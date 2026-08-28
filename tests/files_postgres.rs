@@ -61,11 +61,17 @@ fn registration() -> RegisterRequestV1 {
 }
 
 fn configure_object_storage() {
-    std::env::set_var("FILE_OBJECT_STORAGE_ENDPOINT", "https://storage.example.com");
+    std::env::set_var(
+        "FILE_OBJECT_STORAGE_ENDPOINT",
+        "https://storage.example.com",
+    );
     std::env::set_var("FILE_OBJECT_STORAGE_BUCKET", "lifetrace-files");
     std::env::set_var("FILE_OBJECT_STORAGE_REGION", "us-east-1");
     std::env::set_var("FILE_OBJECT_STORAGE_ACCESS_KEY_ID", "AKIDFILETEST");
-    std::env::set_var("FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY", "file-test-secret-key");
+    std::env::set_var(
+        "FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY",
+        "file-test-secret-key",
+    );
     std::env::set_var("FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS", "300");
 }
 
@@ -118,9 +124,11 @@ async fn prepare_deduplicates_and_signed_headers_are_browser_safe() {
         .as_str()
         .unwrap()
         .contains("X-Amz-Signature="));
-    assert!(first_body["upload"]["requiredHeaders"]["x-amz-checksum-sha256"]
-        .as_str()
-        .is_some());
+    assert!(
+        first_body["upload"]["requiredHeaders"]["x-amz-checksum-sha256"]
+            .as_str()
+            .is_some()
+    );
     assert!(first_body["upload"]["requiredHeaders"]["host"].is_null());
 
     let second = router
