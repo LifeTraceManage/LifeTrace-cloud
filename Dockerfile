@@ -6,8 +6,7 @@ WORKDIR /build
 ENV CARGO_NET_RETRY=3 \
     CARGO_HTTP_TIMEOUT=60 \
     CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
-COPY crates ./crates
-COPY services/cloud ./services/cloud
+COPY . .
 
 # Keep Cargo's registry/git cache across BuildKit invocations. Fetching is kept
 # separate from compilation so transient network failures do not discard crates
@@ -15,7 +14,7 @@ COPY services/cloud ./services/cloud
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     sh -ec 'for attempt in 1 2 3 4 5; do \
-      cargo fetch --locked --manifest-path services/cloud/Cargo.toml && exit 0; \
+      cargo fetch --locked --manifest-path Cargo.toml && exit 0; \
       echo "cargo fetch failed (attempt ${attempt}/5), retrying in 5s..." >&2; \
       sleep 5; \
     done; exit 1'
@@ -23,7 +22,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     cargo build --offline --locked --release \
-    --manifest-path services/cloud/Cargo.toml \
+    --manifest-path Cargo.toml \
     --bin lifetrace-cloud \
     --bin mail_worker \
     --bin execution_worker \
@@ -42,11 +41,11 @@ RUN sed -i \
     && mkdir -p /data/photo-staging \
     && chown -R lifetrace:lifetrace /data
 WORKDIR /app
-COPY --from=builder /build/services/cloud/target/release/lifetrace-cloud /app/lifetrace-cloud
-COPY --from=builder /build/services/cloud/target/release/mail_worker /app/mail_worker
-COPY --from=builder /build/services/cloud/target/release/execution_worker /app/execution_worker
-COPY --from=builder /build/services/cloud/target/release/lifetrace-migrate /app/lifetrace-migrate
-COPY --from=builder /build/services/cloud/target/release/lifetrace-admin /app/lifetrace-admin
+COPY --from=builder /build/target/release/lifetrace-cloud /app/lifetrace-cloud
+COPY --from=builder /build/target/release/mail_worker /app/mail_worker
+COPY --from=builder /build/target/release/execution_worker /app/execution_worker
+COPY --from=builder /build/target/release/lifetrace-migrate /app/lifetrace-migrate
+COPY --from=builder /build/target/release/lifetrace-admin /app/lifetrace-admin
 USER lifetrace
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
