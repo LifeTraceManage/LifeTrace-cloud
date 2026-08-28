@@ -45,8 +45,12 @@ jobs:
       - run: cargo fmt --check
       - run: cargo test --locked -- --test-threads=1
       - run: cargo clippy --locked --all-targets -- -D warnings
-      - run: cargo test --locked --manifest-path crates/lifetrace-contracts/Cargo.toml
-      - run: cargo test --locked --manifest-path crates/lifetrace-sync-client/Cargo.toml
+      - run: cargo test --manifest-path crates/lifetrace-contracts/Cargo.toml
+      - run: cargo test --manifest-path crates/lifetrace-sync-client/Cargo.toml
+      - name: Regenerate contracts
+        run: cargo run --manifest-path tools/contract-exporter/Cargo.toml
+      - name: Require committed generated contracts
+        run: git diff --exit-code -- contracts/
 
   docker:
     runs-on: ubuntu-latest
