@@ -85,7 +85,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "`finance.category`",
+  "description": "`finance.category`\n\nForward fields such as `ledgerId`, `sortOrder`, `level`, `iconType` and\n`customIconFileId` stay in the raw sync payload while older clients continue\nto use this stable view.",
   "properties": {
     "categoryType": {
       "$ref": "#/$defs/TransactionType"

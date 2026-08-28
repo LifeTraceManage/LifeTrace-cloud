@@ -97,7 +97,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "`finance.transaction`",
+  "description": "`finance.transaction`\n\nForward bookkeeping fields (`ledgerId`, recurrence, statistics/budget\nexclusions and currency snapshots) are intentionally not added as public\nRust fields here. Serde accepts them and LifeTrace Cloud stores the original\nJSON unchanged, preserving both source compatibility and wire fidelity.",
   "properties": {
     "accountId": {
       "anyOf": [

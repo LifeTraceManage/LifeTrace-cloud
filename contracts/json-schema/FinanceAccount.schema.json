@@ -89,7 +89,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "`finance.account`",
+  "description": "`finance.account`\n\nNew Android-only forward fields such as `ledgerId`, `sortOrder`, credit-card\nmetadata and `isHidden` are accepted by serde as unknown fields and remain in\nthe original JSON stored by LifeTrace Cloud.",
   "properties": {
     "accountType": {
       "$ref": "#/$defs/AccountType"

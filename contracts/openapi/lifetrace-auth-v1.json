@@ -648,24 +648,12 @@
         "type": "string"
       },
       "ConflictMode": {
-        "description": "Entity conflict handling mode.",
-        "oneOf": [
-          {
-            "const": "optimistic",
-            "description": "Client `baseServerVersion` must equal the current server version;\notherwise an explicit conflict is returned. No automatic last-write-wins.",
-            "type": "string"
-          },
-          {
-            "const": "server_authoritative",
-            "description": "The server is authoritative; client writes are rejected or ignored.",
-            "type": "string"
-          },
-          {
-            "const": "none",
-            "description": "No conflict semantics (device-local / not synced data).",
-            "type": "string"
-          }
-        ]
+        "enum": [
+          "optimistic",
+          "server_authoritative",
+          "none"
+        ],
+        "type": "string"
       },
       "ConflictReason": {
         "description": "Conflict reason. Known values: base_version_mismatch, client_modified_server_deleted, client_deleted_server_modified, both_deleted. Unknown values are preserved.",
@@ -1664,37 +1652,16 @@
         "type": "object"
       },
       "EntityOwnership": {
-        "description": "Entity ownership class.",
-        "oneOf": [
-          {
-            "const": "user_owned",
-            "description": "Owned and edited by the user; bidirectional sync with conflict checks.",
-            "type": "string"
-          },
-          {
-            "const": "server_managed",
-            "description": "Managed by the server (for example identity.user, identity.device).",
-            "type": "string"
-          },
-          {
-            "const": "shared_catalog",
-            "description": "Global catalog shared by all users (for example english.article).",
-            "type": "string"
-          },
-          {
-            "const": "device_local",
-            "description": "Only meaningful on the device that created it; never synced.",
-            "type": "string"
-          },
-          {
-            "const": "secret_local_only",
-            "description": "Credentials and secrets; MUST NEVER enter a sync payload.",
-            "type": "string"
-          }
-        ]
+        "enum": [
+          "user_owned",
+          "server_managed",
+          "shared_catalog",
+          "device_local",
+          "secret_local_only"
+        ],
+        "type": "string"
       },
       "EntityRef": {
-        "description": "A typed reference to another syncable entity.",
         "properties": {
           "entityId": {
             "$ref": "#/components/schemas/EntityId"
@@ -1734,7 +1701,7 @@
         "type": "object"
       },
       "EntityType": {
-        "description": "Registered entity type. Known values: identity.user, identity.device, finance.account, finance.category, finance.transaction, finance.transaction_evidence, habit.activity, habit.log, review.daily, note.folder, note.note, note.tag, note.tag_relation, note.relation, note.revision, english.article, english.learning_record, english.highlight, english.note, english.vocabulary, english.vocabulary_occurrence, english.vocabulary_review_state, workout.import, workout.workout, workout.exercise, workout.set, workout.training_note, file.metadata, entity.link, user.preference. Unknown values are preserved.",
+        "description": "Registered entity type. Known values: identity.user, identity.device, finance.ledger, finance.account, finance.category, finance.transaction, finance.recurring_transaction, finance.tag, finance.transaction_tag, finance.budget, finance.transaction_attachment, finance.transaction_evidence, habit.activity, habit.log, review.daily, note.folder, note.note, note.tag, note.tag_relation, note.relation, note.revision, english.article, english.learning_record, english.highlight, english.note, english.vocabulary, english.vocabulary_occurrence, english.vocabulary_review_state, workout.import, workout.workout, workout.exercise, workout.set, workout.training_note, execution.goal, execution.weekly_review, execution.project, execution.recurrence_rule, execution.task, execution.task_dependency, execution.task_occurrence, execution.waiting_item, execution.calendar_event, execution.calendar_occurrence, execution.important_date, execution.focus_session, execution.memo, execution.memo_tag, execution.memo_tag_relation, execution.reminder, execution.completion_result, execution.entity_link, file.metadata, entity.link, user.preference. Unknown values are preserved.",
         "type": "string"
       },
       "ErrorCode": {
@@ -1854,7 +1821,7 @@
         "type": "string"
       },
       "FinanceAccount": {
-        "description": "`finance.account`",
+        "description": "`finance.account`\n\nNew Android-only forward fields such as `ledgerId`, `sortOrder`, credit-card\nmetadata and `isHidden` are accepted by serde as unknown fields and remain in\nthe original JSON stored by LifeTrace Cloud.",
         "properties": {
           "accountType": {
             "$ref": "#/components/schemas/AccountType"
@@ -2933,7 +2900,6 @@
         "type": "object"
       },
       "SyncMode": {
-        "description": "Entity sync mode.",
         "enum": [
           "bidirectional",
           "server_to_client",
@@ -3070,7 +3036,7 @@
         "type": "object"
       },
       "Transaction": {
-        "description": "`finance.transaction`",
+        "description": "`finance.transaction`\n\nForward bookkeeping fields (`ledgerId`, recurrence, statistics/budget\nexclusions and currency snapshots) are intentionally not added as public\nRust fields here. Serde accepts them and LifeTrace Cloud stores the original\nJSON unchanged, preserving both source compatibility and wire fidelity.",
         "properties": {
           "accountId": {
             "anyOf": [
@@ -3174,7 +3140,7 @@
         "type": "object"
       },
       "TransactionCategory": {
-        "description": "`finance.category`",
+        "description": "`finance.category`\n\nForward fields such as `ledgerId`, `sortOrder`, `level`, `iconType` and\n`customIconFileId` stay in the raw sync payload while older clients continue\nto use this stable view.",
         "properties": {
           "categoryType": {
             "$ref": "#/components/schemas/TransactionType"
