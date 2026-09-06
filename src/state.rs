@@ -87,7 +87,14 @@ impl AppState {
         };
 
         let auth_service = Arc::new(AuthService::new(pool.clone(), config.clone()));
-        let auth: Arc<dyn AuthProvider> = if database_enabled {
+        let auth: Arc<dyn AuthProvider> = if config.dev_auth_enabled {
+            Arc::new(DevelopmentAuthProvider::new(
+                true,
+                config.dev_auth_token.clone(),
+                lifetrace_contracts::UserId::new(config.dev_auth_user_id.clone()),
+                config.dev_auth_device_id.clone(),
+            ))
+        } else if database_enabled {
             Arc::new(DatabaseAuthProvider::new(
                 pool.clone(),
                 auth_service.token_manager(),
