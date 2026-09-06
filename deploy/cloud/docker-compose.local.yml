@@ -20,7 +20,7 @@ services:
     profiles: ["cloud"]
     build:
       context: ../..
-      dockerfile: services/cloud/Dockerfile
+      dockerfile: Dockerfile
     environment: &cloud_environment
       LIFETRACE_ENV: development
       LIFETRACE_BIND_ADDRESS: 0.0.0.0:8787
@@ -67,7 +67,7 @@ services:
     profiles: ["cloud"]
     build:
       context: ../..
-      dockerfile: services/cloud/Dockerfile
+      dockerfile: Dockerfile
     entrypoint: ["/app/mail_worker"]
     healthcheck:
       test: ["CMD-SHELL", "kill -0 1"]
@@ -88,7 +88,7 @@ services:
     profiles: ["cloud"]
     build:
       context: ../..
-      dockerfile: services/cloud/Dockerfile
+      dockerfile: Dockerfile
     entrypoint: ["/app/execution_worker"]
     healthcheck:
       test: ["CMD-SHELL", "kill -0 1"]
