@@ -1,0 +1,13 @@
+{
+  "$comment": "GENERATED FILE - DO NOT EDIT MANUALLY. Source: crates/lifetrace-contracts.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reminder delivery lifecycle shared by Cloud and clients.",
+  "enum": [
+    "scheduled",
+    "fired",
+    "dismissed",
+    "cancelled"
+  ],
+  "title": "ReminderStatus",
+  "type": "string"
+}

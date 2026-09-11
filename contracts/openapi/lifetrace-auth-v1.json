@@ -2809,6 +2809,75 @@
         ],
         "type": "object"
       },
+      "Reminder": {
+        "description": "`execution.reminder`.\n\nThis intentionally preserves the existing Execute wire shape\n(`subjectType`, `subjectId`, `fireKey`) while making it a strict typed\ncontract. The Cloud execution worker advances due `scheduled` reminders to\n`fired`. Clients use the subject fields to route notification taps.",
+        "properties": {
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fireKey": {
+            "type": "string"
+          },
+          "lastFiredAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EntityMeta"
+          },
+          "snoozedUntil": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReminderStatus"
+          },
+          "subjectId": {
+            "$ref": "#/components/schemas/EntityId"
+          },
+          "subjectType": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "triggerAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meta",
+          "subjectType",
+          "subjectId",
+          "triggerAt",
+          "status",
+          "fireKey"
+        ],
+        "type": "object"
+      },
+      "ReminderStatus": {
+        "description": "Reminder delivery lifecycle shared by Cloud and clients.",
+        "enum": [
+          "scheduled",
+          "fired",
+          "dismissed",
+          "cancelled"
+        ],
+        "type": "string"
+      },
       "RequestId": {
         "description": "Request tracing id. It never replaces changeId for idempotency.",
         "type": "string"
