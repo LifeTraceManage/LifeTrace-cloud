@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::ids::EntityId;
-use crate::time::{LocalDate, UtcTimestamp};
+use crate::time::UtcTimestamp;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
@@ -63,8 +63,8 @@ pub struct Asset {
     pub status: AssetStatus,
     pub purchase_price: f64,
     pub current_value: f64,
-    pub purchase_date: LocalDate,
-    pub warranty_until: Option<LocalDate>,
+    pub purchase_date: UtcTimestamp,
+    pub warranty_until: Option<UtcTimestamp>,
     pub spec: String,
     pub serial_number: String,
     pub location: String,
