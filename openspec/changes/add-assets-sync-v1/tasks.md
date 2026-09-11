@@ -1,13 +1,15 @@
 ## Contract
-- [ ] Add typed asset DTOs.
-- [ ] Register asset entity types.
-- [ ] Add payload dispatch validation.
+- [x] Add typed asset DTOs.
+- [x] Register asset entity types.
+- [x] Add payload dispatch validation.
 
 ## Authorization
-- [ ] Add Assets app id.
-- [ ] Add assets read/write scopes and least-privilege app grants.
+- [x] Add Assets app id.
+- [x] Add assets read/write scopes and least-privilege app grants.
 
 ## Verification
-- [ ] Add registry/payload/scope tests.
-- [ ] Run cargo fmt/check/test.
-- [ ] Verify existing sync regression tests.
+- [x] Add registry/payload/scope tests.
+- [ ] Run cargo fmt/check/test. *(pending latest CI)*
+- [ ] Verify existing sync regression tests. *(pending latest CI)*
+
+- [ ] Run OpenSpec strict validation. *(now enforced by CI)*
