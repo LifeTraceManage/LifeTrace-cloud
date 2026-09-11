@@ -68,7 +68,8 @@ pub enum ReminderStatus {
 /// This intentionally preserves the existing Execute wire shape
 /// (`subjectType`, `subjectId`, `fireKey`) while making it a strict typed
 /// contract. The Cloud execution worker advances due `scheduled` reminders to
-/// `fired`. Clients use the subject fields to route notification taps.
+/// `fired`. Clients use the subject fields to route notification taps, while
+/// `fireKey` remains the compatibility/idempotency key used by existing Execute data.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
