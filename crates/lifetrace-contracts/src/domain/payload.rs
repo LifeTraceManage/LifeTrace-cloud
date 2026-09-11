@@ -553,7 +553,7 @@ mod tests {
             "createdAt": "2026-09-11T00:00:00Z",
             "updatedAt": "2026-09-11T00:00:00Z",
             "isDeleted": false,
-            "serverVersion": 0
+            "serverVersion": "0"
         }).into();
 
         let parsed =
