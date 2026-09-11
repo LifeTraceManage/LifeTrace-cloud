@@ -1,9 +1,9 @@
 ## Authorization
 
-- [ ] Add links:read and links:write to the supported scope catalog.
-- [ ] Map entity.link to link scopes.
-- [ ] Grant link scopes to lifetrace-assets without account:write.
-- [ ] Add least-privilege regression tests.
+- [x] Add links:read and links:write to the supported scope catalog.
+- [x] Map entity.link to link scopes.
+- [x] Grant link scopes to lifetrace-assets without account:write.
+- [x] Add least-privilege regression tests.
 
 ## Verification
 
