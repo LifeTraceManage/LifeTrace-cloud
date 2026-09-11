@@ -9,7 +9,7 @@
 
 ## Verification
 - [x] Add registry/payload/scope tests.
-- [ ] Run cargo fmt/check/test. *(pending latest CI)*
-- [ ] Verify existing sync regression tests. *(pending latest CI)*
+- [x] Run cargo fmt/check/test.
+- [x] Verify existing sync regression tests.
 
-- [ ] Run OpenSpec strict validation. *(now enforced by CI)*
+- [x] Run OpenSpec strict validation.
