@@ -29,7 +29,11 @@ Run `34572077638` passed the complete gate and generated the contract artifacts 
 on this branch. This final verification commit exists to trigger the same gate on the exact PR
 head after generated artifacts were committed by GitHub Actions.
 
-## Archive gate
+## Archive completion
 
-The change MUST only be archived after this exact-head CI is green and the implementation is
-merged to the target branch.
+Exact-head PR CI run `34572759558` passed before merge. The implementation was merged to
+`main` as `548d6d2c4d2e86cba25ac1ed42d97ce4c3365faa`, and post-merge Cloud CI runs
+`34578955577` and `34578955468` also passed.
+
+The change was archived on 2026-09-11 after its delta specification was synchronized into
+`openspec/specs/asset-sync/spec.md`.

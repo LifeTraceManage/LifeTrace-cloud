@@ -37,8 +37,8 @@ jobs:
       AUTH_TOKEN_HASH_PEPPER: cloud-ci-token-pepper
     steps:
       - uses: actions/checkout@v4
-      - name: Validate OpenSpec change
-        run: npx --yes @fission-ai/openspec@1.13.0 validate add-assets-sync-v1 --strict --no-interactive
+      - name: Validate OpenSpec repository
+        run: npx --yes @fission-ai/openspec@1.13.0 validate --all --strict --no-interactive
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
