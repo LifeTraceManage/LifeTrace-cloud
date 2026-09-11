@@ -97,6 +97,6 @@ pub struct AssetEvent {
     pub updated_at: UtcTimestamp,
     #[serde(default)]
     pub is_deleted: bool,
-    #[serde(default)]
-    pub server_version: String,
+    #[serde(default = "ServerVersion::zero")]
+    pub server_version: ServerVersion,
 }
