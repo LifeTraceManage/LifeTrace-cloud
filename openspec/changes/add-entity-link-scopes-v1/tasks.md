@@ -7,7 +7,7 @@
 
 ## Verification
 
-- [ ] Run OpenSpec strict validation.
-- [ ] Run cargo fmt/test/clippy and contract tests.
+- [x] Run OpenSpec strict validation.
+- [x] Run cargo fmt/test/clippy and contract tests.
 - [ ] Merge only after exact-head CI is green.
 - [ ] Archive after post-merge verification.
