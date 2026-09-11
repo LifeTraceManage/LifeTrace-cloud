@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::ids::EntityId;
+use crate::ids::{EntityId, ServerVersion};
 use crate::time::UtcTimestamp;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
@@ -76,8 +76,8 @@ pub struct Asset {
     pub updated_at: UtcTimestamp,
     #[serde(default)]
     pub is_deleted: bool,
-    #[serde(default)]
-    pub server_version: String,
+    #[serde(default = "ServerVersion::zero")]
+    pub server_version: ServerVersion,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
