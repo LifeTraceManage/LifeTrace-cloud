@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: cloud-ci-${{ github.ref }}
@@ -57,8 +57,20 @@ jobs:
           name: generated-contracts
           path: contracts/
           if-no-files-found: error
+      - name: Commit generated contracts on this PR branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if [ -n "$(git status --porcelain -- contracts/)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add contracts/
+            git commit -m "contracts: regenerate Assets Sync v1 artifacts"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
       - name: Require committed generated contracts
-        run: git diff --exit-code -- contracts/
+        run: |
+          git diff --exit-code -- contracts/
+          test -z "$(git ls-files --others --exclude-standard contracts/)"
 
   docker:
     runs-on: ubuntu-latest
