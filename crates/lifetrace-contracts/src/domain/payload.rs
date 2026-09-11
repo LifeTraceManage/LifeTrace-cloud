@@ -538,6 +538,78 @@ mod tests {
 
 
     #[test]
+    fn execute_reminder_dispatch_accepts_typed_payload() {
+        let value: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "reminder-1",
+                "userId": "user-1",
+                "createdAt": "2026-09-11T12:00:00Z",
+                "updatedAt": "2026-09-11T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": "device-1"
+            },
+            "target": {
+                "entityType": "execution.task",
+                "entityId": "task-1"
+            },
+            "triggerAt": "2026-09-12T01:30:00Z",
+            "status": "scheduled",
+            "snoozedUntil": null,
+            "lastFiredAt": null,
+            "title": "Task reminder",
+            "body": "Finish the task"
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_REMINDER),
+            value,
+        ))
+        .unwrap();
+
+        assert_eq!(parsed.entity_id().as_str(), "reminder-1");
+        assert_eq!(parsed.to_json().0["status"], "scheduled");
+        assert_eq!(
+            parsed.to_json().0["target"]["entityType"],
+            EntityType::EXECUTION_TASK
+        );
+    }
+
+    #[test]
+    fn execute_reminder_rejects_missing_trigger_at() {
+        let value: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "reminder-1",
+                "userId": "user-1",
+                "createdAt": "2026-09-11T12:00:00Z",
+                "updatedAt": "2026-09-11T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "target": {
+                "entityType": "execution.task",
+                "entityId": "task-1"
+            },
+            "status": "scheduled",
+            "snoozedUntil": null,
+            "lastFiredAt": null,
+            "title": null,
+            "body": null
+        })
+        .into();
+
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_REMINDER),
+            value,
+        ))
+        .is_err());
+    }
+
+    #[test]
     fn asset_payload_dispatch_accepts_flutter_wire_payload() {
         let value: JsonValue = serde_json::json!({
             "id": "asset-1",
