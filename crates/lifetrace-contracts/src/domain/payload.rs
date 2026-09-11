@@ -550,12 +550,11 @@ mod tests {
                 "serverVersion": null,
                 "modifiedByDevice": "device-1"
             },
-            "target": {
-                "entityType": "execution.task",
-                "entityId": "task-1"
-            },
+            "subjectType": "task",
+            "subjectId": "task-1",
             "triggerAt": "2026-09-12T01:30:00Z",
             "status": "scheduled",
+            "fireKey": "task-1@2026-09-12T01:30:00Z",
             "snoozedUntil": null,
             "lastFiredAt": null,
             "title": "Task reminder",
@@ -571,10 +570,8 @@ mod tests {
 
         assert_eq!(parsed.entity_id().as_str(), "reminder-1");
         assert_eq!(parsed.to_json().0["status"], "scheduled");
-        assert_eq!(
-            parsed.to_json().0["target"]["entityType"],
-            EntityType::EXECUTION_TASK
-        );
+        assert_eq!(parsed.to_json().0["subjectType"], "task");
+        assert_eq!(parsed.to_json().0["subjectId"], "task-1");
     }
 
     #[test]
@@ -590,11 +587,10 @@ mod tests {
                 "serverVersion": null,
                 "modifiedByDevice": null
             },
-            "target": {
-                "entityType": "execution.task",
-                "entityId": "task-1"
-            },
+            "subjectType": "task",
+            "subjectId": "task-1",
             "status": "scheduled",
+            "fireKey": "task-1@2026-09-12T01:30:00Z",
             "snoozedUntil": null,
             "lastFiredAt": null,
             "title": null,
