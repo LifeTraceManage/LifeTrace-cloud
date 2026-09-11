@@ -38,7 +38,7 @@ export type Asset = { id: EntityId, name: string, brand: string, model: string, 
 
 export type AssetCategory = "phone" | "tablet" | "computer" | "wearable" | "audio" | "camera" | "home" | "other";
 
-export type AssetEvent = { id: EntityId, assetId: EntityId, type: AssetEventType, date: string, title: string, detail: string, amount: number | null, createdAt: string, updatedAt: string, isDeleted: boolean, serverVersion: string, };
+export type AssetEvent = { id: EntityId, assetId: EntityId, type: AssetEventType, date: string, title: string, detail: string, amount: number | null, createdAt: string, updatedAt: string, isDeleted: boolean, serverVersion: ServerVersion, };
 
 export type AssetEventType = "purchase" | "useStart" | "maintenance" | "repair" | "replacement" | "lend" | "returnItem" | "idle" | "valuation" | "sell" | "retire" | "note";
 
