@@ -333,8 +333,14 @@ mod tests {
             required_entity_scope("asset.event", true),
             Some("assets:write")
         );
-        assert_eq!(required_entity_scope("entity.link", false), Some("links:read"));
-        assert_eq!(required_entity_scope("entity.link", true), Some("links:write"));
+        assert_eq!(
+            required_entity_scope("entity.link", false),
+            Some("links:read")
+        );
+        assert_eq!(
+            required_entity_scope("entity.link", true),
+            Some("links:write")
+        );
         assert_eq!(
             required_entity_scope("identity.user", true),
             Some("account:write")
