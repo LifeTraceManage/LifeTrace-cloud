@@ -353,6 +353,206 @@
         ],
         "type": "object"
       },
+      "Asset": {
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/AssetCategory"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "currentValue": {
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "$ref": "#/components/schemas/EntityId"
+          },
+          "isDeleted": {
+            "default": false,
+            "type": "boolean"
+          },
+          "location": {
+            "type": "string"
+          },
+          "maintenanceCost": {
+            "format": "double",
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "purchaseChannel": {
+            "type": "string"
+          },
+          "purchaseDate": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "purchasePrice": {
+            "format": "double",
+            "type": "number"
+          },
+          "recoveredAmount": {
+            "format": "double",
+            "type": "number"
+          },
+          "serialNumber": {
+            "type": "string"
+          },
+          "serverVersion": {
+            "$ref": "#/components/schemas/ServerVersion",
+            "default": "0"
+          },
+          "spec": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssetStatus"
+          },
+          "targetDailyCost": {
+            "format": "double",
+            "type": "number"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "warrantyUntil": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "brand",
+          "model",
+          "category",
+          "status",
+          "purchasePrice",
+          "currentValue",
+          "purchaseDate",
+          "spec",
+          "serialNumber",
+          "location",
+          "targetDailyCost",
+          "purchaseChannel",
+          "maintenanceCost",
+          "recoveredAmount",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "AssetCategory": {
+        "enum": [
+          "phone",
+          "tablet",
+          "computer",
+          "wearable",
+          "audio",
+          "camera",
+          "home",
+          "other"
+        ],
+        "type": "string"
+      },
+      "AssetEvent": {
+        "properties": {
+          "amount": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "assetId": {
+            "$ref": "#/components/schemas/EntityId"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "date": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/EntityId"
+          },
+          "isDeleted": {
+            "default": false,
+            "type": "boolean"
+          },
+          "serverVersion": {
+            "default": "",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AssetEventType"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "assetId",
+          "type",
+          "date",
+          "title",
+          "detail",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "AssetEventType": {
+        "enum": [
+          "purchase",
+          "useStart",
+          "maintenance",
+          "repair",
+          "replacement",
+          "lend",
+          "returnItem",
+          "idle",
+          "valuation",
+          "sell",
+          "retire",
+          "note"
+        ],
+        "type": "string"
+      },
+      "AssetStatus": {
+        "enum": [
+          "active",
+          "idle",
+          "lent",
+          "repair",
+          "sold",
+          "retired"
+        ],
+        "type": "string"
+      },
       "AtomicGroupId": {
         "description": "Groups changes that must be applied all-or-nothing in one push request.",
         "type": "string"
@@ -1719,7 +1919,7 @@
         "type": "object"
       },
       "EntityType": {
-        "description": "Registered entity type. Known values: identity.user, identity.device, finance.ledger, finance.account, finance.category, finance.transaction, finance.recurring_transaction, finance.tag, finance.transaction_tag, finance.budget, finance.transaction_attachment, finance.transaction_evidence, habit.activity, habit.log, review.daily, note.folder, note.note, note.tag, note.tag_relation, note.relation, note.revision, english.article, english.learning_record, english.highlight, english.note, english.vocabulary, english.vocabulary_occurrence, english.vocabulary_review_state, workout.import, workout.workout, workout.exercise, workout.set, workout.training_note, execution.goal, execution.weekly_review, execution.project, execution.recurrence_rule, execution.task, execution.task_dependency, execution.task_occurrence, execution.waiting_item, execution.calendar_event, execution.calendar_occurrence, execution.important_date, execution.focus_session, execution.memo, execution.memo_tag, execution.memo_tag_relation, execution.reminder, execution.completion_result, execution.entity_link, file.metadata, entity.link, user.preference. Unknown values are preserved.",
+        "description": "Registered entity type. Known values: identity.user, identity.device, asset.asset, asset.event, finance.ledger, finance.account, finance.category, finance.transaction, finance.recurring_transaction, finance.tag, finance.transaction_tag, finance.budget, finance.transaction_attachment, finance.transaction_evidence, habit.activity, habit.log, review.daily, note.folder, note.note, note.tag, note.tag_relation, note.relation, note.revision, english.article, english.learning_record, english.highlight, english.note, english.vocabulary, english.vocabulary_occurrence, english.vocabulary_review_state, workout.import, workout.workout, workout.exercise, workout.set, workout.training_note, execution.goal, execution.weekly_review, execution.project, execution.recurrence_rule, execution.task, execution.task_dependency, execution.task_occurrence, execution.waiting_item, execution.calendar_event, execution.calendar_occurrence, execution.important_date, execution.focus_session, execution.memo, execution.memo_tag, execution.memo_tag_relation, execution.reminder, execution.completion_result, execution.entity_link, file.metadata, entity.link, user.preference. Unknown values are preserved.",
         "type": "string"
       },
       "ErrorCode": {

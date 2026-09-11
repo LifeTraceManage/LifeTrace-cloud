@@ -1,0 +1,14 @@
+{
+  "$comment": "GENERATED FILE - DO NOT EDIT MANUALLY. Source: crates/lifetrace-contracts.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "active",
+    "idle",
+    "lent",
+    "repair",
+    "sold",
+    "retired"
+  ],
+  "title": "AssetStatus",
+  "type": "string"
+}
