@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::common::EntityMeta;
 use crate::ids::{EntityId, UserId};
 use crate::time::{LocalDate, UtcTimestamp};
 
@@ -48,6 +49,40 @@ pub struct ImportantDate {
     pub lunar_month: Option<u8>,
     pub lunar_day: Option<u8>,
     pub lunar_leap_month: bool,
+}
+
+
+/// Reminder delivery lifecycle shared by Cloud and clients.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum ReminderStatus {
+    Scheduled,
+    Fired,
+    Dismissed,
+    Cancelled,
+}
+
+/// `execution.reminder`.
+///
+/// This intentionally preserves the existing Execute wire shape
+/// (`subjectType`, `subjectId`, `fireKey`) while making it a strict typed
+/// contract. The Cloud execution worker advances due `scheduled` reminders to
+/// `fired`. Clients use the subject fields to route notification taps.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct Reminder {
+    pub meta: EntityMeta,
+    pub subject_type: String,
+    pub subject_id: EntityId,
+    pub trigger_at: UtcTimestamp,
+    pub status: ReminderStatus,
+    pub fire_key: String,
+    pub snoozed_until: Option<UtcTimestamp>,
+    pub last_fired_at: Option<UtcTimestamp>,
+    pub title: Option<String>,
+    pub body: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

@@ -232,6 +232,10 @@ export type RefreshRequestV1 = { refreshToken: string, appId: AppId, deviceId: s
 
 export type RegisterRequestV1 = { email: string, password: string, displayName: string | null, inviteToken: string | null, appId: AppId, deviceId: string, deviceName: string, platform: string, clientVersion: string | null, requestedScopes: Array<Scope>, };
 
+export type Reminder = { meta: EntityMeta, subjectType: string, subjectId: EntityId, triggerAt: string, status: ReminderStatus, fireKey: string, snoozedUntil: string | null, lastFiredAt: string | null, title: string | null, body: string | null, };
+
+export type ReminderStatus = "scheduled" | "fired" | "dismissed" | "cancelled";
+
 export type RequestId = string;
 
 export type ResetPasswordRequestV1 = { token: string, newPassword: string, };

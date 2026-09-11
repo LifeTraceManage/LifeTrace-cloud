@@ -6,7 +6,7 @@
 
 use crate::domain::assets::{Asset, AssetEvent};
 use crate::domain::english::*;
-use crate::domain::execution::{FocusSession, ImportantDate};
+use crate::domain::execution::{FocusSession, ImportantDate, Reminder};
 use crate::domain::files::FileMetadata;
 use crate::domain::finance::*;
 use crate::domain::habits::*;
@@ -41,6 +41,7 @@ pub enum EntityPayload {
     ActivityLog(ActivityLog),
     DailyReview(DailyReview),
     ImportantDate(ImportantDate),
+    Reminder(Reminder),
     FocusSession(FocusSession),
     NoteFolder(NoteFolder),
     Note(Note),
@@ -91,6 +92,7 @@ impl EntityPayload {
             EntityPayload::ActivityLog(_) => EntityType::HABIT_LOG,
             EntityPayload::DailyReview(_) => EntityType::REVIEW_DAILY,
             EntityPayload::ImportantDate(_) => EntityType::EXECUTION_IMPORTANT_DATE,
+            EntityPayload::Reminder(_) => EntityType::EXECUTION_REMINDER,
             EntityPayload::FocusSession(_) => EntityType::EXECUTION_FOCUS_SESSION,
             EntityPayload::NoteFolder(_) => EntityType::NOTE_FOLDER,
             EntityPayload::Note(_) => EntityType::NOTE_NOTE,
@@ -137,6 +139,7 @@ impl EntityPayload {
             EntityPayload::ActivityLog(value) => &value.meta.id,
             EntityPayload::DailyReview(value) => &value.meta.id,
             EntityPayload::ImportantDate(value) => &value.id,
+            EntityPayload::Reminder(value) => &value.meta.id,
             EntityPayload::FocusSession(value) => &value.id,
             EntityPayload::NoteFolder(value) => &value.meta.id,
             EntityPayload::Note(value) => &value.meta.id,
@@ -188,6 +191,7 @@ impl EntityPayload {
             EntityPayload::ActivityLog(v) => json!(v),
             EntityPayload::DailyReview(v) => json!(v),
             EntityPayload::ImportantDate(v) => json!(v),
+            EntityPayload::Reminder(v) => json!(v),
             EntityPayload::FocusSession(v) => json!(v),
             EntityPayload::NoteFolder(v) => json!(v),
             EntityPayload::Note(v) => json!(v),
@@ -415,7 +419,10 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
             EntityType::EXECUTION_MEMO_TAG_RELATION => {
                 registered(value, EntityType::EXECUTION_MEMO_TAG_RELATION)
             }
-            EntityType::EXECUTION_REMINDER => registered(value, EntityType::EXECUTION_REMINDER),
+            EntityType::EXECUTION_REMINDER => {
+                parse::<Reminder>(&value, EntityType::EXECUTION_REMINDER)
+                    .map(EntityPayload::Reminder)
+            }
             EntityType::EXECUTION_COMPLETION_RESULT => {
                 registered(value, EntityType::EXECUTION_COMPLETION_RESULT)
             }
@@ -529,6 +536,74 @@ mod tests {
         assert_eq!(parsed.to_json().0["focusSeconds"], 1500);
     }
 
+
+    #[test]
+    fn execute_reminder_dispatch_accepts_typed_payload() {
+        let value: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "reminder-1",
+                "userId": "user-1",
+                "createdAt": "2026-09-11T12:00:00Z",
+                "updatedAt": "2026-09-11T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": "device-1"
+            },
+            "subjectType": "task",
+            "subjectId": "task-1",
+            "triggerAt": "2026-09-12T01:30:00Z",
+            "status": "scheduled",
+            "fireKey": "task-1@2026-09-12T01:30:00Z",
+            "snoozedUntil": null,
+            "lastFiredAt": null,
+            "title": "Task reminder",
+            "body": "Finish the task"
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_REMINDER),
+            value,
+        ))
+        .unwrap();
+
+        assert_eq!(parsed.entity_id().as_str(), "reminder-1");
+        assert_eq!(parsed.to_json().0["status"], "scheduled");
+        assert_eq!(parsed.to_json().0["subjectType"], "task");
+        assert_eq!(parsed.to_json().0["subjectId"], "task-1");
+    }
+
+    #[test]
+    fn execute_reminder_rejects_missing_trigger_at() {
+        let value: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "reminder-1",
+                "userId": "user-1",
+                "createdAt": "2026-09-11T12:00:00Z",
+                "updatedAt": "2026-09-11T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "subjectType": "task",
+            "subjectId": "task-1",
+            "status": "scheduled",
+            "fireKey": "task-1@2026-09-12T01:30:00Z",
+            "snoozedUntil": null,
+            "lastFiredAt": null,
+            "title": null,
+            "body": null
+        })
+        .into();
+
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_REMINDER),
+            value,
+        ))
+        .is_err());
+    }
 
     #[test]
     fn asset_payload_dispatch_accepts_flutter_wire_payload() {
