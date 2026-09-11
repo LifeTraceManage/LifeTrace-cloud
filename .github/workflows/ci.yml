@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate OpenSpec change
-        run: npx --yes @fission-ai/openspec@latest validate add-assets-sync-v1 --strict --no-interactive
+        run: npx --yes @fission-ai/openspec@1.13.0 validate add-assets-sync-v1 --strict --no-interactive
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
@@ -51,6 +51,12 @@ jobs:
       - run: cargo test --manifest-path crates/lifetrace-sync-client/Cargo.toml
       - name: Regenerate contracts
         run: cargo run --manifest-path tools/contract-exporter/Cargo.toml
+      - name: Upload generated contracts
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-contracts
+          path: contracts/
+          if-no-files-found: error
       - name: Require committed generated contracts
         run: git diff --exit-code -- contracts/
 
