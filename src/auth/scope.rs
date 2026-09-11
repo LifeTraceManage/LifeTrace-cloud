@@ -296,7 +296,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn assets_app_has_only_required_product_scopes() {
         assert!(supported_app(AppId::ASSETS));
@@ -314,8 +313,14 @@ mod tests {
         assert!(!granted.contains("finance:write"));
         assert!(!granted.contains("notes:write"));
         assert!(!granted.contains("mail:write"));
-        assert_eq!(required_entity_scope("asset.asset", false), Some("assets:read"));
-        assert_eq!(required_entity_scope("asset.event", true), Some("assets:write"));
+        assert_eq!(
+            required_entity_scope("asset.asset", false),
+            Some("assets:read")
+        );
+        assert_eq!(
+            required_entity_scope("asset.event", true),
+            Some("assets:write")
+        );
     }
 
     #[test]
