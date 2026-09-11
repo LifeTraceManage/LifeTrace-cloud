@@ -4,6 +4,7 @@
 //! database rows and the UI view models are separate layers; only these
 //! structs are wire contracts.
 
+pub mod assets;
 pub mod english;
 pub mod enums;
 pub mod execution;
@@ -18,6 +19,7 @@ pub mod reviews;
 pub mod user;
 pub mod workouts;
 
+pub use assets::*;
 pub use english::*;
 pub use enums::*;
 pub use execution::*;
