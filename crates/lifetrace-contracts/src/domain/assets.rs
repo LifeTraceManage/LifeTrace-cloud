@@ -77,7 +77,7 @@ pub struct Asset {
     #[serde(default)]
     pub is_deleted: bool,
     #[serde(default)]
-    pub server_version: u64,
+    pub server_version: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
@@ -98,5 +98,5 @@ pub struct AssetEvent {
     #[serde(default)]
     pub is_deleted: bool,
     #[serde(default)]
-    pub server_version: u64,
+    pub server_version: String,
 }
