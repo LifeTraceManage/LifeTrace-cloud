@@ -6,7 +6,6 @@ use ts_rs::TS;
 
 use crate::common::EntityMeta;
 use crate::ids::{EntityId, UserId};
-use crate::registry::EntityRef;
 use crate::time::{LocalDate, UtcTimestamp};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
@@ -66,18 +65,20 @@ pub enum ReminderStatus {
 
 /// `execution.reminder`.
 ///
-/// The Cloud execution worker advances due `scheduled` reminders to `fired`.
-/// Clients use `target` to schedule a local notification and route notification
-/// taps to the owning Task, Calendar Event, Important Date, Focus Session, or
-/// any future registered entity type.
+/// This intentionally preserves the existing Execute wire shape
+/// (`subjectType`, `subjectId`, `fireKey`) while making it a strict typed
+/// contract. The Cloud execution worker advances due `scheduled` reminders to
+/// `fired`. Clients use the subject fields to route notification taps.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct Reminder {
     pub meta: EntityMeta,
-    pub target: EntityRef,
+    pub subject_type: String,
+    pub subject_id: EntityId,
     pub trigger_at: UtcTimestamp,
     pub status: ReminderStatus,
+    pub fire_key: String,
     pub snoozed_until: Option<UtcTimestamp>,
     pub last_fired_at: Option<UtcTimestamp>,
     pub title: Option<String>,
