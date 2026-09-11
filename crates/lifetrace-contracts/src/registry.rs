@@ -94,6 +94,8 @@ const fn shared_catalog(entity_type: &'static str) -> EntityDescriptor {
 pub const REGISTRY: &[EntityDescriptor] = &[
     server_managed(EntityType::IDENTITY_USER),
     server_managed(EntityType::IDENTITY_DEVICE),
+    user_owned(EntityType::ASSET_ASSET, false),
+    user_owned(EntityType::ASSET_EVENT, false),
     user_owned(EntityType::FINANCE_LEDGER, false),
     user_owned(EntityType::FINANCE_ACCOUNT, false),
     user_owned(EntityType::FINANCE_CATEGORY, false),
@@ -162,6 +164,8 @@ pub struct EntityType(String);
 impl EntityType {
     pub const IDENTITY_USER: &'static str = "identity.user";
     pub const IDENTITY_DEVICE: &'static str = "identity.device";
+    pub const ASSET_ASSET: &'static str = "asset.asset";
+    pub const ASSET_EVENT: &'static str = "asset.event";
     pub const FINANCE_LEDGER: &'static str = "finance.ledger";
     pub const FINANCE_ACCOUNT: &'static str = "finance.account";
     pub const FINANCE_CATEGORY: &'static str = "finance.category";
@@ -222,6 +226,8 @@ impl EntityType {
         &[
             Self::IDENTITY_USER,
             Self::IDENTITY_DEVICE,
+            Self::ASSET_ASSET,
+            Self::ASSET_EVENT,
             Self::FINANCE_LEDGER,
             Self::FINANCE_ACCOUNT,
             Self::FINANCE_CATEGORY,
@@ -374,6 +380,8 @@ mod tests {
     #[test]
     fn unknown_entity_types_are_not_syncable() {
         assert!(!is_syncable("secret.credential"));
+        assert!(is_syncable(EntityType::ASSET_ASSET));
+        assert!(is_syncable(EntityType::ASSET_EVENT));
         assert!(is_syncable(EntityType::FINANCE_TRANSACTION));
         assert!(is_syncable(EntityType::EXECUTION_GOAL));
         assert!(is_syncable(EntityType::EXECUTION_IMPORTANT_DATE));

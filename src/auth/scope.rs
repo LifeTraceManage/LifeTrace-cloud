@@ -32,6 +32,8 @@ pub const ALL_SCOPES: &[&str] = &[
     "workouts:write",
     "execution:read",
     "execution:write",
+    "assets:read",
+    "assets:write",
     "mail:read",
     "mail:write",
 ];
@@ -45,6 +47,7 @@ pub fn supported_app(app_id: &str) -> bool {
             | AppId::ENGLISH_ANDROID
             | AppId::HABITS_ANDROID
             | AppId::EXECUTE_ANDROID
+            | AppId::ASSETS
             | AppId::BEECOUNT
             | AppId::WEB
     )
@@ -105,6 +108,14 @@ pub fn allowed_scopes(app_id: &str) -> BTreeSet<String> {
             "files:read",
             "files:write",
         ],
+        AppId::ASSETS => &[
+            "account:read",
+            "devices:read",
+            "sync:read",
+            "sync:write",
+            "assets:read",
+            "assets:write",
+        ],
         AppId::BEECOUNT => &[
             "account:read",
             "devices:read",
@@ -161,6 +172,8 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         "workouts"
     } else if entity_type.starts_with("execution.") {
         "execution"
+    } else if entity_type.starts_with("asset.") {
+        "assets"
     } else if entity_type.starts_with("mail.") {
         "mail"
     } else if entity_type == "file.metadata" {
@@ -185,6 +198,8 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         ("workouts", _) => "workouts:write",
         ("execution", "read") => "execution:read",
         ("execution", _) => "execution:write",
+        ("assets", "read") => "assets:read",
+        ("assets", _) => "assets:write",
         ("mail", "read") => "mail:read",
         ("mail", _) => "mail:write",
         ("files", "read") => "files:read",
@@ -278,6 +293,33 @@ mod tests {
         assert_eq!(
             required_entity_scope("mail.account", true),
             Some("mail:write")
+        );
+    }
+
+    #[test]
+    fn assets_app_has_only_required_product_scopes() {
+        assert!(supported_app(AppId::ASSETS));
+        let granted = allowed_scopes(AppId::ASSETS);
+        for required in [
+            "account:read",
+            "devices:read",
+            "sync:read",
+            "sync:write",
+            "assets:read",
+            "assets:write",
+        ] {
+            assert!(granted.contains(required), "missing scope: {required}");
+        }
+        assert!(!granted.contains("finance:write"));
+        assert!(!granted.contains("notes:write"));
+        assert!(!granted.contains("mail:write"));
+        assert_eq!(
+            required_entity_scope("asset.asset", false),
+            Some("assets:read")
+        );
+        assert_eq!(
+            required_entity_scope("asset.event", true),
+            Some("assets:write")
         );
     }
 

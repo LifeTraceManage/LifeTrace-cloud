@@ -1,0 +1,87 @@
+{
+  "$comment": "GENERATED FILE - DO NOT EDIT MANUALLY. Source: crates/lifetrace-contracts.",
+  "$defs": {
+    "AssetEventType": {
+      "enum": [
+        "purchase",
+        "useStart",
+        "maintenance",
+        "repair",
+        "replacement",
+        "lend",
+        "returnItem",
+        "idle",
+        "valuation",
+        "sell",
+        "retire",
+        "note"
+      ],
+      "type": "string"
+    },
+    "EntityId": {
+      "description": "Entity identifier. New IDs are UUID v4; legacy non-UUID IDs are preserved verbatim.",
+      "type": "string"
+    },
+    "ServerVersion": {
+      "description": "Server-authoritative entity version. Wire format: decimal string\n(for example `\"42\"`) to avoid JavaScript safe-integer issues.",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "amount": {
+      "format": "double",
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "assetId": {
+      "$ref": "#/$defs/EntityId"
+    },
+    "createdAt": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "date": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "detail": {
+      "type": "string"
+    },
+    "id": {
+      "$ref": "#/$defs/EntityId"
+    },
+    "isDeleted": {
+      "default": false,
+      "type": "boolean"
+    },
+    "serverVersion": {
+      "$ref": "#/$defs/ServerVersion",
+      "default": "0"
+    },
+    "title": {
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/AssetEventType"
+    },
+    "updatedAt": {
+      "format": "date-time",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "assetId",
+    "type",
+    "date",
+    "title",
+    "detail",
+    "createdAt",
+    "updatedAt"
+  ],
+  "title": "AssetEvent",
+  "type": "object"
+}

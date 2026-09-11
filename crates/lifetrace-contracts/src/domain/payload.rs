@@ -4,6 +4,7 @@
 //! strict validation for typed LifeTrace domains before the generic sync store
 //! accepts them.
 
+use crate::domain::assets::{Asset, AssetEvent};
 use crate::domain::english::*;
 use crate::domain::execution::{FocusSession, ImportantDate};
 use crate::domain::files::FileMetadata;
@@ -24,6 +25,8 @@ use crate::registry::EntityType;
 pub enum EntityPayload {
     User(User),
     Device(Device),
+    Asset(Asset),
+    AssetEvent(AssetEvent),
     FinanceLedger(FinanceLedger),
     FinanceAccount(FinanceAccount),
     TransactionCategory(TransactionCategory),
@@ -72,6 +75,8 @@ impl EntityPayload {
         EntityType::new(match self {
             EntityPayload::User(_) => EntityType::IDENTITY_USER,
             EntityPayload::Device(_) => EntityType::IDENTITY_DEVICE,
+            EntityPayload::Asset(_) => EntityType::ASSET_ASSET,
+            EntityPayload::AssetEvent(_) => EntityType::ASSET_EVENT,
             EntityPayload::FinanceLedger(_) => EntityType::FINANCE_LEDGER,
             EntityPayload::FinanceAccount(_) => EntityType::FINANCE_ACCOUNT,
             EntityPayload::TransactionCategory(_) => EntityType::FINANCE_CATEGORY,
@@ -116,6 +121,8 @@ impl EntityPayload {
         match self {
             EntityPayload::User(value) => &value.meta.id,
             EntityPayload::Device(value) => &value.meta.id,
+            EntityPayload::Asset(value) => &value.id,
+            EntityPayload::AssetEvent(value) => &value.id,
             EntityPayload::FinanceLedger(value) => &value.meta.id,
             EntityPayload::FinanceAccount(value) => &value.meta.id,
             EntityPayload::TransactionCategory(value) => &value.meta.id,
@@ -165,6 +172,8 @@ impl EntityPayload {
         match self {
             EntityPayload::User(v) => json!(v),
             EntityPayload::Device(v) => json!(v),
+            EntityPayload::Asset(v) => json!(v),
+            EntityPayload::AssetEvent(v) => json!(v),
             EntityPayload::FinanceLedger(v) => json!(v),
             EntityPayload::FinanceAccount(v) => json!(v),
             EntityPayload::TransactionCategory(v) => json!(v),
@@ -245,6 +254,12 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
             }
             EntityType::IDENTITY_DEVICE => {
                 parse::<Device>(&value, EntityType::IDENTITY_DEVICE).map(EntityPayload::Device)
+            }
+            EntityType::ASSET_ASSET => {
+                parse::<Asset>(&value, EntityType::ASSET_ASSET).map(EntityPayload::Asset)
+            }
+            EntityType::ASSET_EVENT => {
+                parse::<AssetEvent>(&value, EntityType::ASSET_EVENT).map(EntityPayload::AssetEvent)
             }
             EntityType::FINANCE_LEDGER => {
                 parse::<FinanceLedger>(&value, EntityType::FINANCE_LEDGER)
@@ -512,6 +527,56 @@ mod tests {
 
         assert_eq!(parsed.entity_id().as_str(), "focus-1");
         assert_eq!(parsed.to_json().0["focusSeconds"], 1500);
+    }
+
+
+    #[test]
+    fn asset_payload_dispatch_accepts_flutter_wire_payload() {
+        let value: JsonValue = serde_json::json!({
+            "id": "asset-1",
+            "name": "Phone",
+            "brand": "LifeTrace",
+            "model": "V1",
+            "category": "phone",
+            "status": "active",
+            "purchasePrice": 1000.0,
+            "currentValue": 800.0,
+            "purchaseDate": "2026-01-01T00:00:00Z",
+            "warrantyUntil": "2027-01-01T00:00:00Z",
+            "spec": "test",
+            "serialNumber": "SN-1",
+            "location": "desk",
+            "targetDailyCost": 5.0,
+            "purchaseChannel": "store",
+            "maintenanceCost": 0.0,
+            "recoveredAmount": 0.0,
+            "createdAt": "2026-09-11T00:00:00Z",
+            "updatedAt": "2026-09-11T00:00:00Z",
+            "isDeleted": false,
+            "serverVersion": "0"
+        }).into();
+
+        let parsed =
+            EntityPayload::try_from((&EntityType::new(EntityType::ASSET_ASSET), value)).unwrap();
+        assert_eq!(parsed.entity_id().as_str(), "asset-1");
+        assert_eq!(parsed.entity_type().as_str(), EntityType::ASSET_ASSET);
+    }
+
+    #[test]
+    fn asset_event_payload_rejects_missing_asset_id() {
+        let value: JsonValue = serde_json::json!({
+            "id": "event-1",
+            "type": "note",
+            "date": "2026-09-11T00:00:00Z",
+            "title": "Note",
+            "detail": "",
+            "amount": null,
+            "createdAt": "2026-09-11T00:00:00Z",
+            "updatedAt": "2026-09-11T00:00:00Z"
+        }).into();
+        assert!(EntityPayload::try_from(
+            (&EntityType::new(EntityType::ASSET_EVENT), value)
+        ).is_err());
     }
 
     #[test]

@@ -34,6 +34,16 @@ export type AppInstallationId = string;
 
 export type ArticleVocabularyItem = { word: string, phonetic: string | null, meaning: string, example: string | null, };
 
+export type Asset = { id: EntityId, name: string, brand: string, model: string, category: AssetCategory, status: AssetStatus, purchasePrice: number, currentValue: number, purchaseDate: string, warrantyUntil: string | null, spec: string, serialNumber: string, location: string, targetDailyCost: number, purchaseChannel: string, maintenanceCost: number, recoveredAmount: number, createdAt: string, updatedAt: string, isDeleted: boolean, serverVersion: ServerVersion, };
+
+export type AssetCategory = "phone" | "tablet" | "computer" | "wearable" | "audio" | "camera" | "home" | "other";
+
+export type AssetEvent = { id: EntityId, assetId: EntityId, type: AssetEventType, date: string, title: string, detail: string, amount: number | null, createdAt: string, updatedAt: string, isDeleted: boolean, serverVersion: ServerVersion, };
+
+export type AssetEventType = "purchase" | "useStart" | "maintenance" | "repair" | "replacement" | "lend" | "returnItem" | "idle" | "valuation" | "sell" | "retire" | "note";
+
+export type AssetStatus = "active" | "idle" | "lent" | "repair" | "sold" | "retired";
+
 export type AtomicGroupId = string;
 
 export type AuthCapabilitiesV1 = { registrationMode: string, passwordMinLength: number, passwordMaxBytes: number, accessTokenTtlSeconds: bigint, refreshIdleTtlSeconds: bigint, refreshAbsoluteTtlSeconds: bigint, webSessionEnabled: boolean, supportedApps: Array<AppId>, };

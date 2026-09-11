@@ -1,0 +1,9 @@
+schema: spec-driven
+context: |
+  LifeTrace Cloud provides generic authenticated Sync v1 storage for LifeTrace clients.
+  Asset sync is an additive domain extension used by LifeTraceManage/LifeTrace-assets.
+rules:
+  specs:
+    - Use MUST/SHALL requirements with Given/When/Then scenarios.
+  tasks:
+    - Mark tasks complete only after cargo tests pass.

@@ -1,0 +1,139 @@
+{
+  "$comment": "GENERATED FILE - DO NOT EDIT MANUALLY. Source: crates/lifetrace-contracts.",
+  "$defs": {
+    "AssetCategory": {
+      "enum": [
+        "phone",
+        "tablet",
+        "computer",
+        "wearable",
+        "audio",
+        "camera",
+        "home",
+        "other"
+      ],
+      "type": "string"
+    },
+    "AssetStatus": {
+      "enum": [
+        "active",
+        "idle",
+        "lent",
+        "repair",
+        "sold",
+        "retired"
+      ],
+      "type": "string"
+    },
+    "EntityId": {
+      "description": "Entity identifier. New IDs are UUID v4; legacy non-UUID IDs are preserved verbatim.",
+      "type": "string"
+    },
+    "ServerVersion": {
+      "description": "Server-authoritative entity version. Wire format: decimal string\n(for example `\"42\"`) to avoid JavaScript safe-integer issues.",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "brand": {
+      "type": "string"
+    },
+    "category": {
+      "$ref": "#/$defs/AssetCategory"
+    },
+    "createdAt": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "currentValue": {
+      "format": "double",
+      "type": "number"
+    },
+    "id": {
+      "$ref": "#/$defs/EntityId"
+    },
+    "isDeleted": {
+      "default": false,
+      "type": "boolean"
+    },
+    "location": {
+      "type": "string"
+    },
+    "maintenanceCost": {
+      "format": "double",
+      "type": "number"
+    },
+    "model": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "purchaseChannel": {
+      "type": "string"
+    },
+    "purchaseDate": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "purchasePrice": {
+      "format": "double",
+      "type": "number"
+    },
+    "recoveredAmount": {
+      "format": "double",
+      "type": "number"
+    },
+    "serialNumber": {
+      "type": "string"
+    },
+    "serverVersion": {
+      "$ref": "#/$defs/ServerVersion",
+      "default": "0"
+    },
+    "spec": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AssetStatus"
+    },
+    "targetDailyCost": {
+      "format": "double",
+      "type": "number"
+    },
+    "updatedAt": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "warrantyUntil": {
+      "format": "date-time",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "brand",
+    "model",
+    "category",
+    "status",
+    "purchasePrice",
+    "currentValue",
+    "purchaseDate",
+    "spec",
+    "serialNumber",
+    "location",
+    "targetDailyCost",
+    "purchaseChannel",
+    "maintenanceCost",
+    "recoveredAmount",
+    "createdAt",
+    "updatedAt"
+  ],
+  "title": "Asset",
+  "type": "object"
+}
