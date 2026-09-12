@@ -407,8 +407,10 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
                 registered(value, EntityType::EXECUTION_CALENDAR_OCCURRENCE)
             }
             EntityType::EXECUTION_IMPORTANT_DATE => {
-                parse::<ImportantDate>(&value, EntityType::EXECUTION_IMPORTANT_DATE)
-                    .map(EntityPayload::ImportantDate)
+                let important =
+                    parse::<ImportantDate>(&value, EntityType::EXECUTION_IMPORTANT_DATE)?;
+                important.validate()?;
+                Ok(EntityPayload::ImportantDate(important))
             }
             EntityType::EXECUTION_FOCUS_SESSION => {
                 parse::<FocusSession>(&value, EntityType::EXECUTION_FOCUS_SESSION)
@@ -497,6 +499,152 @@ mod tests {
 
         assert_eq!(parsed.entity_id().as_str(), "important-1");
         assert_eq!(parsed.to_json().0["title"], "生日");
+    }
+
+    #[test]
+    fn execute_important_date_legacy_payload_defaults_enabled() {
+        let value: JsonValue = serde_json::json!({
+            "id": "important-legacy",
+            "userId": "user-1",
+            "title": "纪念日",
+            "date": "2026-09-02",
+            "repeat": "once",
+            "kind": "anniversary",
+            "calendar": "solar",
+            "lunarMonth": null,
+            "lunarDay": null,
+            "lunarLeapMonth": false
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            value,
+        ))
+        .unwrap();
+
+        assert_eq!(parsed.to_json().0["enabled"], true);
+        assert_eq!(parsed.to_json().0["lunarYear"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn execute_lunar_important_date_requires_raw_lunar_source_fields() {
+        let valid: JsonValue = serde_json::json!({
+            "id": "important-lunar",
+            "userId": "user-1",
+            "title": "农历生日",
+            "date": "2026-09-02",
+            "repeat": "once",
+            "kind": "birthday",
+            "calendar": "lunar",
+            "lunarYear": 2026,
+            "lunarMonth": 7,
+            "lunarDay": 21,
+            "lunarLeapMonth": false,
+            "enabled": true
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            valid,
+        ))
+        .unwrap();
+        assert_eq!(parsed.to_json().0["lunarYear"], 2026);
+        assert_eq!(parsed.to_json().0["enabled"], true);
+
+        let missing_year: JsonValue = serde_json::json!({
+            "id": "important-lunar-missing-year",
+            "userId": "user-1",
+            "title": "一次农历日期",
+            "date": "2026-09-02",
+            "repeat": "once",
+            "kind": "other",
+            "calendar": "lunar",
+            "lunarYear": null,
+            "lunarMonth": 7,
+            "lunarDay": 21,
+            "lunarLeapMonth": false,
+            "enabled": true
+        })
+        .into();
+
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            missing_year,
+        ))
+        .is_err());
+    }
+
+    #[test]
+    fn execute_yearly_lunar_important_date_allows_no_source_year() {
+        let value: JsonValue = serde_json::json!({
+            "id": "important-yearly-lunar",
+            "userId": "user-1",
+            "title": "每年农历纪念日",
+            "date": "2026-09-02",
+            "repeat": "yearly",
+            "kind": "anniversary",
+            "calendar": "lunar",
+            "lunarYear": null,
+            "lunarMonth": 8,
+            "lunarDay": 15,
+            "lunarLeapMonth": false,
+            "enabled": false
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            value,
+        ))
+        .unwrap();
+        assert_eq!(parsed.to_json().0["enabled"], false);
+    }
+
+    #[test]
+    fn execute_important_date_rejects_invalid_calendar_field_combinations() {
+        let solar_with_lunar: JsonValue = serde_json::json!({
+            "id": "bad-solar",
+            "userId": "user-1",
+            "title": "Bad",
+            "date": "2026-09-02",
+            "repeat": "yearly",
+            "kind": "other",
+            "calendar": "solar",
+            "lunarYear": 2026,
+            "lunarMonth": 8,
+            "lunarDay": 15,
+            "lunarLeapMonth": false,
+            "enabled": true
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            solar_with_lunar,
+        ))
+        .is_err());
+
+        let bad_lunar_day: JsonValue = serde_json::json!({
+            "id": "bad-lunar",
+            "userId": "user-1",
+            "title": "Bad",
+            "date": "2026-09-02",
+            "repeat": "yearly",
+            "kind": "other",
+            "calendar": "lunar",
+            "lunarYear": null,
+            "lunarMonth": 8,
+            "lunarDay": 31,
+            "lunarLeapMonth": false,
+            "enabled": true
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            bad_lunar_day,
+        ))
+        .is_err());
     }
 
     #[test]
