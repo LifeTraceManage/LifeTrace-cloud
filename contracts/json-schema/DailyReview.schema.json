@@ -116,6 +116,15 @@
         "null"
       ]
     },
+    "focusSeconds": {
+      "default": null,
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
     "meta": {
       "$ref": "#/$defs/EntityMeta"
     },

@@ -82,7 +82,7 @@ export type CurrencyCode = string;
 
 export type Cursor = string;
 
-export type DailyReview = { meta: EntityMeta, reviewDate: LocalDate, energy: bigint | null, mood: bigint | null, completionScore: number | null, bestThing: string | null, problem: string | null, tomorrowPriority: string | null, note: string | null, completedTaskCount: bigint | null, totalTaskCount: bigint | null, };
+export type DailyReview = { meta: EntityMeta, reviewDate: LocalDate, energy: bigint | null, mood: bigint | null, completionScore: number | null, bestThing: string | null, problem: string | null, tomorrowPriority: string | null, note: string | null, completedTaskCount: bigint | null, totalTaskCount: bigint | null, focusSeconds: bigint | null, };
 
 export type Device = { meta: EntityMeta, deviceName: string, platform: string, appId: string | null, status: string, lastSeenAt: string | null, };
 
