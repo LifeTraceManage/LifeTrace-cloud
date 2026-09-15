@@ -13,7 +13,7 @@ use crate::domain::habits::*;
 use crate::domain::links::EntityLink;
 use crate::domain::notes::*;
 use crate::domain::preferences::UserPreference;
-use crate::domain::reviews::DailyReview;
+use crate::domain::reviews::{DailyReview, WeeklyReview};
 use crate::domain::user::{Device, User};
 use crate::domain::workouts::*;
 use crate::ids::EntityId;
@@ -40,6 +40,7 @@ pub enum EntityPayload {
     Activity(Activity),
     ActivityLog(ActivityLog),
     DailyReview(DailyReview),
+    WeeklyReview(WeeklyReview),
     ImportantDate(ImportantDate),
     Reminder(Reminder),
     FocusSession(FocusSession),
@@ -91,6 +92,7 @@ impl EntityPayload {
             EntityPayload::Activity(_) => EntityType::HABIT_ACTIVITY,
             EntityPayload::ActivityLog(_) => EntityType::HABIT_LOG,
             EntityPayload::DailyReview(_) => EntityType::REVIEW_DAILY,
+            EntityPayload::WeeklyReview(_) => EntityType::EXECUTION_WEEKLY_REVIEW,
             EntityPayload::ImportantDate(_) => EntityType::EXECUTION_IMPORTANT_DATE,
             EntityPayload::Reminder(_) => EntityType::EXECUTION_REMINDER,
             EntityPayload::FocusSession(_) => EntityType::EXECUTION_FOCUS_SESSION,
@@ -138,6 +140,7 @@ impl EntityPayload {
             EntityPayload::Activity(value) => &value.meta.id,
             EntityPayload::ActivityLog(value) => &value.meta.id,
             EntityPayload::DailyReview(value) => &value.meta.id,
+            EntityPayload::WeeklyReview(value) => &value.meta.id,
             EntityPayload::ImportantDate(value) => &value.id,
             EntityPayload::Reminder(value) => &value.meta.id,
             EntityPayload::FocusSession(value) => &value.id,
@@ -190,6 +193,7 @@ impl EntityPayload {
             EntityPayload::Activity(v) => json!(v),
             EntityPayload::ActivityLog(v) => json!(v),
             EntityPayload::DailyReview(v) => json!(v),
+            EntityPayload::WeeklyReview(v) => json!(v),
             EntityPayload::ImportantDate(v) => json!(v),
             EntityPayload::Reminder(v) => json!(v),
             EntityPayload::FocusSession(v) => json!(v),
@@ -384,7 +388,8 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
             }
             EntityType::EXECUTION_GOAL => registered(value, EntityType::EXECUTION_GOAL),
             EntityType::EXECUTION_WEEKLY_REVIEW => {
-                registered(value, EntityType::EXECUTION_WEEKLY_REVIEW)
+                parse::<WeeklyReview>(&value, EntityType::EXECUTION_WEEKLY_REVIEW)
+                    .map(EntityPayload::WeeklyReview)
             }
             EntityType::EXECUTION_PROJECT => registered(value, EntityType::EXECUTION_PROJECT),
             EntityType::EXECUTION_RECURRENCE_RULE => {
