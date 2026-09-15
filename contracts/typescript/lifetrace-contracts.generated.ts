@@ -82,7 +82,7 @@ export type CurrencyCode = string;
 
 export type Cursor = string;
 
-export type DailyReview = { meta: EntityMeta, reviewDate: LocalDate, energy: bigint | null, mood: bigint | null, completionScore: number | null, bestThing: string | null, problem: string | null, tomorrowPriority: string | null, note: string | null, completedTaskCount: bigint | null, totalTaskCount: bigint | null, };
+export type DailyReview = { meta: EntityMeta, reviewDate: LocalDate, energy: bigint | null, mood: bigint | null, completionScore: number | null, bestThing: string | null, problem: string | null, tomorrowPriority: string | null, note: string | null, completedTaskCount: bigint | null, totalTaskCount: bigint | null, focusSeconds: bigint | null, };
 
 export type Device = { meta: EntityMeta, deviceName: string, platform: string, appId: string | null, status: string, lastSeenAt: string | null, };
 
@@ -346,6 +346,8 @@ export type VocabularyStatus = string;
 export type WebLoginRequestV1 = { email: string, password: string, requestedScopes: Array<Scope>, publicDevice: boolean, };
 
 export type WebSessionResponseV1 = { user: AuthUserV1, session: AuthSessionV1, csrfToken: string, };
+
+export type WeeklyReview = { meta: EntityMeta, weekStart: LocalDate, weekEnd: LocalDate, completionScore: number | null, completedTaskCount: bigint | null, totalTaskCount: bigint | null, focusSeconds: bigint | null, completionSummary: string | null, bestThing: string | null, problem: string | null, improvement: string | null, nextWeekPriority: string | null, note: string | null, };
 
 export type Workout = { meta: EntityMeta, source: WorkoutSource, sourceId: string | null, name: string, occurredAt: string, localDate: LocalDate, durationSeconds: bigint, exerciseCount: bigint, setCount: bigint, plannedSetCount: bigint | null, volumeKg: number | null, caloriesKcal: number | null, status: WorkoutStatus | null, };
 
