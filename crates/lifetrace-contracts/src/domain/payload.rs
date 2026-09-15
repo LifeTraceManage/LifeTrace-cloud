@@ -691,6 +691,87 @@ mod tests {
 
 
     #[test]
+    fn execute_weekly_review_dispatch_accepts_typed_payload() {
+        let value: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "weekly-1",
+                "userId": "user-1",
+                "createdAt": "2026-09-13T12:00:00Z",
+                "updatedAt": "2026-09-13T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": "device-1"
+            },
+            "weekStart": "2026-09-07",
+            "weekEnd": "2026-09-13",
+            "completionScore": 0.75,
+            "completedTaskCount": 6,
+            "totalTaskCount": 8,
+            "focusSeconds": 7200,
+            "completionSummary": "完成主要工作",
+            "bestThing": "保持了执行节奏",
+            "problem": "周中注意力分散",
+            "improvement": "减少上下文切换",
+            "nextWeekPriority": "推进核心研究",
+            "note": "周复盘"
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_WEEKLY_REVIEW),
+            value,
+        ))
+        .unwrap();
+
+        assert_eq!(parsed.entity_id().as_str(), "weekly-1");
+        assert_eq!(
+            parsed.entity_type().as_str(),
+            EntityType::EXECUTION_WEEKLY_REVIEW
+        );
+        assert_eq!(parsed.to_json().0["completedTaskCount"], 6);
+        assert_eq!(parsed.to_json().0["focusSeconds"], 7200);
+        assert_eq!(
+            parsed.to_json().0["nextWeekPriority"],
+            "推进核心研究"
+        );
+    }
+
+    #[test]
+    fn execute_weekly_review_rejects_missing_week_boundary() {
+        let value: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "weekly-bad",
+                "userId": "user-1",
+                "createdAt": "2026-09-13T12:00:00Z",
+                "updatedAt": "2026-09-13T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "weekStart": "2026-09-07",
+            "completionScore": null,
+            "completedTaskCount": null,
+            "totalTaskCount": null,
+            "focusSeconds": null,
+            "completionSummary": null,
+            "bestThing": null,
+            "problem": null,
+            "improvement": null,
+            "nextWeekPriority": null,
+            "note": null
+        })
+        .into();
+
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_WEEKLY_REVIEW),
+            value,
+        ))
+        .is_err());
+    }
+
+    #[test]
     fn execute_reminder_dispatch_accepts_typed_payload() {
         let value: JsonValue = serde_json::json!({
             "meta": {
