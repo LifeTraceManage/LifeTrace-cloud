@@ -3758,6 +3758,103 @@
         ],
         "type": "object"
       },
+      "WeeklyReview": {
+        "description": "`execution.weekly_review`.\n\nWeek boundaries are explicit local dates so clients can render and query\nhistorical reviews without depending on locale-specific week numbering.",
+        "properties": {
+          "bestThing": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completedTaskCount": {
+            "default": null,
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "completionScore": {
+            "default": null,
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "completionSummary": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "focusSeconds": {
+            "default": null,
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "improvement": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EntityMeta"
+          },
+          "nextWeekPriority": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "problem": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "totalTaskCount": {
+            "default": null,
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "weekEnd": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "weekStart": {
+            "$ref": "#/components/schemas/LocalDate"
+          }
+        },
+        "required": [
+          "meta",
+          "weekStart",
+          "weekEnd"
+        ],
+        "type": "object"
+      },
       "Workout": {
         "description": "`workout.workout` (summary; exercises and sets are separate entities).",
         "properties": {

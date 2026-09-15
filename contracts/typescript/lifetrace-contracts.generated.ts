@@ -347,6 +347,8 @@ export type WebLoginRequestV1 = { email: string, password: string, requestedScop
 
 export type WebSessionResponseV1 = { user: AuthUserV1, session: AuthSessionV1, csrfToken: string, };
 
+export type WeeklyReview = { meta: EntityMeta, weekStart: LocalDate, weekEnd: LocalDate, completionScore: number | null, completedTaskCount: bigint | null, totalTaskCount: bigint | null, focusSeconds: bigint | null, completionSummary: string | null, bestThing: string | null, problem: string | null, improvement: string | null, nextWeekPriority: string | null, note: string | null, };
+
 export type Workout = { meta: EntityMeta, source: WorkoutSource, sourceId: string | null, name: string, occurredAt: string, localDate: LocalDate, durationSeconds: bigint, exerciseCount: bigint, setCount: bigint, plannedSetCount: bigint | null, volumeKg: number | null, caloriesKcal: number | null, status: WorkoutStatus | null, };
 
 export type WorkoutExercise = { meta: EntityMeta, workoutId: EntityId, name: string, sortOrder: bigint, plannedSets: bigint, completedSets: bigint, };
