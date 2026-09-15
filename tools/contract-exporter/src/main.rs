@@ -97,6 +97,7 @@ macro_rules! public_types {
             Activity::type_name(),
             ActivityLog::type_name(),
             DailyReview::type_name(),
+            WeeklyReview::type_name(),
             Reminder::type_name(),
             // notes
             NoteFolder::type_name(),
@@ -284,6 +285,7 @@ fn schema_for_type(name: &str) -> schemars::Schema {
         Activity,
         ActivityLog,
         DailyReview,
+        WeeklyReview,
         Reminder,
         NoteFolder,
         Note,
@@ -458,6 +460,7 @@ fn ts_decl_for(name: &str) -> String {
         Activity,
         ActivityLog,
         DailyReview,
+        WeeklyReview,
         Reminder,
         NoteFolder,
         Note,
