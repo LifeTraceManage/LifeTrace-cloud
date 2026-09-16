@@ -6,7 +6,7 @@
 
 use crate::domain::assets::{Asset, AssetEvent};
 use crate::domain::english::*;
-use crate::domain::execution::{FocusSession, ImportantDate, Reminder};
+use crate::domain::execution::{ExecutionGoal, FocusSession, ImportantDate, Reminder};
 use crate::domain::files::FileMetadata;
 use crate::domain::finance::*;
 use crate::domain::habits::*;
@@ -41,6 +41,7 @@ pub enum EntityPayload {
     ActivityLog(ActivityLog),
     DailyReview(DailyReview),
     WeeklyReview(WeeklyReview),
+    ExecutionGoal(ExecutionGoal),
     ImportantDate(ImportantDate),
     Reminder(Reminder),
     FocusSession(FocusSession),
@@ -93,6 +94,7 @@ impl EntityPayload {
             EntityPayload::ActivityLog(_) => EntityType::HABIT_LOG,
             EntityPayload::DailyReview(_) => EntityType::REVIEW_DAILY,
             EntityPayload::WeeklyReview(_) => EntityType::EXECUTION_WEEKLY_REVIEW,
+            EntityPayload::ExecutionGoal(_) => EntityType::EXECUTION_GOAL,
             EntityPayload::ImportantDate(_) => EntityType::EXECUTION_IMPORTANT_DATE,
             EntityPayload::Reminder(_) => EntityType::EXECUTION_REMINDER,
             EntityPayload::FocusSession(_) => EntityType::EXECUTION_FOCUS_SESSION,
@@ -141,6 +143,7 @@ impl EntityPayload {
             EntityPayload::ActivityLog(value) => &value.meta.id,
             EntityPayload::DailyReview(value) => &value.meta.id,
             EntityPayload::WeeklyReview(value) => &value.meta.id,
+            EntityPayload::ExecutionGoal(value) => &value.meta.id,
             EntityPayload::ImportantDate(value) => &value.id,
             EntityPayload::Reminder(value) => &value.meta.id,
             EntityPayload::FocusSession(value) => &value.id,
@@ -194,6 +197,7 @@ impl EntityPayload {
             EntityPayload::ActivityLog(v) => json!(v),
             EntityPayload::DailyReview(v) => json!(v),
             EntityPayload::WeeklyReview(v) => json!(v),
+            EntityPayload::ExecutionGoal(v) => json!(v),
             EntityPayload::ImportantDate(v) => json!(v),
             EntityPayload::Reminder(v) => json!(v),
             EntityPayload::FocusSession(v) => json!(v),
@@ -389,7 +393,11 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
                 parse::<UserPreference>(&value, EntityType::USER_PREFERENCE)
                     .map(EntityPayload::UserPreference)
             }
-            EntityType::EXECUTION_GOAL => registered(value, EntityType::EXECUTION_GOAL),
+            EntityType::EXECUTION_GOAL => {
+                let goal = parse::<ExecutionGoal>(&value, EntityType::EXECUTION_GOAL)?;
+                goal.validate()?;
+                Ok(EntityPayload::ExecutionGoal(goal))
+            },
             EntityType::EXECUTION_WEEKLY_REVIEW => {
                 let review =
                     parse::<WeeklyReview>(&value, EntityType::EXECUTION_WEEKLY_REVIEW)?;
@@ -692,6 +700,100 @@ mod tests {
 
         assert_eq!(parsed.entity_id().as_str(), "focus-1");
         assert_eq!(parsed.to_json().0["focusSeconds"], 1500);
+    }
+
+
+    #[test]
+    fn execute_goal_dispatch_accepts_shared_goal_payload() {
+        let value: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "goal-1",
+                "userId": "user-1",
+                "createdAt": "2026-09-16T00:00:00Z",
+                "updatedAt": "2026-09-16T00:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": "device-1"
+            },
+            "name": "完成论文",
+            "description": "推进实验、论文与答辩准备",
+            "status": "active",
+            "targetAt": "2026-12-31T23:59:59Z",
+            "color": "#49715d",
+            "icon": "target",
+            "sortOrder": 0,
+            "completedAt": null
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_GOAL),
+            value,
+        ))
+        .unwrap();
+
+        assert_eq!(parsed.entity_id().as_str(), "goal-1");
+        assert_eq!(parsed.entity_type().as_str(), EntityType::EXECUTION_GOAL);
+        assert_eq!(parsed.to_json().0["name"], "完成论文");
+        assert_eq!(parsed.to_json().0["status"], "active");
+    }
+
+    #[test]
+    fn execute_goal_rejects_empty_name_and_unknown_status() {
+        let empty_name: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "goal-empty",
+                "userId": "user-1",
+                "createdAt": "2026-09-16T00:00:00Z",
+                "updatedAt": "2026-09-16T00:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "name": "   ",
+            "description": null,
+            "status": "active",
+            "targetAt": null,
+            "color": null,
+            "icon": null,
+            "sortOrder": 0,
+            "completedAt": null
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_GOAL),
+            empty_name,
+        ))
+        .is_err());
+
+        let invalid_status: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "goal-invalid-status",
+                "userId": "user-1",
+                "createdAt": "2026-09-16T00:00:00Z",
+                "updatedAt": "2026-09-16T00:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "name": "目标",
+            "description": null,
+            "status": "doing",
+            "targetAt": null,
+            "color": null,
+            "icon": null,
+            "sortOrder": 0,
+            "completedAt": null
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_GOAL),
+            invalid_status,
+        ))
+        .is_err());
     }
 
 
