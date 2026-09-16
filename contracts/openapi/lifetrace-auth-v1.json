@@ -1977,6 +1977,68 @@
         ],
         "type": "string"
       },
+      "ExecutionGoal": {
+        "description": "`execution.goal`, matching the shared Goal layer used by LifeTrace desktop/web.\n\nGoal is the layer above projects: Goal -> Project -> Task. The wire contract\nintentionally preserves the existing nullable presentation fields and\ntimestamp fields so older clients can continue syncing the same entity.",
+        "properties": {
+          "color": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completedAt": {
+            "default": null,
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "icon": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EntityMeta"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "default": 0,
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GoalStatus"
+          },
+          "targetAt": {
+            "default": null,
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "meta",
+          "name",
+          "status"
+        ],
+        "type": "object"
+      },
       "FieldError": {
         "description": "Field-level validation error inside `ApiErrorV1`.",
         "properties": {
@@ -2114,6 +2176,15 @@
           "email"
         ],
         "type": "object"
+      },
+      "GoalStatus": {
+        "enum": [
+          "active",
+          "paused",
+          "completed",
+          "cancelled"
+        ],
+        "type": "string"
       },
       "HighlightColor": {
         "description": "English highlight color. Known values: yellow, green, blue. Unknown values are preserved (forward compatible).",

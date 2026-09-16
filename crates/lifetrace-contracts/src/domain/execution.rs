@@ -12,6 +12,51 @@ fn default_true() -> bool {
     true
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum GoalStatus {
+    Active,
+    Paused,
+    Completed,
+    Cancelled,
+}
+
+/// `execution.goal`, matching the shared Goal layer used by LifeTrace desktop/web.
+///
+/// Goal is the layer above projects: Goal -> Project -> Task. The wire contract
+/// intentionally preserves the existing nullable presentation fields and
+/// timestamp fields so older clients can continue syncing the same entity.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ExecutionGoal {
+    pub meta: EntityMeta,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub status: GoalStatus,
+    #[serde(default)]
+    pub target_at: Option<UtcTimestamp>,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub sort_order: i64,
+    #[serde(default)]
+    pub completed_at: Option<UtcTimestamp>,
+}
+
+impl ExecutionGoal {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.name.trim().is_empty() {
+            return Err("goal name must not be empty".to_owned());
+        }
+        Ok(())
+    }
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]

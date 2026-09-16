@@ -147,6 +147,8 @@ export type EntityType = string;
 
 export type ErrorCode = string;
 
+export type ExecutionGoal = { meta: EntityMeta, name: string, description: string | null, status: GoalStatus, targetAt: string | null, color: string | null, icon: string | null, sortOrder: bigint, completedAt: string | null, };
+
 export type FieldError = { 
 /**
  * Field path, for example `changes[3].entityType`.
@@ -168,6 +170,8 @@ export type FinanceAccount = { meta: EntityMeta, name: string, accountType: Acco
 openingBalanceCents: bigint | null, balanceAt: string | null, last4: string | null, color: string, icon: string, isArchived: boolean, currency: CurrencyCode, };
 
 export type ForgotPasswordRequestV1 = { email: string, };
+
+export type GoalStatus = "active" | "paused" | "completed" | "cancelled";
 
 export type HighlightColor = string;
 
