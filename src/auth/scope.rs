@@ -34,6 +34,8 @@ pub const ALL_SCOPES: &[&str] = &[
     "execution:write",
     "assets:read",
     "assets:write",
+    "links:read",
+    "links:write",
     "mail:read",
     "mail:write",
 ];
@@ -117,6 +119,8 @@ pub fn allowed_scopes(app_id: &str) -> BTreeSet<String> {
             "sync:write",
             "assets:read",
             "assets:write",
+            "links:read",
+            "links:write",
         ],
         AppId::BEECOUNT => &[
             "account:read",
@@ -180,7 +184,9 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         "mail"
     } else if entity_type == "file.metadata" {
         "files"
-    } else if entity_type == "user.preference" || entity_type == "entity.link" {
+    } else if entity_type == "entity.link" {
+        "links"
+    } else if entity_type == "user.preference" {
         "account"
     } else {
         return None;
@@ -202,6 +208,8 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         ("execution", _) => "execution:write",
         ("assets", "read") => "assets:read",
         ("assets", _) => "assets:write",
+        ("links", "read") => "links:read",
+        ("links", _) => "links:write",
         ("mail", "read") => "mail:read",
         ("mail", _) => "mail:write",
         ("files", "read") => "files:read",
@@ -311,11 +319,15 @@ mod tests {
             "sync:write",
             "assets:read",
             "assets:write",
+            "links:read",
+            "links:write",
         ] {
             assert!(granted.contains(required), "missing scope: {required}");
         }
+        assert!(!granted.contains("account:write"));
         assert!(!granted.contains("finance:write"));
         assert!(!granted.contains("notes:write"));
+        assert!(!granted.contains("execution:write"));
         assert!(!granted.contains("mail:write"));
         assert_eq!(
             required_entity_scope("asset.asset", false),
@@ -324,6 +336,18 @@ mod tests {
         assert_eq!(
             required_entity_scope("asset.event", true),
             Some("assets:write")
+        );
+        assert_eq!(
+            required_entity_scope("entity.link", false),
+            Some("links:read")
+        );
+        assert_eq!(
+            required_entity_scope("entity.link", true),
+            Some("links:write")
+        );
+        assert_eq!(
+            required_entity_scope("identity.user", true),
+            Some("account:write")
         );
     }
 
