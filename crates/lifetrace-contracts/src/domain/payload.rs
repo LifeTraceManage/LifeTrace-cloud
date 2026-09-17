@@ -6,14 +6,14 @@
 
 use crate::domain::assets::{Asset, AssetEvent};
 use crate::domain::english::*;
-use crate::domain::execution::{FocusSession, ImportantDate, Reminder};
+use crate::domain::execution::{ExecutionGoal, FocusSession, ImportantDate, Reminder};
 use crate::domain::files::FileMetadata;
 use crate::domain::finance::*;
 use crate::domain::habits::*;
 use crate::domain::links::EntityLink;
 use crate::domain::notes::*;
 use crate::domain::preferences::UserPreference;
-use crate::domain::reviews::DailyReview;
+use crate::domain::reviews::{DailyReview, WeeklyReview};
 use crate::domain::user::{Device, User};
 use crate::domain::workouts::*;
 use crate::ids::EntityId;
@@ -40,6 +40,8 @@ pub enum EntityPayload {
     Activity(Activity),
     ActivityLog(ActivityLog),
     DailyReview(DailyReview),
+    WeeklyReview(WeeklyReview),
+    ExecutionGoal(ExecutionGoal),
     ImportantDate(ImportantDate),
     Reminder(Reminder),
     FocusSession(FocusSession),
@@ -91,6 +93,8 @@ impl EntityPayload {
             EntityPayload::Activity(_) => EntityType::HABIT_ACTIVITY,
             EntityPayload::ActivityLog(_) => EntityType::HABIT_LOG,
             EntityPayload::DailyReview(_) => EntityType::REVIEW_DAILY,
+            EntityPayload::WeeklyReview(_) => EntityType::EXECUTION_WEEKLY_REVIEW,
+            EntityPayload::ExecutionGoal(_) => EntityType::EXECUTION_GOAL,
             EntityPayload::ImportantDate(_) => EntityType::EXECUTION_IMPORTANT_DATE,
             EntityPayload::Reminder(_) => EntityType::EXECUTION_REMINDER,
             EntityPayload::FocusSession(_) => EntityType::EXECUTION_FOCUS_SESSION,
@@ -138,6 +142,8 @@ impl EntityPayload {
             EntityPayload::Activity(value) => &value.meta.id,
             EntityPayload::ActivityLog(value) => &value.meta.id,
             EntityPayload::DailyReview(value) => &value.meta.id,
+            EntityPayload::WeeklyReview(value) => &value.meta.id,
+            EntityPayload::ExecutionGoal(value) => &value.meta.id,
             EntityPayload::ImportantDate(value) => &value.id,
             EntityPayload::Reminder(value) => &value.meta.id,
             EntityPayload::FocusSession(value) => &value.id,
@@ -190,6 +196,8 @@ impl EntityPayload {
             EntityPayload::Activity(v) => json!(v),
             EntityPayload::ActivityLog(v) => json!(v),
             EntityPayload::DailyReview(v) => json!(v),
+            EntityPayload::WeeklyReview(v) => json!(v),
+            EntityPayload::ExecutionGoal(v) => json!(v),
             EntityPayload::ImportantDate(v) => json!(v),
             EntityPayload::Reminder(v) => json!(v),
             EntityPayload::FocusSession(v) => json!(v),
@@ -310,8 +318,11 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
             EntityType::HABIT_LOG => {
                 parse::<ActivityLog>(&value, EntityType::HABIT_LOG).map(EntityPayload::ActivityLog)
             }
-            EntityType::REVIEW_DAILY => parse::<DailyReview>(&value, EntityType::REVIEW_DAILY)
-                .map(EntityPayload::DailyReview),
+            EntityType::REVIEW_DAILY => {
+                let review = parse::<DailyReview>(&value, EntityType::REVIEW_DAILY)?;
+                review.validate()?;
+                Ok(EntityPayload::DailyReview(review))
+            },
             EntityType::NOTE_FOLDER => {
                 parse::<NoteFolder>(&value, EntityType::NOTE_FOLDER).map(EntityPayload::NoteFolder)
             }
@@ -382,9 +393,16 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
                 parse::<UserPreference>(&value, EntityType::USER_PREFERENCE)
                     .map(EntityPayload::UserPreference)
             }
-            EntityType::EXECUTION_GOAL => registered(value, EntityType::EXECUTION_GOAL),
+            EntityType::EXECUTION_GOAL => {
+                let goal = parse::<ExecutionGoal>(&value, EntityType::EXECUTION_GOAL)?;
+                goal.validate()?;
+                Ok(EntityPayload::ExecutionGoal(goal))
+            },
             EntityType::EXECUTION_WEEKLY_REVIEW => {
-                registered(value, EntityType::EXECUTION_WEEKLY_REVIEW)
+                let review =
+                    parse::<WeeklyReview>(&value, EntityType::EXECUTION_WEEKLY_REVIEW)?;
+                review.validate()?;
+                Ok(EntityPayload::WeeklyReview(review))
             }
             EntityType::EXECUTION_PROJECT => registered(value, EntityType::EXECUTION_PROJECT),
             EntityType::EXECUTION_RECURRENCE_RULE => {
@@ -407,8 +425,10 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
                 registered(value, EntityType::EXECUTION_CALENDAR_OCCURRENCE)
             }
             EntityType::EXECUTION_IMPORTANT_DATE => {
-                parse::<ImportantDate>(&value, EntityType::EXECUTION_IMPORTANT_DATE)
-                    .map(EntityPayload::ImportantDate)
+                let important =
+                    parse::<ImportantDate>(&value, EntityType::EXECUTION_IMPORTANT_DATE)?;
+                important.validate()?;
+                Ok(EntityPayload::ImportantDate(important))
             }
             EntityType::EXECUTION_FOCUS_SESSION => {
                 parse::<FocusSession>(&value, EntityType::EXECUTION_FOCUS_SESSION)
@@ -500,6 +520,152 @@ mod tests {
     }
 
     #[test]
+    fn execute_important_date_legacy_payload_defaults_enabled() {
+        let value: JsonValue = serde_json::json!({
+            "id": "important-legacy",
+            "userId": "user-1",
+            "title": "纪念日",
+            "date": "2026-09-02",
+            "repeat": "once",
+            "kind": "anniversary",
+            "calendar": "solar",
+            "lunarMonth": null,
+            "lunarDay": null,
+            "lunarLeapMonth": false
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            value,
+        ))
+        .unwrap();
+
+        assert_eq!(parsed.to_json().0["enabled"], true);
+        assert_eq!(parsed.to_json().0["lunarYear"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn execute_lunar_important_date_requires_raw_lunar_source_fields() {
+        let valid: JsonValue = serde_json::json!({
+            "id": "important-lunar",
+            "userId": "user-1",
+            "title": "农历生日",
+            "date": "2026-09-02",
+            "repeat": "once",
+            "kind": "birthday",
+            "calendar": "lunar",
+            "lunarYear": 2026,
+            "lunarMonth": 7,
+            "lunarDay": 21,
+            "lunarLeapMonth": false,
+            "enabled": true
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            valid,
+        ))
+        .unwrap();
+        assert_eq!(parsed.to_json().0["lunarYear"], 2026);
+        assert_eq!(parsed.to_json().0["enabled"], true);
+
+        let missing_year: JsonValue = serde_json::json!({
+            "id": "important-lunar-missing-year",
+            "userId": "user-1",
+            "title": "一次农历日期",
+            "date": "2026-09-02",
+            "repeat": "once",
+            "kind": "other",
+            "calendar": "lunar",
+            "lunarYear": null,
+            "lunarMonth": 7,
+            "lunarDay": 21,
+            "lunarLeapMonth": false,
+            "enabled": true
+        })
+        .into();
+
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            missing_year,
+        ))
+        .is_err());
+    }
+
+    #[test]
+    fn execute_yearly_lunar_important_date_allows_no_source_year() {
+        let value: JsonValue = serde_json::json!({
+            "id": "important-yearly-lunar",
+            "userId": "user-1",
+            "title": "每年农历纪念日",
+            "date": "2026-09-02",
+            "repeat": "yearly",
+            "kind": "anniversary",
+            "calendar": "lunar",
+            "lunarYear": null,
+            "lunarMonth": 8,
+            "lunarDay": 15,
+            "lunarLeapMonth": false,
+            "enabled": false
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            value,
+        ))
+        .unwrap();
+        assert_eq!(parsed.to_json().0["enabled"], false);
+    }
+
+    #[test]
+    fn execute_important_date_rejects_invalid_calendar_field_combinations() {
+        let solar_with_lunar: JsonValue = serde_json::json!({
+            "id": "bad-solar",
+            "userId": "user-1",
+            "title": "Bad",
+            "date": "2026-09-02",
+            "repeat": "yearly",
+            "kind": "other",
+            "calendar": "solar",
+            "lunarYear": 2026,
+            "lunarMonth": 8,
+            "lunarDay": 15,
+            "lunarLeapMonth": false,
+            "enabled": true
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            solar_with_lunar,
+        ))
+        .is_err());
+
+        let bad_lunar_day: JsonValue = serde_json::json!({
+            "id": "bad-lunar",
+            "userId": "user-1",
+            "title": "Bad",
+            "date": "2026-09-02",
+            "repeat": "yearly",
+            "kind": "other",
+            "calendar": "lunar",
+            "lunarYear": null,
+            "lunarMonth": 8,
+            "lunarDay": 31,
+            "lunarLeapMonth": false,
+            "enabled": true
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_IMPORTANT_DATE),
+            bad_lunar_day,
+        ))
+        .is_err());
+    }
+
+    #[test]
     fn execute_important_date_rejects_incomplete_payload() {
         let value: JsonValue = serde_json::json!({
             "id": "important-1",
@@ -536,6 +702,291 @@ mod tests {
         assert_eq!(parsed.to_json().0["focusSeconds"], 1500);
     }
 
+
+    #[test]
+    fn execute_goal_dispatch_accepts_shared_goal_payload() {
+        let value: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "goal-1",
+                "userId": "user-1",
+                "createdAt": "2026-09-16T00:00:00Z",
+                "updatedAt": "2026-09-16T00:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": "device-1"
+            },
+            "name": "完成论文",
+            "description": "推进实验、论文与答辩准备",
+            "status": "active",
+            "targetAt": "2026-12-31T23:59:59Z",
+            "color": "#49715d",
+            "icon": "target",
+            "sortOrder": 0,
+            "completedAt": null
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_GOAL),
+            value,
+        ))
+        .unwrap();
+
+        assert_eq!(parsed.entity_id().as_str(), "goal-1");
+        assert_eq!(parsed.entity_type().as_str(), EntityType::EXECUTION_GOAL);
+        assert_eq!(parsed.to_json().0["name"], "完成论文");
+        assert_eq!(parsed.to_json().0["status"], "active");
+    }
+
+    #[test]
+    fn execute_goal_rejects_empty_name_and_unknown_status() {
+        let empty_name: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "goal-empty",
+                "userId": "user-1",
+                "createdAt": "2026-09-16T00:00:00Z",
+                "updatedAt": "2026-09-16T00:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "name": "   ",
+            "description": null,
+            "status": "active",
+            "targetAt": null,
+            "color": null,
+            "icon": null,
+            "sortOrder": 0,
+            "completedAt": null
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_GOAL),
+            empty_name,
+        ))
+        .is_err());
+
+        let invalid_status: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "goal-invalid-status",
+                "userId": "user-1",
+                "createdAt": "2026-09-16T00:00:00Z",
+                "updatedAt": "2026-09-16T00:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "name": "目标",
+            "description": null,
+            "status": "doing",
+            "targetAt": null,
+            "color": null,
+            "icon": null,
+            "sortOrder": 0,
+            "completedAt": null
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_GOAL),
+            invalid_status,
+        ))
+        .is_err());
+    }
+
+
+    #[test]
+    fn execute_weekly_review_dispatch_accepts_typed_payload() {
+        let value: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "weekly-1",
+                "userId": "user-1",
+                "createdAt": "2026-09-13T12:00:00Z",
+                "updatedAt": "2026-09-13T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": "device-1"
+            },
+            "weekStart": "2026-09-07",
+            "weekEnd": "2026-09-13",
+            "completionScore": 0.75,
+            "completedTaskCount": 6,
+            "totalTaskCount": 8,
+            "focusSeconds": 7200,
+            "completionSummary": "完成主要工作",
+            "bestThing": "保持了执行节奏",
+            "problem": "周中注意力分散",
+            "improvement": "减少上下文切换",
+            "nextWeekPriority": "推进核心研究",
+            "note": "周复盘"
+        })
+        .into();
+
+        let parsed = EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_WEEKLY_REVIEW),
+            value,
+        ))
+        .unwrap();
+
+        assert_eq!(parsed.entity_id().as_str(), "weekly-1");
+        assert_eq!(
+            parsed.entity_type().as_str(),
+            EntityType::EXECUTION_WEEKLY_REVIEW
+        );
+        assert_eq!(parsed.to_json().0["completedTaskCount"], 6);
+        assert_eq!(parsed.to_json().0["focusSeconds"], 7200);
+        assert_eq!(
+            parsed.to_json().0["nextWeekPriority"],
+            "推进核心研究"
+        );
+    }
+
+    #[test]
+    fn execute_weekly_review_rejects_invalid_week_and_counts() {
+        let invalid_week: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "weekly-invalid-week",
+                "userId": "user-1",
+                "createdAt": "2026-09-13T12:00:00Z",
+                "updatedAt": "2026-09-13T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "weekStart": "2026-09-07",
+            "weekEnd": "2026-09-12",
+            "completionScore": 0.5,
+            "completedTaskCount": 2,
+            "totalTaskCount": 4,
+            "focusSeconds": 600
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_WEEKLY_REVIEW),
+            invalid_week,
+        ))
+        .is_err());
+
+        let invalid_counts: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "weekly-invalid-counts",
+                "userId": "user-1",
+                "createdAt": "2026-09-13T12:00:00Z",
+                "updatedAt": "2026-09-13T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "weekStart": "2026-09-07",
+            "weekEnd": "2026-09-13",
+            "completionScore": 1.2,
+            "completedTaskCount": 5,
+            "totalTaskCount": 4,
+            "focusSeconds": 600
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_WEEKLY_REVIEW),
+            invalid_counts,
+        ))
+        .is_err());
+    }
+
+    #[test]
+    fn daily_review_accepts_focus_snapshot_and_validates_counts() {
+        let valid: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "daily-focus",
+                "userId": "user-1",
+                "createdAt": "2026-09-15T12:00:00Z",
+                "updatedAt": "2026-09-15T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": "device-1"
+            },
+            "reviewDate": "2026-09-15",
+            "energy": 4,
+            "mood": 4,
+            "completionScore": 0.75,
+            "bestThing": null,
+            "problem": null,
+            "tomorrowPriority": null,
+            "note": null,
+            "completedTaskCount": 3,
+            "totalTaskCount": 4,
+            "focusSeconds": 5400
+        })
+        .into();
+        let parsed =
+            EntityPayload::try_from((&EntityType::new(EntityType::REVIEW_DAILY), valid)).unwrap();
+        assert_eq!(parsed.to_json().0["focusSeconds"], 5400);
+
+        let invalid: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "daily-invalid",
+                "userId": "user-1",
+                "createdAt": "2026-09-15T12:00:00Z",
+                "updatedAt": "2026-09-15T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "reviewDate": "2026-09-15",
+            "energy": 6,
+            "mood": 4,
+            "completionScore": 1.1,
+            "completedTaskCount": 5,
+            "totalTaskCount": 4,
+            "focusSeconds": 0
+        })
+        .into();
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::REVIEW_DAILY),
+            invalid,
+        ))
+        .is_err());
+    }
+
+    #[test]
+    fn execute_weekly_review_rejects_missing_week_boundary() {
+        let value: JsonValue = serde_json::json!({
+            "meta": {
+                "id": "weekly-bad",
+                "userId": "user-1",
+                "createdAt": "2026-09-13T12:00:00Z",
+                "updatedAt": "2026-09-13T12:00:00Z",
+                "deletedAt": null,
+                "localVersion": 1,
+                "serverVersion": null,
+                "modifiedByDevice": null
+            },
+            "weekStart": "2026-09-07",
+            "completionScore": null,
+            "completedTaskCount": null,
+            "totalTaskCount": null,
+            "focusSeconds": null,
+            "completionSummary": null,
+            "bestThing": null,
+            "problem": null,
+            "improvement": null,
+            "nextWeekPriority": null,
+            "note": null
+        })
+        .into();
+
+        assert!(EntityPayload::try_from((
+            &EntityType::new(EntityType::EXECUTION_WEEKLY_REVIEW),
+            value,
+        ))
+        .is_err());
+    }
 
     #[test]
     fn execute_reminder_dispatch_accepts_typed_payload() {

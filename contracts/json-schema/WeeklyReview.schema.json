@@ -85,9 +85,10 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "`review.daily`",
+  "description": "`execution.weekly_review`.\n\nWeek boundaries are explicit local dates so clients can render and query\nhistorical reviews without depending on locale-specific week numbering.",
   "properties": {
     "bestThing": {
+      "default": null,
       "type": [
         "string",
         "null"
@@ -103,16 +104,17 @@
       ]
     },
     "completionScore": {
+      "default": null,
       "format": "double",
       "type": [
         "number",
         "null"
       ]
     },
-    "energy": {
-      "format": "int64",
+    "completionSummary": {
+      "default": null,
       "type": [
-        "integer",
+        "string",
         "null"
       ]
     },
@@ -125,32 +127,32 @@
         "null"
       ]
     },
+    "improvement": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "meta": {
       "$ref": "#/$defs/EntityMeta"
     },
-    "mood": {
-      "format": "int64",
+    "nextWeekPriority": {
+      "default": null,
       "type": [
-        "integer",
+        "string",
         "null"
       ]
     },
     "note": {
+      "default": null,
       "type": [
         "string",
         "null"
       ]
     },
     "problem": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "reviewDate": {
-      "$ref": "#/$defs/LocalDate"
-    },
-    "tomorrowPriority": {
+      "default": null,
       "type": [
         "string",
         "null"
@@ -164,12 +166,19 @@
         "integer",
         "null"
       ]
+    },
+    "weekEnd": {
+      "$ref": "#/$defs/LocalDate"
+    },
+    "weekStart": {
+      "$ref": "#/$defs/LocalDate"
     }
   },
   "required": [
     "meta",
-    "reviewDate"
+    "weekStart",
+    "weekEnd"
   ],
-  "title": "DailyReview",
+  "title": "WeeklyReview",
   "type": "object"
 }

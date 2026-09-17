@@ -71,8 +71,13 @@
       ],
       "type": "object"
     },
-    "LocalDate": {
-      "description": "A natural calendar day in `YYYY-MM-DD` (wire format).",
+    "GoalStatus": {
+      "enum": [
+        "active",
+        "paused",
+        "completed",
+        "cancelled"
+      ],
       "type": "string"
     },
     "ServerVersion": {
@@ -85,91 +90,65 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "`review.daily`",
+  "description": "`execution.goal`, matching the shared Goal layer used by LifeTrace desktop/web.\n\nGoal is the layer above projects: Goal -> Project -> Task. The wire contract\nintentionally preserves the existing nullable presentation fields and\ntimestamp fields so older clients can continue syncing the same entity.",
   "properties": {
-    "bestThing": {
+    "color": {
+      "default": null,
       "type": [
         "string",
         "null"
       ]
     },
-    "completedTaskCount": {
+    "completedAt": {
       "default": null,
-      "format": "uint64",
-      "minimum": 0,
+      "format": "date-time",
       "type": [
-        "integer",
+        "string",
         "null"
       ]
     },
-    "completionScore": {
-      "format": "double",
-      "type": [
-        "number",
-        "null"
-      ]
-    },
-    "energy": {
-      "format": "int64",
-      "type": [
-        "integer",
-        "null"
-      ]
-    },
-    "focusSeconds": {
+    "description": {
       "default": null,
-      "format": "uint64",
-      "minimum": 0,
       "type": [
-        "integer",
+        "string",
+        "null"
+      ]
+    },
+    "icon": {
+      "default": null,
+      "type": [
+        "string",
         "null"
       ]
     },
     "meta": {
       "$ref": "#/$defs/EntityMeta"
     },
-    "mood": {
+    "name": {
+      "type": "string"
+    },
+    "sortOrder": {
+      "default": 0,
       "format": "int64",
-      "type": [
-        "integer",
-        "null"
-      ]
+      "type": "integer"
     },
-    "note": {
-      "type": [
-        "string",
-        "null"
-      ]
+    "status": {
+      "$ref": "#/$defs/GoalStatus"
     },
-    "problem": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "reviewDate": {
-      "$ref": "#/$defs/LocalDate"
-    },
-    "tomorrowPriority": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "totalTaskCount": {
+    "targetAt": {
       "default": null,
-      "format": "uint64",
-      "minimum": 0,
+      "format": "date-time",
       "type": [
-        "integer",
+        "string",
         "null"
       ]
     }
   },
   "required": [
     "meta",
-    "reviewDate"
+    "name",
+    "status"
   ],
-  "title": "DailyReview",
+  "title": "ExecutionGoal",
   "type": "object"
 }
