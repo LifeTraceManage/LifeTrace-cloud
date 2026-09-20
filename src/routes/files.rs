@@ -5,6 +5,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
+use lifetrace_contracts::sync::v1::AppId;
 use lifetrace_contracts::{ErrorCode, UserId};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -17,6 +18,7 @@ use crate::state::AppState;
 
 const DEFAULT_MAX_FILE_BYTES: i64 = 256 * 1024 * 1024;
 const MAX_LIST_LIMIT: i64 = 200;
+const ASSETS_DOMAIN: &str = "assets_attachments";
 const DOMAINS: &[&str] = &[
     "finance_imports",
     "notes_attachments",
@@ -24,6 +26,7 @@ const DOMAINS: &[&str] = &[
     "photos",
     "workout_imports",
     "backups",
+    ASSETS_DOMAIN,
 ];
 
 #[derive(Debug, Deserialize)]
@@ -119,6 +122,7 @@ async fn prepare(
     principal.require_scope("files:write")?;
     ensure_database(&state)?;
     validate_prepare(&mut input)?;
+    authorize_file_domain(&principal, &input.domain)?;
     let storage = storage_config()?;
     let user_id = user_uuid(&principal.user_id)?;
 
@@ -200,9 +204,7 @@ async fn list(
 ) -> Result<Json<FileList>, ApiError> {
     principal.require_scope("files:read")?;
     ensure_database(&state)?;
-    if let Some(domain) = query.domain.as_deref() {
-        validate_domain(domain)?;
-    }
+    let domain = effective_list_domain(&principal, query.domain.as_deref())?;
     if query.entity_type.is_some() != query.entity_id.is_some() {
         return Err(bad_request("entityType 与 entityId 必须同时提供"));
     }
@@ -216,7 +218,7 @@ async fn list(
          ORDER BY created_at DESC LIMIT $5",
     )
     .bind(owner)
-    .bind(query.domain)
+    .bind(domain)
     .bind(query.entity_type)
     .bind(query.entity_id)
     .bind(limit)
@@ -235,6 +237,7 @@ async fn metadata(
 ) -> Result<Json<FileMetadata>, ApiError> {
     principal.require_scope("files:read")?;
     let row = owned_row(&state, &principal.user_id, id).await?;
+    authorize_file_row(&principal, &row)?;
     Ok(Json(row_to_metadata(&row)?))
 }
 
@@ -245,6 +248,7 @@ async fn refresh_upload_url(
 ) -> Result<Json<SignedTransfer>, ApiError> {
     principal.require_scope("files:write")?;
     let row = owned_row(&state, &principal.user_id, id).await?;
+    authorize_file_row(&principal, &row)?;
     let status: String = row.try_get("status").map_err(database_error)?;
     if status == "available" {
         return Err(bad_request("文件已完成上传，无需重新签名"));
@@ -268,6 +272,8 @@ async fn mark_complete(
     AxumPath(id): AxumPath<Uuid>,
 ) -> Result<Json<FileMetadata>, ApiError> {
     principal.require_scope("files:write")?;
+    let existing = owned_row(&state, &principal.user_id, id).await?;
+    authorize_file_row(&principal, &existing)?;
     let owner = user_uuid(&principal.user_id)?;
     ensure_database(&state)?;
     let row = sqlx::query(
@@ -290,6 +296,8 @@ async fn mark_failed(
     Json(input): Json<FailureRequest>,
 ) -> Result<Json<FileMetadata>, ApiError> {
     principal.require_scope("files:write")?;
+    let existing = owned_row(&state, &principal.user_id, id).await?;
+    authorize_file_row(&principal, &existing)?;
     let owner = user_uuid(&principal.user_id)?;
     ensure_database(&state)?;
     let reason = input
@@ -322,6 +330,7 @@ async fn download_url(
 ) -> Result<Json<SignedTransfer>, ApiError> {
     principal.require_scope("files:read")?;
     let row = owned_row(&state, &principal.user_id, id).await?;
+    authorize_file_row(&principal, &row)?;
     let status: String = row.try_get("status").map_err(database_error)?;
     if status != "available" {
         return Err(bad_request("文件尚未完成上传"));
@@ -339,6 +348,8 @@ async fn delete_metadata(
     AxumPath(id): AxumPath<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     principal.require_scope("files:write")?;
+    let existing = owned_row(&state, &principal.user_id, id).await?;
+    authorize_file_row(&principal, &existing)?;
     let owner = user_uuid(&principal.user_id)?;
     ensure_database(&state)?;
     let changed = sqlx::query(
@@ -364,12 +375,19 @@ async fn orphans(
     ensure_database(&state)?;
     let owner = user_uuid(&principal.user_id)?;
     let hours = query.older_than_hours.unwrap_or(24).clamp(1, 24 * 365);
+    let domain = if principal.app_id.as_str() == AppId::ASSETS {
+        Some(ASSETS_DOMAIN.to_owned())
+    } else {
+        None
+    };
     let rows = sqlx::query(
         "SELECT * FROM file_objects WHERE user_id=$1 AND deleted_at IS NULL AND entity_type IS NULL \
-         AND status IN ('pending','failed') AND created_at < now() - ($2::text || ' hours')::interval \
+         AND ($2::text IS NULL OR domain=$2) \
+         AND status IN ('pending','failed') AND created_at < now() - ($3::text || ' hours')::interval \
          ORDER BY created_at ASC LIMIT 200",
     )
     .bind(owner)
+    .bind(domain)
     .bind(hours.to_string())
     .fetch_all(&state.pool)
     .await
@@ -422,6 +440,18 @@ fn validate_prepare(input: &mut PrepareRequest) -> Result<(), ApiError> {
     if let Some(value) = input.entity_id.as_mut() {
         *value = clean_text(value, 180, "");
     }
+    if input.domain == ASSETS_DOMAIN {
+        let valid_owner = matches!(
+            (input.entity_type.as_deref(), input.entity_id.as_deref()),
+            (Some("asset.asset"), Some(id)) | (Some("asset.event"), Some(id))
+                if !id.is_empty()
+        );
+        if !valid_owner {
+            return Err(bad_request(
+                "assets_attachments 必须绑定 asset.asset 或 asset.event",
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -463,8 +493,61 @@ fn mime_allowed(domain: &str, mime: &str) -> bool {
                 | "application/json"
                 | "application/octet-stream"
         ),
+        ASSETS_DOMAIN => matches!(
+            mime,
+            "image/jpeg"
+                | "image/png"
+                | "image/webp"
+                | "image/heic"
+                | "image/heif"
+                | "application/pdf"
+                | "text/plain"
+                | "application/msword"
+                | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                | "application/vnd.ms-excel"
+                | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                | "application/vnd.ms-powerpoint"
+                | "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        ),
         _ => false,
     }
+}
+
+fn authorize_file_domain(
+    principal: &AuthenticatedPrincipal,
+    domain: &str,
+) -> Result<(), ApiError> {
+    if principal.app_id.as_str() == AppId::ASSETS && domain != ASSETS_DOMAIN {
+        return Err(ApiError::new(
+            ErrorCode::AuthScopeDenied,
+            "application is not authorized for this file domain",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+    Ok(())
+}
+
+fn effective_list_domain(
+    principal: &AuthenticatedPrincipal,
+    requested: Option<&str>,
+) -> Result<Option<String>, ApiError> {
+    if let Some(domain) = requested {
+        validate_domain(domain)?;
+        authorize_file_domain(principal, domain)?;
+    }
+    if principal.app_id.as_str() == AppId::ASSETS {
+        Ok(Some(ASSETS_DOMAIN.to_owned()))
+    } else {
+        Ok(requested.map(str::to_owned))
+    }
+}
+
+fn authorize_file_row(
+    principal: &AuthenticatedPrincipal,
+    row: &sqlx::postgres::PgRow,
+) -> Result<(), ApiError> {
+    let domain: String = row.try_get("domain").map_err(database_error)?;
+    authorize_file_domain(principal, &domain)
 }
 
 fn max_file_bytes() -> i64 {
@@ -576,6 +659,9 @@ mod tests {
         assert!(mime_allowed("finance_imports", "text/csv"));
         assert!(!mime_allowed("finance_imports", "image/png"));
         assert!(mime_allowed("photos", "image/jpeg"));
+        assert!(mime_allowed(ASSETS_DOMAIN, "image/jpeg"));
+        assert!(mime_allowed(ASSETS_DOMAIN, "application/pdf"));
+        assert!(!mime_allowed(ASSETS_DOMAIN, "image/svg+xml"));
         assert!(!mime_allowed("unknown", "image/jpeg"));
     }
 
@@ -591,6 +677,32 @@ mod tests {
             entity_id: None,
         };
         assert!(validate_prepare(&mut input).is_err());
+    }
+
+    #[test]
+    fn assets_owner_validation_is_fail_closed() {
+        let base = PrepareRequest {
+            domain: ASSETS_DOMAIN.to_owned(),
+            original_name: "asset.jpg".to_owned(),
+            mime_type: "image/jpeg".to_owned(),
+            size_bytes: 128,
+            sha256: "a".repeat(64),
+            entity_type: Some("asset.asset".to_owned()),
+            entity_id: Some("asset-1".to_owned()),
+        };
+        let mut valid = base;
+        assert!(validate_prepare(&mut valid).is_ok());
+
+        let mut invalid = PrepareRequest {
+            domain: ASSETS_DOMAIN.to_owned(),
+            original_name: "asset.jpg".to_owned(),
+            mime_type: "image/jpeg".to_owned(),
+            size_bytes: 128,
+            sha256: "b".repeat(64),
+            entity_type: Some("note.note".to_owned()),
+            entity_id: Some("note-1".to_owned()),
+        };
+        assert!(validate_prepare(&mut invalid).is_err());
     }
 
     #[test]
