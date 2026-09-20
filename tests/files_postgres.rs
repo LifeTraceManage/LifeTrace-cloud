@@ -4,7 +4,7 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Method, Request, StatusCode};
 use lifetrace_cloud::auth::security::RequestContext;
 use lifetrace_cloud::{app, AppState, Config};
-use lifetrace_contracts::auth::v1::{RegisterRequestV1, Scope};
+use lifetrace_contracts::auth::v1::{LoginRequestV1, RegisterRequestV1, Scope};
 use lifetrace_contracts::sync::v1::AppId;
 use serde_json::{json, Value};
 use tower::ServiceExt;
@@ -45,18 +45,46 @@ fn context() -> RequestContext {
     }
 }
 
+const TEST_PASSWORD: &str = "正确 horse battery staple 文件密码";
+
 fn registration() -> RegisterRequestV1 {
+    registration_for(
+        format!("file-{}@example.test", Uuid::new_v4()),
+        AppId::DESKTOP,
+        vec![Scope::new("files:read"), Scope::new("files:write")],
+    )
+}
+
+fn registration_for(
+    email: String,
+    app_id: &str,
+    requested_scopes: Vec<Scope>,
+) -> RegisterRequestV1 {
     RegisterRequestV1 {
-        email: format!("file-{}@example.test", Uuid::new_v4()),
-        password: "正确 horse battery staple 文件密码".to_owned(),
+        email,
+        password: TEST_PASSWORD.to_owned(),
         display_name: Some("File Test".to_owned()),
         invite_token: None,
-        app_id: AppId::new(AppId::DESKTOP),
+        app_id: AppId::new(app_id),
         device_id: Uuid::new_v4().to_string(),
         device_name: "File Integration Device".to_owned(),
         platform: "windows".to_owned(),
         client_version: Some("0.3.1".to_owned()),
-        requested_scopes: vec![Scope::new("files:read"), Scope::new("files:write")],
+        requested_scopes,
+    }
+}
+
+fn login_for(email: &str, app_id: &str, requested_scopes: Vec<Scope>) -> LoginRequestV1 {
+    LoginRequestV1 {
+        email: email.to_owned(),
+        password: TEST_PASSWORD.to_owned(),
+        app_id: AppId::new(app_id),
+        device_id: Uuid::new_v4().to_string(),
+        device_name: "File Integration Device".to_owned(),
+        platform: "android".to_owned(),
+        client_version: Some("0.3.1".to_owned()),
+        requested_scopes,
+        public_device: false,
     }
 }
 
@@ -205,4 +233,244 @@ async fn file_id_cannot_cross_user_boundary() {
         .await
         .unwrap();
     assert_eq!(hidden.status(), StatusCode::NOT_FOUND);
+}
+
+
+#[tokio::test]
+async fn assets_client_can_prepare_only_assets_attachment_domain() {
+    let Some(state) = state().await else {
+        return;
+    };
+    configure_object_storage();
+    let email = format!("assets-file-{}@example.test", Uuid::new_v4());
+    let tokens = state
+        .auth_service
+        .register(
+            registration_for(
+                email,
+                AppId::ASSETS,
+                vec![Scope::new("files:read"), Scope::new("files:write")],
+            ),
+            &context(),
+        )
+        .await
+        .unwrap();
+    assert!(tokens.scopes.iter().any(|scope| scope.as_str() == "files:read"));
+    assert!(tokens.scopes.iter().any(|scope| scope.as_str() == "files:write"));
+
+    let bearer = format!("Bearer {}", tokens.access_token);
+    let router = app(state);
+    let allowed = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/files")
+                .header("content-type", "application/json")
+                .header("authorization", &bearer)
+                .body(Body::from(
+                    json!({
+                        "domain": "assets_attachments",
+                        "originalName": "asset.jpg",
+                        "mimeType": "image/jpeg",
+                        "sizeBytes": 128,
+                        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+                        "entityType": "asset.asset",
+                        "entityId": "asset-test-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(allowed.status(), StatusCode::CREATED);
+
+    let cross_domain = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/files")
+                .header("content-type", "application/json")
+                .header("authorization", &bearer)
+                .body(Body::from(
+                    json!({
+                        "domain": "notes_attachments",
+                        "originalName": "note.txt",
+                        "mimeType": "text/plain",
+                        "sizeBytes": 16,
+                        "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+                        "entityType": "note.note",
+                        "entityId": "note-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cross_domain.status(), StatusCode::FORBIDDEN);
+
+    let invalid_owner = router
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/files")
+                .header("content-type", "application/json")
+                .header("authorization", bearer)
+                .body(Body::from(
+                    json!({
+                        "domain": "assets_attachments",
+                        "originalName": "wrong.jpg",
+                        "mimeType": "image/jpeg",
+                        "sizeBytes": 64,
+                        "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+                        "entityType": "note.note",
+                        "entityId": "note-2"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_owner.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn assets_client_cannot_access_another_domain_by_file_id() {
+    let Some(state) = state().await else {
+        return;
+    };
+    configure_object_storage();
+    let email = format!("assets-cross-domain-{}@example.test", Uuid::new_v4());
+    let desktop = state
+        .auth_service
+        .register(
+            registration_for(
+                email.clone(),
+                AppId::DESKTOP,
+                vec![Scope::new("files:read"), Scope::new("files:write")],
+            ),
+            &context(),
+        )
+        .await
+        .unwrap();
+    let assets = state
+        .auth_service
+        .login(
+            login_for(
+                &email,
+                AppId::ASSETS,
+                vec![Scope::new("files:read"), Scope::new("files:write")],
+            ),
+            &context(),
+        )
+        .await
+        .unwrap();
+
+    let router = app(state);
+    let created = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/files")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {}", desktop.access_token))
+                .body(Body::from(
+                    json!({
+                        "domain": "notes_attachments",
+                        "originalName": "private.txt",
+                        "mimeType": "text/plain",
+                        "sizeBytes": 32,
+                        "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+                        "entityType": "note.note",
+                        "entityId": "note-cross-domain"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let body = json_body(created).await;
+    let id = body["file"]["id"].as_str().unwrap();
+    let assets_bearer = format!("Bearer {}", assets.access_token);
+
+    for (method, uri) in [
+        (Method::GET, format!("/api/v1/files/{id}")),
+        (
+            Method::POST,
+            format!("/api/v1/files/{id}/download-url"),
+        ),
+        (
+            Method::POST,
+            format!("/api/v1/files/{id}/upload-url"),
+        ),
+        (Method::DELETE, format!("/api/v1/files/{id}")),
+    ] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(uri)
+                    .header("authorization", &assets_bearer)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+}
+
+#[tokio::test]
+async fn assets_domain_still_requires_generic_file_scope() {
+    let Some(state) = state().await else {
+        return;
+    };
+    configure_object_storage();
+    let email = format!("assets-no-file-scope-{}@example.test", Uuid::new_v4());
+    let tokens = state
+        .auth_service
+        .register(
+            registration_for(
+                email,
+                AppId::ASSETS,
+                vec![Scope::new("assets:read"), Scope::new("assets:write")],
+            ),
+            &context(),
+        )
+        .await
+        .unwrap();
+    let router = app(state);
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/files")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {}", tokens.access_token))
+                .body(Body::from(
+                    json!({
+                        "domain": "assets_attachments",
+                        "originalName": "no-scope.jpg",
+                        "mimeType": "image/jpeg",
+                        "sizeBytes": 12,
+                        "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+                        "entityType": "asset.asset",
+                        "entityId": "asset-no-file-scope"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
