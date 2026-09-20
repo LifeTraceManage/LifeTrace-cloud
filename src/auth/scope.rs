@@ -121,6 +121,8 @@ pub fn allowed_scopes(app_id: &str) -> BTreeSet<String> {
             "assets:write",
             "links:read",
             "links:write",
+            "files:read",
+            "files:write",
         ],
         AppId::BEECOUNT => &[
             "account:read",
@@ -321,6 +323,8 @@ mod tests {
             "assets:write",
             "links:read",
             "links:write",
+            "files:read",
+            "files:write",
         ] {
             assert!(granted.contains(required), "missing scope: {required}");
         }
@@ -329,6 +333,8 @@ mod tests {
         assert!(!granted.contains("notes:write"));
         assert!(!granted.contains("execution:write"));
         assert!(!granted.contains("mail:write"));
+        assert!(granted.contains("files:read"));
+        assert!(granted.contains("files:write"));
         assert_eq!(
             required_entity_scope("asset.asset", false),
             Some("assets:read")
