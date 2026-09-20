@@ -87,6 +87,7 @@ impl AuthService {
                 AppId::ENGLISH_ANDROID,
                 AppId::HABITS_ANDROID,
                 AppId::EXECUTE_ANDROID,
+                AppId::ASSETS,
                 AppId::BEECOUNT,
                 AppId::WEB,
             ]
