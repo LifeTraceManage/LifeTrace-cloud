@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 
 use axum::extract::{Path, Query, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode};
 use axum::routing::get;
 use axum::{Json, Router};
 use chrono::Utc;
@@ -17,8 +17,7 @@ use serde_json::{json, Map, Value};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::auth::security::cookie_value;
-use crate::auth::{AuthCredential, AuthenticatedPrincipal};
+use crate::auth::extract::authenticate_bearer_or_web_session;
 use crate::beecount::compat::{decimal_amount_to_cents, lifetrace_entity_id, BeeCountReadLedgerOut};
 use crate::beecount::sync::BeeCountSyncService;
 use crate::error::ApiError;
@@ -50,7 +49,7 @@ async fn status(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    let principal = integration_principal(&state, &headers).await?;
+    let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     principal.require_scope("finance:read")?;
     Ok(Json(json!({
         "enabled": state.database_enabled,
@@ -70,7 +69,7 @@ async fn ledgers(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    let principal = integration_principal(&state, &headers).await?;
+    let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     principal.require_scope("finance:read")?;
     require_database(&state)?;
     let rows = BeeCountSyncService::new(state.pool.clone())
@@ -92,7 +91,7 @@ async fn snapshot(
     Path(ledger_id): Path<String>,
     Query(query): Query<SnapshotQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    let principal = integration_principal(&state, &headers).await?;
+    let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     principal.require_scope("finance:read")?;
     require_database(&state)?;
     if ledger_id.is_empty() || ledger_id.len() > 256 || query.limit == 0 || query.limit > 500 {
@@ -272,26 +271,6 @@ fn filter_user_global(
                 .is_some_and(|source_id| source_ids.contains(source_id))
         })
         .collect()
-}
-
-async fn integration_principal(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<AuthenticatedPrincipal, ApiError> {
-    let authorization = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok());
-    if authorization.is_some() {
-        return state
-            .auth
-            .authenticate(AuthCredential::Bearer(authorization))
-            .await;
-    }
-    let session = cookie_value(headers, &state.config.auth_cookie_name);
-    state
-        .auth
-        .authenticate(AuthCredential::WebSession(session.as_deref()))
-        .await
 }
 
 fn require_database(state: &AppState) -> Result<(), ApiError> {
