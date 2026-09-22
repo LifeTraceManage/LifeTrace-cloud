@@ -8,18 +8,6 @@ pub mod api_rate_limit;
 pub mod auth;
 pub mod beecount;
 
-// Transitional public aliases keep existing internal/external paths stable
-// while the implementation lives under the BeeCount domain module.
-#[doc(hidden)]
-pub use beecount::attachments as beecount_attachments;
-#[doc(hidden)]
-pub use beecount::collaboration as beecount_collaboration;
-#[doc(hidden)]
-pub use beecount::compat as beecount_compat;
-#[doc(hidden)]
-pub use beecount::realtime as beecount_realtime;
-#[doc(hidden)]
-pub use beecount::sync as beecount_sync;
 pub mod config;
 pub mod error;
 pub mod mail;
