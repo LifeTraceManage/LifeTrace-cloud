@@ -59,6 +59,14 @@ pub struct Config {
     pub retention_entries: usize,
 
     pub beecount_attachment_max_upload_bytes: usize,
+
+    pub file_object_storage_endpoint: Option<String>,
+    pub file_object_storage_bucket: Option<String>,
+    pub file_object_storage_region: String,
+    pub file_object_storage_access_key_id: Option<String>,
+    pub file_object_storage_secret_access_key: Option<String>,
+    pub file_object_storage_presign_ttl_seconds: u32,
+    pub file_max_upload_bytes: i64,
 }
 
 impl Default for Config {
@@ -113,6 +121,13 @@ impl Default for Config {
             graceful_shutdown_seconds: 10,
             retention_entries: 1000,
             beecount_attachment_max_upload_bytes: 64 * 1024 * 1024,
+            file_object_storage_endpoint: None,
+            file_object_storage_bucket: None,
+            file_object_storage_region: "us-east-1".to_owned(),
+            file_object_storage_access_key_id: None,
+            file_object_storage_secret_access_key: None,
+            file_object_storage_presign_ttl_seconds: 900,
+            file_max_upload_bytes: 256 * 1024 * 1024,
         }
     }
 }
@@ -220,6 +235,22 @@ impl Config {
             "BEECOUNT_ATTACHMENT_MAX_UPLOAD_BYTES",
             c.beecount_attachment_max_upload_bytes,
         );
+        c.file_object_storage_endpoint = env_var("FILE_OBJECT_STORAGE_ENDPOINT");
+        c.file_object_storage_bucket = env_var("FILE_OBJECT_STORAGE_BUCKET");
+        c.file_object_storage_region =
+            env_string("FILE_OBJECT_STORAGE_REGION", &c.file_object_storage_region);
+        c.file_object_storage_access_key_id = env_var("FILE_OBJECT_STORAGE_ACCESS_KEY_ID");
+        c.file_object_storage_secret_access_key =
+            env_var("FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY");
+        c.file_object_storage_presign_ttl_seconds = env_usize(
+            "FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS",
+            c.file_object_storage_presign_ttl_seconds as usize,
+        )
+        .clamp(60, 3600) as u32;
+        c.file_max_upload_bytes = env_var("FILE_MAX_UPLOAD_BYTES")
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(c.file_max_upload_bytes);
         c
     }
 
@@ -257,6 +288,9 @@ impl Config {
             return Err(
                 "BEECOUNT_ATTACHMENT_MAX_UPLOAD_BYTES must be between 1 KiB and 128 MiB".to_owned(),
             );
+        }
+        if self.file_max_upload_bytes <= 0 {
+            return Err("FILE_MAX_UPLOAD_BYTES must be greater than zero".to_owned());
         }
         if self.is_production() {
             if self.dev_auth_enabled {
