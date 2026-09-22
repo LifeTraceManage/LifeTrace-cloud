@@ -15,7 +15,6 @@ use crate::error::ApiError;
 use crate::object_storage::{ObjectStorageConfig, PresignedRequest};
 use crate::state::AppState;
 
-const DEFAULT_MAX_FILE_BYTES: i64 = 256 * 1024 * 1024;
 const MAX_LIST_LIMIT: i64 = 200;
 const DOMAINS: &[&str] = &[
     "finance_imports",
@@ -118,8 +117,8 @@ async fn prepare(
 ) -> Result<(StatusCode, Json<PrepareResponse>), ApiError> {
     principal.require_scope("files:write")?;
     ensure_database(&state)?;
-    validate_prepare(&mut input)?;
-    let storage = storage_config()?;
+    validate_prepare(&mut input, state.config.file_max_upload_bytes)?;
+    let storage = storage_config(&state)?;
     let user_id = user_uuid(&principal.user_id)?;
 
     if let Some(row) = sqlx::query(
@@ -256,7 +255,7 @@ async fn refresh_upload_url(
         .execute(&state.pool)
         .await
         .map_err(database_error)?;
-    let signed = storage_config()?
+    let signed = storage_config(&state)?
         .presign_put(&key, &sha256, Utc::now())
         .map_err(storage_error)?;
     Ok(Json(signed_transfer(signed)))
@@ -327,7 +326,7 @@ async fn download_url(
         return Err(bad_request("文件尚未完成上传"));
     }
     let key: String = row.try_get("storage_key").map_err(database_error)?;
-    let signed = storage_config()?
+    let signed = storage_config(&state)?
         .presign_get(&key, Utc::now())
         .map_err(storage_error)?;
     Ok(Json(signed_transfer(signed)))
@@ -395,15 +394,15 @@ async fn owned_row(
         .ok_or_else(not_found)
 }
 
-fn validate_prepare(input: &mut PrepareRequest) -> Result<(), ApiError> {
+fn validate_prepare(input: &mut PrepareRequest, max_file_bytes: i64) -> Result<(), ApiError> {
     validate_domain(&input.domain)?;
     input.original_name = clean_text(&input.original_name, 180, "file");
     input.mime_type =
         clean_text(&input.mime_type, 120, "application/octet-stream").to_ascii_lowercase();
-    if input.size_bytes <= 0 || input.size_bytes > max_file_bytes() {
+    if input.size_bytes <= 0 || input.size_bytes > max_file_bytes {
         return Err(bad_request(format!(
             "文件大小必须在 1..={} bytes",
-            max_file_bytes()
+            max_file_bytes
         )));
     }
     input.sha256 = input.sha256.trim().to_ascii_lowercase();
@@ -467,16 +466,8 @@ fn mime_allowed(domain: &str, mime: &str) -> bool {
     }
 }
 
-fn max_file_bytes() -> i64 {
-    std::env::var("FILE_MAX_UPLOAD_BYTES")
-        .ok()
-        .and_then(|value| value.parse::<i64>().ok())
-        .filter(|value| *value > 0)
-        .unwrap_or(DEFAULT_MAX_FILE_BYTES)
-}
-
-fn storage_config() -> Result<ObjectStorageConfig, ApiError> {
-    ObjectStorageConfig::from_env().map_err(storage_error)
+fn storage_config(state: &AppState) -> Result<ObjectStorageConfig, ApiError> {
+    ObjectStorageConfig::from_config(&state.config).map_err(storage_error)
 }
 
 fn signed_transfer(value: PresignedRequest) -> SignedTransfer {
@@ -590,7 +581,7 @@ mod tests {
             entity_type: None,
             entity_id: None,
         };
-        assert!(validate_prepare(&mut input).is_err());
+        assert!(validate_prepare(&mut input, 256 * 1024 * 1024).is_err());
     }
 
     #[test]
