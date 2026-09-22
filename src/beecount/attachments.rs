@@ -88,7 +88,7 @@ impl BeeCountAttachmentService {
         content: Vec<u8>,
     ) -> Result<AttachmentUploadOut, ApiError> {
         let actor_uuid = parse_uuid(user_id.as_str(), "invalid user identity")?;
-        let access = crate::beecount_collaboration::resolve_ledger_access(
+        let access = crate::beecount::collaboration::resolve_ledger_access(
             &self.pool, actor_uuid, ledger_id, true,
         )
         .await?;
@@ -221,7 +221,7 @@ impl BeeCountAttachmentService {
             return Err(invalid("too many attachment hashes"));
         }
         let actor_uuid = parse_uuid(user_id.as_str(), "invalid user identity")?;
-        let access = crate::beecount_collaboration::resolve_ledger_access(
+        let access = crate::beecount::collaboration::resolve_ledger_access(
             &self.pool,
             actor_uuid,
             &request.ledger_id,
@@ -296,7 +296,7 @@ impl BeeCountAttachmentService {
         if storage_user_id != actor_uuid {
             let ledger_id: Option<String> = row.try_get("ledger_id").map_err(internal)?;
             let allowed = if let Some(ledger_id) = ledger_id {
-                crate::beecount_collaboration::resolve_ledger_access(
+                crate::beecount::collaboration::resolve_ledger_access(
                     &self.pool, actor_uuid, &ledger_id, false,
                 )
                 .await
