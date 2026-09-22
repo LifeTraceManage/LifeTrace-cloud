@@ -7,7 +7,6 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
 use crate::auth::{AuthProvider, AuthService, DatabaseAuthProvider, DevelopmentAuthProvider};
-use crate::beecount_adapter::BeeCountAdapter;
 use crate::beecount_realtime::BeeCountRealtimeHub;
 use crate::config::Config;
 use crate::postgres_repository::PostgresRepository;
@@ -37,7 +36,6 @@ pub struct AppState {
     pub auth_service: Arc<AuthService>,
     pub cursor_codec: Arc<CursorCodec>,
     pub page_token_codec: Arc<PageTokenCodec>,
-    pub beecount_adapter: Option<Arc<BeeCountAdapter>>,
     pub beecount_realtime: Arc<BeeCountRealtimeHub>,
 }
 
@@ -107,14 +105,6 @@ impl AppState {
                 config.dev_auth_device_id.clone(),
             ))
         };
-        let beecount_adapter = if config.beecount_adapter_enabled {
-            Some(Arc::new(
-                BeeCountAdapter::from_config(&config)
-                    .expect("BeeCount adapter configuration must be validated"),
-            ))
-        } else {
-            None
-        };
 
         Self {
             pool,
@@ -125,7 +115,6 @@ impl AppState {
             auth_service,
             cursor_codec: Arc::new(cursor_codec),
             page_token_codec: Arc::new(page_token_codec),
-            beecount_adapter,
             beecount_realtime: Arc::new(BeeCountRealtimeHub::default()),
         }
     }
