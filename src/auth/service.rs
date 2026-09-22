@@ -271,11 +271,15 @@ impl AuthService {
         Ok(())
     }
 
-    pub async fn register(
+    pub(crate) async fn create_account(
         &self,
-        request: RegisterRequestV1,
+        email: &str,
+        password: &str,
+        display_name: Option<&str>,
+        invite_token: Option<&str>,
+        app_id: &str,
         context: &RequestContext,
-    ) -> Result<TokenResponseV1, ApiError> {
+    ) -> Result<(), ApiError> {
         if self.config.auth_registration_mode == "disabled" {
             return Err(Self::error(
                 ErrorCode::AuthRegistrationDisabled,
@@ -283,14 +287,7 @@ impl AuthService {
                 StatusCode::FORBIDDEN,
             ));
         }
-        if !scope::supported_app(request.app_id.as_str()) || request.app_id.as_str() == AppId::WEB {
-            return Err(Self::error(
-                ErrorCode::AppIdUnsupported,
-                "unsupported registration application",
-                StatusCode::BAD_REQUEST,
-            ));
-        }
-        let normalized = Self::normalize_email(&request.email);
+        let normalized = Self::normalize_email(email);
         if normalized.is_empty() || !normalized.contains('@') {
             return Err(Self::error(
                 ErrorCode::InvalidRequest,
@@ -298,17 +295,23 @@ impl AuthService {
                 StatusCode::BAD_REQUEST,
             ));
         }
-        let password_hash = self.passwords.hash(&request.password)?;
+        let password_hash = self.passwords.hash(password)?;
         let user_id = Uuid::new_v4();
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        self.consume_invite(&mut tx, request.invite_token.as_deref(), &normalized)
-            .await?;
+        self.consume_invite(&mut tx, invite_token, &normalized).await?;
         let inserted = sqlx::query(
             "INSERT INTO cloud_users (id,status,email,email_normalized,display_name,password_hash,password_version,password_changed_at,registration_source,auth_state) \
              VALUES ($1,'active',$2,$3,$4,$5,1,now(),$6,'active') ON CONFLICT (email_normalized) DO NOTHING"
-        ).bind(user_id).bind(request.email.trim()).bind(&normalized).bind(&request.display_name).bind(password_hash)
-            .bind(if self.config.auth_registration_mode == "invite" { "invite" } else { "open" })
-            .execute(&mut *tx).await.map_err(Self::db)?;
+        )
+        .bind(user_id)
+        .bind(email.trim())
+        .bind(&normalized)
+        .bind(display_name)
+        .bind(password_hash)
+        .bind(if self.config.auth_registration_mode == "invite" { "invite" } else { "open" })
+        .execute(&mut *tx)
+        .await
+        .map_err(Self::db)?;
         if inserted.rows_affected() != 1 {
             return Err(Self::error(
                 ErrorCode::InvalidRequest,
@@ -321,7 +324,7 @@ impl AuthService {
             Some(user_id),
             None,
             None,
-            Some(request.app_id.as_str()),
+            Some(app_id),
             "account.register",
             "success",
             context,
@@ -329,6 +332,30 @@ impl AuthService {
         )
         .await?;
         tx.commit().await.map_err(Self::db)?;
+        Ok(())
+    }
+
+    pub async fn register(
+        &self,
+        request: RegisterRequestV1,
+        context: &RequestContext,
+    ) -> Result<TokenResponseV1, ApiError> {
+        if !scope::supported_app(request.app_id.as_str()) || request.app_id.as_str() == AppId::WEB {
+            return Err(Self::error(
+                ErrorCode::AppIdUnsupported,
+                "unsupported registration application",
+                StatusCode::BAD_REQUEST,
+            ));
+        }
+        self.create_account(
+            &request.email,
+            &request.password,
+            request.display_name.as_deref(),
+            request.invite_token.as_deref(),
+            request.app_id.as_str(),
+            context,
+        )
+        .await?;
         self.login(
             LoginRequestV1 {
                 email: request.email,
