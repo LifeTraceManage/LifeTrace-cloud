@@ -1,6 +1,6 @@
 #[test]
 fn cloud_repository_owns_execution_and_auth_server_contracts() {
-    let guard = include_str!("../src/postgres_repository/push/execution_guard.rs");
+    let guard = include_str!("../src/repository/postgres/push/execution_guard.rs");
     let worker = include_str!("../src/bin/execution_worker.rs");
     let migration = include_str!("../migrations/0021_execution_worker.sql");
     let config = include_str!("../src/config.rs");
