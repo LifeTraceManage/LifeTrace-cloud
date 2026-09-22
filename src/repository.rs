@@ -13,7 +13,8 @@ use lifetrace_contracts::{EntityId, EntityType, ServerVersion, UserId};
 use tokio::sync::RwLock;
 
 use crate::error::ApiError;
-use crate::store::Store;
+mod memory_store;
+use memory_store::Store;
 use crate::sync::cursor_codec::CursorCodec;
 use crate::sync::page_token::PageTokenCodec;
 use crate::Config;
