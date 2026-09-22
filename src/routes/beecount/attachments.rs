@@ -10,7 +10,7 @@ use lifetrace_contracts::sync::v1::AppId;
 use lifetrace_contracts::ErrorCode;
 
 use crate::auth::AuthenticatedPrincipal;
-use crate::beecount_attachments::{
+use crate::beecount::attachments::{
     AttachmentBatchExistsRequest, AttachmentBatchExistsResponse, AttachmentUploadOut,
     BeeCountAttachmentService,
 };
