@@ -157,7 +157,7 @@ async fn content(
     let sha256: String = row.try_get("sha256").map_err(database_error)?;
     let expected_size: i64 = row.try_get("size_bytes").map_err(database_error)?;
     let storage_name: String = row.try_get("storage_name").map_err(database_error)?;
-    let storage_path = resolve_storage_path(&storage_name)?;
+    let storage_path = resolve_storage_path(state, &storage_name)?;
     let bytes = fs::read(&storage_path).await.map_err(|error| {
         storage_error(format!(
             "读取暂存照片文件失败 {}: {error}",
@@ -207,7 +207,7 @@ async fn acknowledge(
     .map_err(database_error)?
     .ok_or_else(not_found)?;
     let storage_name: String = row.try_get("storage_name").map_err(database_error)?;
-    remove_storage_file(&storage_name).await;
+    remove_storage_file(state, &storage_name).await;
     Ok(Json(serde_json::json!({ "deleted": true, "id": id })))
 }
 
@@ -234,15 +234,12 @@ pub(crate) async fn stage_for_user(
     // No expiry by default: an original remains staged until the desktop
     // confirms that the existing local photo library committed it. Operators
     // may explicitly configure a positive TTL for other relay deployments.
-    let expires_at = std::env::var("PHOTO_STAGING_TTL_HOURS")
-        .ok()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-        .and_then(|value| value.parse::<i64>().ok())
-        .filter(|hours| *hours > 0)
-        .map(|hours| Utc::now() + Duration::hours(hours.min(24 * 3650)));
+    let expires_at = state
+        .config
+        .photo_staging_ttl_hours
+        .map(|hours| Utc::now() + Duration::hours(hours));
     let storage_name = format!("{owner}/{id}.blob");
-    let storage_path = resolve_storage_path(&storage_name)?;
+    let storage_path = resolve_storage_path(state, &storage_name)?;
     let parent = storage_path
         .parent()
         .ok_or_else(|| storage_error("暂存照片目录无效"))?;
@@ -443,14 +440,14 @@ async fn cleanup_expired(state: &AppState) -> Result<(), ApiError> {
     .map_err(database_error)?;
     for row in rows {
         if let Ok(storage_name) = row.try_get::<String, _>("storage_name") {
-            remove_storage_file(&storage_name).await;
+            remove_storage_file(state, &storage_name).await;
         }
     }
     Ok(())
 }
 
-async fn remove_storage_file(storage_name: &str) {
-    match resolve_storage_path(storage_name) {
+async fn remove_storage_file(state: &AppState, storage_name: &str) {
+    match resolve_storage_path(state, storage_name) {
         Ok(path) => {
             if let Err(error) = fs::remove_file(&path).await {
                 if error.kind() != std::io::ErrorKind::NotFound {
@@ -467,25 +464,11 @@ async fn remove_storage_file(storage_name: &str) {
     }
 }
 
-fn staging_root() -> PathBuf {
-    std::env::var("PHOTO_STAGING_DIR")
-        .ok()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            if std::env::var("LIFETRACE_ENV")
-                .ok()
-                .is_some_and(|value| value.eq_ignore_ascii_case("production"))
-            {
-                PathBuf::from("/data/photo-staging")
-            } else {
-                PathBuf::from("./data/photo-staging")
-            }
-        })
+fn staging_root(state: &AppState) -> PathBuf {
+    PathBuf::from(&state.config.photo_staging_dir)
 }
 
-fn resolve_storage_path(storage_name: &str) -> Result<PathBuf, ApiError> {
+fn resolve_storage_path(state: &AppState, storage_name: &str) -> Result<PathBuf, ApiError> {
     let relative = Path::new(storage_name);
     if relative.is_absolute()
         || relative.components().any(|component| {
@@ -497,7 +480,7 @@ fn resolve_storage_path(storage_name: &str) -> Result<PathBuf, ApiError> {
     {
         return Err(storage_error("暂存照片路径无效"));
     }
-    Ok(staging_root().join(relative))
+    Ok(staging_root(state).join(relative))
 }
 
 fn ensure_database(state: &AppState) -> Result<(), ApiError> {
