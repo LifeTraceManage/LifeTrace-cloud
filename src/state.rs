@@ -9,7 +9,7 @@ use sqlx::PgPool;
 use crate::auth::{AuthProvider, AuthService, DatabaseAuthProvider, DevelopmentAuthProvider};
 use crate::beecount::realtime::BeeCountRealtimeHub;
 use crate::config::Config;
-use crate::postgres_repository::PostgresRepository;
+use crate::repository::postgres::PostgresRepository;
 use crate::repository::{MemoryRepository, SyncRepository};
 use crate::sync::cursor_codec::CursorCodec;
 use crate::sync::page_token::PageTokenCodec;
