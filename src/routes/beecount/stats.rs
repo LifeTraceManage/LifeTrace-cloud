@@ -14,8 +14,8 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
-use crate::beecount_collaboration::resolve_ledger_access;
-use crate::beecount_sync::BeeCountSyncService;
+use crate::beecount::collaboration::resolve_ledger_access;
+use crate::beecount::sync::BeeCountSyncService;
 use crate::error::ApiError;
 use crate::state::AppState;
 
