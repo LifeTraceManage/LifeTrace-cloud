@@ -197,7 +197,7 @@ async fn public_summary(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ChallengeStats>, ApiError> {
-    verify_challenge_key(&headers)?;
+    verify_challenge_key(&state, &headers)?;
     let owner = challenge_owner(&state).await?;
     Ok(Json(load_stats(&state, &owner).await?))
 }
@@ -239,7 +239,7 @@ async fn score_photo(
     headers: HeaderMap,
     multipart: Multipart,
 ) -> Result<Json<ScoreResponse>, ApiError> {
-    verify_challenge_key(&headers)?;
+    verify_challenge_key(&state, &headers)?;
     let owner = challenge_owner(&state).await?;
     let owner_uuid = user_uuid(&owner)?;
     let upload = read_challenge_upload(multipart).await?;
@@ -276,7 +276,7 @@ async fn score_photo(
     )
     .await?;
 
-    let model_score = call_glm_score(&upload.preview_data_url).await?;
+    let model_score = call_glm_score(&state, &upload.preview_data_url).await?;
     // Keep the provider-reported total parseable for compatibility, but never trust it.
     let _reported_score = model_score.score;
     let breakdown = ScoreBreakdown {
@@ -293,7 +293,7 @@ async fn score_photo(
         + breakdown.originality;
     let qualified = score > HIGH_SCORE_THRESHOLD;
     let id = Uuid::new_v4();
-    let model = env_non_empty("PHOTO_CHALLENGE_MODEL").unwrap_or_else(|| "glm-4v-flash".to_owned());
+    let model = state.config.photo_challenge_model.clone();
     let feedback: String = model_score.feedback.trim().chars().take(500).collect();
     let staging_id = Uuid::parse_str(&staged.id).map_err(|_| bad_request("暂存照片编号无效"))?;
 
@@ -433,8 +433,14 @@ fn decode_data_url(
     })
 }
 
-fn verify_challenge_key(headers: &HeaderMap) -> Result<(), ApiError> {
-    let expected = env_non_empty("PHOTO_CHALLENGE_ACCESS_KEY").ok_or_else(|| {
+fn verify_challenge_key(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+    let expected = state
+        .config
+        .photo_challenge_access_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
         ApiError::new(
             ErrorCode::TemporarilyUnavailable,
             "摄影挑战尚未配置访问口令",
@@ -463,8 +469,13 @@ pub(super) async fn challenge_owner(state: &AppState) -> Result<UserId, ApiError
             StatusCode::SERVICE_UNAVAILABLE,
         ));
     }
-    let email = env_non_empty("PHOTO_CHALLENGE_OWNER_EMAIL")
-        .map(|value| value.to_lowercase())
+    let email = state
+        .config
+        .photo_challenge_owner_email
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_lowercase)
         .ok_or_else(|| {
             ApiError::new(
                 ErrorCode::TemporarilyUnavailable,
@@ -590,8 +601,14 @@ fn row_to_entry(row: &sqlx::postgres::PgRow) -> Result<ChallengeEntry, ApiError>
     })
 }
 
-async fn call_glm_score(image_data_url: &str) -> Result<ModelScore, ApiError> {
-    let api_key = env_non_empty("ZHIPU_API_KEY").ok_or_else(|| {
+async fn call_glm_score(state: &AppState, image_data_url: &str) -> Result<ModelScore, ApiError> {
+    let api_key = state
+        .config
+        .zhipu_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
         ApiError::new(
             ErrorCode::TemporarilyUnavailable,
             "缺少 ZHIPU_API_KEY，无法进行照片评分",
@@ -605,9 +622,8 @@ async fn call_glm_score(image_data_url: &str) -> Result<ModelScore, ApiError> {
             StatusCode::INTERNAL_SERVER_ERROR,
         ));
     }
-    let base_url = env_non_empty("ZHIPU_BASE_URL")
-        .unwrap_or_else(|| "https://open.bigmodel.cn/api/paas/v4".to_owned());
-    let model = env_non_empty("PHOTO_CHALLENGE_MODEL").unwrap_or_else(|| "glm-4v-flash".to_owned());
+    let base_url = &state.config.zhipu_base_url;
+    let model = &state.config.photo_challenge_model;
     let endpoint = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let rubric = r#"你是一名严格、稳定的摄影比赛评委。请只评价照片本身，不因鼓励用户而抬高分数。按以下固定量表打分，总分100：构图 composition 0-25；光线与色彩 lightColor 0-20；主体与叙事 subjectStory 0-20；对焦/曝光/噪点等技术质量 technical 0-20；原创性与瞬间感 originality 0-15。90分代表已经达到非常优秀、少见的作品水平，普通好看的照片应明显低于90。只输出一个JSON对象，不要Markdown，不要额外文字，字段必须为：score, composition, lightColor, subjectStory, technical, originality, feedback。所有分数字段必须是JSON数字，不要带“分”、斜杠或其他单位；feedback必须是JSON字符串，绝不能是对象或数组；用中文，最多80字，指出最关键优点和一个最值得改进的点。"#;
     let request = json!({
@@ -847,13 +863,6 @@ fn clean_file_name(value: &str) -> String {
 
 fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
     Uuid::parse_str(user_id.as_str()).map_err(|_| bad_request("摄影挑战所属账号无效"))
-}
-
-fn env_non_empty(name: &str) -> Option<String> {
-    std::env::var(name)
-        .ok()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
 }
 
 fn bad_request(message: impl Into<String>) -> ApiError {
