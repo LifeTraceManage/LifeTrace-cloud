@@ -66,7 +66,7 @@ async fn download_attachment(
     Path(id): Path<Uuid>,
 ) -> Result<Response<Body>, ApiError> {
     principal.require_scope("mail:read")?;
-    let content = AttachmentReader::new(state.pool.clone(), state.database_enabled)
+    let content = AttachmentReader::new(state.pool.clone(), state.database_enabled, state.config.clone())
         .read(&principal.user_id, id)
         .await
         .map_err(map_error)?;
