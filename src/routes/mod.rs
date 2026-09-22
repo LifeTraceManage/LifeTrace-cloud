@@ -5,7 +5,6 @@ pub mod auth;
 pub mod beecount;
 
 pub mod files;
-pub mod finance;
 pub mod health;
 pub mod mail;
 pub mod mail_attachment;
@@ -29,8 +28,7 @@ use crate::state::AppState;
 /// store used by the stock BeeCount client. The historical LifeTrace finance
 /// CRUD routes remain mounted solely for the in-memory protocol test harness.
 pub fn router(state: AppState) -> Router<AppState> {
-    let in_memory_protocol_harness = !state.database_enabled;
-    let mut router = Router::<AppState>::new()
+    Router::<AppState>::new()
         .merge(health::router())
         .merge(auth::router())
         .merge(beecount::router(
@@ -47,11 +45,5 @@ pub fn router(state: AppState) -> Router<AppState> {
         .merge(mail_attachment::router())
         .merge(mail_list::router())
         .merge(privacy::router())
-        .merge(sync::router());
-
-    if in_memory_protocol_harness {
-        router = router.merge(finance::router());
-    }
-
-    router
+        .merge(sync::router())
 }
