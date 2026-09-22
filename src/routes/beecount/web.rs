@@ -19,8 +19,8 @@ use uuid::Uuid;
 
 use crate::auth::security::cookie_value;
 use crate::auth::{AuthCredential, AuthenticatedPrincipal};
-use crate::beecount_compat::{decimal_amount_to_cents, lifetrace_entity_id, BeeCountReadLedgerOut};
-use crate::beecount_sync::BeeCountSyncService;
+use crate::beecount::compat::{decimal_amount_to_cents, lifetrace_entity_id, BeeCountReadLedgerOut};
+use crate::beecount::sync::BeeCountSyncService;
 use crate::error::ApiError;
 use crate::state::AppState;
 
