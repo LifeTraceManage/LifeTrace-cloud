@@ -7,8 +7,6 @@ pub mod beecount;
 pub mod files;
 pub mod health;
 pub mod mail;
-pub mod mail_attachment;
-pub mod mail_list;
 pub mod meta;
 pub mod photo_challenge;
 pub mod photo_challenge_desktop;
@@ -40,8 +38,6 @@ pub fn router(state: AppState) -> Router<AppState> {
         .merge(photo_challenge::router())
         .merge(photo_challenge_desktop::router())
         .merge(mail::router())
-        .merge(mail_attachment::router())
-        .merge(mail_list::router())
         .merge(privacy::router())
         .merge(sync::router())
 }
