@@ -1,152 +1,139 @@
 # LifeTrace Cloud
 
-LifeTrace 独立云端后端服务（Rust + Axum + PostgreSQL）。它与桌面应用位于同一个 Monorepo，但可以独立构建、测试和部署。
+LifeTrace 的独立云端后端，使用 Rust、Axum、SQLx 与 PostgreSQL。仓库负责跨端同步、认证、文件元数据与对象存储签名、BeeCount 财务兼容、邮件能力以及少量云端任务，不包含 Flutter / Desktop 客户端源码。
+
+## 架构边界
+
+```text
+Client
+  │
+  ▼
+Axum routes
+  │
+  ├─ auth / security
+  ├─ sync v1
+  ├─ files / privacy
+  ├─ BeeCount compatibility
+  ├─ mail
+  └─ photo / assistant support
+  │
+  ▼
+Application state
+  │
+  ├─ PostgreSQL repositories        production
+  ├─ object storage signer
+  ├─ auth service
+  └─ in-memory sync repository      tests / protocol harness only
+```
+
+生产同步路径只使用 PostgreSQL。内存同步实现保留在 `src/repository/memory_store.rs`，用于无数据库的协议测试与快速验证，不属于生产持久化方案。
 
 ## 目录
 
-- 云端源码：`services/cloud/src/`
-- 数据库迁移：`services/cloud/migrations/`
-- 云端测试：`services/cloud/tests/`
-- 部署文件：`deploy/cloud/`
-- 共享协议：`crates/lifetrace-contracts/`、`contracts/`
+- `src/`：服务端入口、配置、安全与通用基础设施
+- `src/routes/`：HTTP 路由层
+- `src/auth/`：认证、授权、Session、Token 与密码逻辑
+- `src/beecount/`：BeeCount 兼容与财务集成领域
+- `src/mail/`：邮件协议、解析、凭据与服务
+- `src/postgres_repository/`：Sync v1 PostgreSQL 持久化
+- `src/repository/`：同步仓库的非生产实现与内部细节
+- `src/sync/`：游标、分页令牌、哈希等同步基础设施
+- `src/bin/`：独立 worker / admin / migration 二进制
+- `crates/lifetrace-contracts/`：共享协议与领域契约
+- `crates/lifetrace-sync-client/`：Rust Sync v1 客户端库
+- `contracts/`：由 contract exporter 生成的跨语言契约产物
+- `migrations/`：PostgreSQL migration
+- `deploy/cloud/`：Docker Compose、Caddy 与生产部署示例
+- `openspec/`：当前有效规范与变更记录
+- `tests/`：服务端集成测试
 
-## 端点
+## 核心 API
 
-| 方法 | 路径 | 认证 | 说明 |
-| --- | --- | --- | --- |
-| GET | `/health/live` | 否 | 存活 |
-| GET | `/health/ready` | 否 | 就绪 |
-| GET | `/api/v1/meta/version` | 否 | 版本 |
-| GET | `/api/v1/sync/capabilities` | 否 | 能力协商 |
-| POST | `/api/v1/sync/push` | Bearer / Web Session | 批量提交 |
-| POST | `/api/v1/sync/pull` | Bearer / Web Session | 拉取变更 |
-| POST | `/api/v1/sync/snapshot` | Bearer / Web Session | 全量快照 |
-| GET | `/api/v1/files` | Bearer / Web Session + `files:read` | 查询当前用户文件元数据 |
-| POST | `/api/v1/files` | Bearer / Web Session + `files:write` | 创建/去重元数据并获取短时上传 URL |
-| GET | `/api/v1/files/{id}` | Bearer / Web Session + `files:read` | 查看单个文件元数据 |
-| DELETE | `/api/v1/files/{id}` | Bearer / Web Session + `files:write` | 软删除当前用户文件元数据 |
-| POST | `/api/v1/files/{id}/upload-url` | Bearer / Web Session + `files:write` | 上传失败后重签 PUT URL |
-| POST | `/api/v1/files/{id}/complete` | Bearer / Web Session + `files:write` | 标记上传完成 |
-| POST | `/api/v1/files/{id}/fail` | Bearer / Web Session + `files:write` | 记录上传失败 |
-| POST | `/api/v1/files/{id}/download-url` | Bearer / Web Session + `files:read` | 按需获取短时 GET URL |
-| GET | `/api/v1/files/orphans` | Bearer / Web Session + `files:read` | 查询未关联且长期 pending/failed 的孤立候选 |
-| GET | `/api/v1/privacy/export` | Bearer / Web Session | 导出当前授权范围内的全部用户数据 |
-| GET | `/api/v1/privacy/export/{module}` | Bearer / Web Session | 分模块导出 |
-| GET | `/api/v1/privacy/policy` | Bearer / Web Session | 查看数据保留策略 |
-| DELETE | `/api/v1/privacy/account` | Bearer / Web Session + CSRF | 注销账号并清理云端数据 |
-| GET | `/api/v1/integrations/beecount/status` | Bearer / Web Session + `finance:read` | BeeCount 只读适配器状态 |
-| GET | `/api/v1/integrations/beecount/ledgers` | Bearer / Web Session + `finance:read` | BeeCount 账本列表 |
-| GET | `/api/v1/integrations/beecount/ledgers/{ledger_id}/snapshot` | Bearer / Web Session + `finance:read` | 规范化交易、账户、分类、标签与预算快照 |
+稳定的公共能力按以下前缀组织：
 
-## EPIC-12 对象存储
+| 前缀 | 作用 |
+| --- | --- |
+| `/health/*` | liveness / readiness |
+| `/api/v1/meta/*` | 版本与元信息 |
+| `/api/v1/auth/*` | 认证与账号能力 |
+| `/api/v1/sync/*` | Push / Pull / Snapshot / capabilities |
+| `/api/v1/files/*` | 文件元数据、上传/下载签名 |
+| `/api/v1/privacy/*` | 导出、保留策略与账号删除 |
+| `/api/v1/integrations/beecount/*` | LifeTrace 对 BeeCount 的只读集成 |
+| BeeCount compatibility routes | BeeCount 原生客户端兼容接口 |
+| mail routes | 邮件列表、消息与附件 |
+| photo routes | 临时照片中转与挑战能力 |
 
-长期普通文件使用 `file_objects` 元数据 + S3 兼容对象存储。Cloud 只签发短时 URL，不代理大文件字节；`file.metadata` 继续通过既有 Sync 协议跨端同步，因此 Push/Pull/Snapshot 中不会携带原文件。
+Sync v1 的具体对象类型和字段以 `lifetrace-contracts` 与生成后的 `contracts/` 为准，不在 README 重复维护第二份协议定义。
 
-生产需要配置：
+## 本地运行
+
+直接启动：
+
+```bash
+cargo run
+```
+
+未提供 `DATABASE_URL` 时只适合协议测试/开发；真实云端部署应配置 PostgreSQL，并通过生产安全校验。
+
+常用数据库工具：
+
+```bash
+cargo run --bin lifetrace-migrate
+cargo run --bin lifetrace-admin
+```
+
+## 测试与质量门禁
+
+CI 的核心检查可在本地复现：
+
+```bash
+cargo fmt --check
+cargo test --locked -- --test-threads=1
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --manifest-path crates/lifetrace-contracts/Cargo.toml
+cargo test --manifest-path crates/lifetrace-sync-client/Cargo.toml
+cargo run --manifest-path tools/contract-exporter/Cargo.toml
+```
+
+生成契约后，`contracts/` 必须保持无未提交差异。
+
+## Docker 与部署
+
+根目录 `Dockerfile` 构建 Cloud 镜像。部署样例位于 `deploy/cloud/`：
+
+- `docker-compose.local.yml`：本地开发
+- `docker-compose.test.yml`：测试
+- `docker-compose.production.yml`：生产 Compose
+- `Caddyfile.production`：生产反向代理
+- `deploy-production.sh`：生产部署脚本
+
+生产环境至少需要 PostgreSQL、显式 HTTPS Origin、强随机认证密钥/pepper，并应关闭运行时自动 migration，使用独立 migration 身份执行数据库升级。
+
+## 对象存储
+
+长期文件使用 `file_objects` 元数据 + S3 兼容对象存储。Cloud 只签发短时上传/下载 URL，不代理大文件字节；`file.metadata` 继续通过 Sync v1 跨端同步。
+
+主要配置包括：
 
 ```text
-FILE_OBJECT_STORAGE_ENDPOINT=https://s3.example.com
-FILE_OBJECT_STORAGE_BUCKET=lifetrace-files
-FILE_OBJECT_STORAGE_REGION=us-east-1
-FILE_OBJECT_STORAGE_ACCESS_KEY_ID=...
-FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY=...
-FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS=900
-FILE_MAX_UPLOAD_BYTES=268435456
+FILE_OBJECT_STORAGE_ENDPOINT
+FILE_OBJECT_STORAGE_BUCKET
+FILE_OBJECT_STORAGE_REGION
+FILE_OBJECT_STORAGE_ACCESS_KEY_ID
+FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY
+FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS
+FILE_MAX_UPLOAD_BYTES
 ```
 
-- endpoint 必须是无额外 path/query/fragment 的 HTTP(S) origin；生产应使用 HTTPS；
-- PUT 签名绑定 `x-amz-checksum-sha256`；客户端必须按返回的 `requiredHeaders` 上传；
-- 允许的领域固定为 `finance_imports`、`notes_attachments`、`english_audio`、`photos`、`workout_imports`、`backups`；
-- MIME 白名单按领域校验；默认单文件上限为 256 MiB，可用 `FILE_MAX_UPLOAD_BYTES` 调整；
-- `photo_staging` 是临时照片中转，不替代长期对象存储；
-- BeeCount compatibility attachment 继续保持原协议边界；
-- 本地加密私密相册严格禁止进入本文件服务。
+私密本地加密数据不得通过普通文件服务上传。
 
-完整执行与架构说明见：
+## 兼容性约束
 
-- `docs/epic-12/execution-plan.md`
-- `docs/epic-12/architecture.md`
+本仓库正在逐步收拢历史模块，但重构遵循以下边界：
 
-## 运行
-
-从仓库根目录：
-
-```powershell
-npm run dev:cloud
-```
-
-或直接：
-
-```powershell
-cargo run --manifest-path services/cloud/Cargo.toml
-```
-
-本地 PostgreSQL / Docker 环境见 `deploy/cloud/` 和 `scripts/cloud/`。
-
-## 测试
-
-```powershell
-npm run test:cloud
-```
-
-或：
-
-```powershell
-cargo test --manifest-path services/cloud/Cargo.toml
-```
-
-## 生产安全配置
-
-EPIC-17 在现有 EPIC-04 认证基础上增加统一 CSP、安全响应头、HSTS、隐私导出/删除与更严格的生产配置检查。
-
-生产部署要求：
-
-- TLS 在可信反向代理、Ingress 或负载均衡器终止，外部访问只使用 HTTPS；
-- `PUBLIC_WEB_BASE_URL` 必须是 HTTPS；
-- Session Cookie 必须开启 Secure；
-- `CORS_ALLOWED_ORIGINS` 只填写显式 HTTPS Origin，禁止 `*`、`null` 和 HTTP Origin；
-- `MIGRATION_ON_STARTUP=false`；
-- migration 使用独立高权限数据库身份，运行时数据库身份只授予所需 DML 权限；
-- Secret 通过部署系统注入，不提交到仓库，不输出到日志；
-- 数据库端口不暴露公网。
-
-服务端统一返回 `nosniff`、`no-referrer`、`DENY` frame policy、严格 CSP、`no-store` 等响应头；production 额外返回 HSTS。
-
-## 数据删除说明
-
-`DELETE /api/v1/privacy/account` 会验证认证/Scope，Web Session 调用还会执行 CSRF 校验。当前 PostgreSQL schema 以 `cloud_users` 为用户所有权根，账号删除前先撤销活动 Session，再在事务中删除用户根，由外键级联清理设备、同步数据、Session/Token 和邮件数据。
-
-BeeCount 兼容附件保存在 PostgreSQL `cloud_file_blobs`，随 `cloud_users` 外键级联删除；邮件附件
-的外部 `storage_ref` 仍没有通用对象存储清理 Provider。如果邮件附件存在非空
-`storage_ref`，接口会返回错误而不是虚报账号及外部文件已经删除。EPIC-12 已建立 S3 兼容
-签名传输和 `file_objects` 元数据，但账号注销/GC 的幂等对象物理删除 Provider 仍需在放开
-该门禁前补齐。
-
-完整设计见：
-
-- `docs/epic-17/security-architecture.md`
-- `docs/epic-17/data-lifecycle.md`
-
-## 部署
-
-生产镜像使用 `services/cloud/Dockerfile`。云端服务不依赖 `apps/desktop`，部署时只需要云端源码、共享 Rust crates 与部署配置。
-
-生产 Compose 还可以在同一台服务器上启动 BeeCount Cloud 兼容服务，使无需
-重新构建的 BeeCount iOS 客户端通过独立 HTTPS 域名连接。该服务与 LifeTrace
-PostgreSQL 数据隔离，部署、验证和备份说明见
-`docs/beecount-cloud-integration/deployment.md`。
-
-启用 `BEECOUNT_ADAPTER_ENABLED=true` 后，适配器只允许
-`BEECOUNT_ADAPTER_LIFETRACE_USER_ID` 指定的 LifeTrace 用户读取数据，并只
-连接同一 Compose 网络中的 `http://beecount-cloud:8080/`（测试也可使用本机
-回环地址）。服务账号密码只从部署环境读取；浏览器通过 LifeTrace Session
-访问 `/finance/beecount`，不会接触 BeeCount 凭据。
-
-兼容层附件上传上限由 `BEECOUNT_ATTACHMENT_MAX_UPLOAD_BYTES` 控制，默认 64 MiB。第四阶段的
-附件与 WebSocket 内部接口、存储边界和切流门禁见
-`docs/beecount-cloud-integration/phase-4-execution-report.md`。
-
-第五阶段继续复用 `cloud_users`、`cloud_devices` 和 PostgreSQL 实体日志，补齐 Profile/头像、
-设备撤销及共享账本 Owner/Editor、邀请、转让和共享资源快照。共享关系只保存权限元数据，
-Editor 写入不会生成第二份财务实体。接口和剩余生产门禁见
-`docs/beecount-cloud-integration/phase-5-execution-report.md`。
+1. 不改变已发布的 Sync v1 wire contract。
+2. 不在纯目录重构中修改数据库 schema。
+3. BeeCount 兼容接口在替换前保持现有路径和字段语义。
+4. 生成契约只由 `lifetrace-contracts` 派生，避免手工维护重复 schema。
+5. 生产业务使用 PostgreSQL；内存实现只服务测试与协议 harness。
