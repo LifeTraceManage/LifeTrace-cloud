@@ -5,6 +5,7 @@
 //! requires PostgreSQL.
 
 mod memory_store;
+pub mod postgres;
 
 use async_trait::async_trait;
 use lifetrace_contracts::sync::v1::{
