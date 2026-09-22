@@ -68,13 +68,14 @@ Sync v1 的具体对象类型和字段以 `lifetrace-contracts` 与生成后的 
 
 ## 本地运行
 
-直接启动：
+应用启动要求提供 `DATABASE_URL`：
 
 ```bash
+export DATABASE_URL=postgres://lifetrace:password@127.0.0.1:5432/lifetrace
 cargo run
 ```
 
-未提供 `DATABASE_URL` 时只适合协议测试/开发；真实云端部署应配置 PostgreSQL，并通过生产安全校验。
+无数据库的内存仓库只通过测试/协议 harness 直接构造 `AppState` 使用，不是可启动的 Cloud 运行模式。
 
 常用数据库工具：
 
