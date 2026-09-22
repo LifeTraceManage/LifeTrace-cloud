@@ -18,12 +18,12 @@ use uuid::Uuid;
 
 use crate::auth::security::{PeerAddr, RequestContext};
 use crate::auth::AuthenticatedPrincipal;
-use crate::beecount_compat::{
+use crate::beecount::compat::{
     BeeCountEntityKind, BeeCountReadLedgerOut, BeeCountScope, BeeCountSyncFullResponse,
     BeeCountSyncLedgerOut, BeeCountSyncPullResponse, BeeCountSyncPushRequest,
     BeeCountSyncPushResponse, USER_GLOBAL_LEDGER_SENTINEL,
 };
-use crate::beecount_sync::BeeCountSyncService;
+use crate::beecount::sync::BeeCountSyncService;
 use crate::error::ApiError;
 use crate::state::AppState;
 
@@ -415,7 +415,7 @@ async fn sync_push(
         .await?;
     if response.accepted > 0 {
         for ledger_id in touched_ledgers {
-            let users = crate::beecount_collaboration::member_user_ids(&state.pool, &ledger_id)
+            let users = crate::beecount::collaboration::member_user_ids(&state.pool, &ledger_id)
                 .await
                 .unwrap_or_else(|_| Vec::new());
             if users.is_empty() {
@@ -441,7 +441,7 @@ async fn sync_push(
         if !shared_resource_events.is_empty() {
             if let Ok(owner_uuid) = Uuid::parse_str(principal.user_id.as_str()) {
                 if let Ok(editors) =
-                    crate::beecount_collaboration::editor_members_for_owner(&state.pool, owner_uuid)
+                    crate::beecount::collaboration::editor_members_for_owner(&state.pool, owner_uuid)
                         .await
                 {
                     for (ledger_id, editor_user_id) in editors {
