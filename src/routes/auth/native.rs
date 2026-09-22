@@ -6,7 +6,7 @@ use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use lifetrace_contracts::auth::v1::*;
 
-use crate::auth::security::{PeerAddr, RequestContext};
+use crate::auth::security::PeerAddr;
 use crate::auth::AuthenticatedPrincipal;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -42,9 +42,6 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-fn context(state: &AppState, headers: &HeaderMap, peer: PeerAddr) -> RequestContext {
-    RequestContext::from_headers(headers, peer.0, &state.config)
-}
 
 async fn capabilities(State(state): State<AppState>) -> Json<AuthCapabilitiesV1> {
     Json(state.auth_service.capabilities())
@@ -58,7 +55,7 @@ async fn register(
 ) -> Result<(StatusCode, Json<TokenResponseV1>), ApiError> {
     let result = state
         .auth_service
-        .register(request, &context(&state, &headers, peer))
+        .register(request, &super::context(&state, &headers, peer))
         .await?;
     Ok((StatusCode::CREATED, Json(result)))
 }
@@ -71,7 +68,7 @@ async fn login(
 ) -> Result<Json<TokenResponseV1>, ApiError> {
     state
         .auth_service
-        .login(request, &context(&state, &headers, peer))
+        .login(request, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
@@ -84,7 +81,7 @@ async fn refresh(
 ) -> Result<Json<TokenResponseV1>, ApiError> {
     state
         .auth_service
-        .refresh(request, &context(&state, &headers, peer))
+        .refresh(request, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
@@ -97,7 +94,7 @@ async fn forgot_password(
 ) -> Result<(StatusCode, Json<AcceptedResponseV1>), ApiError> {
     let result = state
         .auth_service
-        .forgot_password(request, &context(&state, &headers, peer))
+        .forgot_password(request, &super::context(&state, &headers, peer))
         .await?;
     Ok((StatusCode::ACCEPTED, Json(result)))
 }
@@ -110,7 +107,7 @@ async fn reset_password(
 ) -> Result<Json<AcceptedResponseV1>, ApiError> {
     state
         .auth_service
-        .reset_password(request, &context(&state, &headers, peer))
+        .reset_password(request, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
@@ -130,7 +127,7 @@ async fn logout(
 ) -> Result<Json<AcceptedResponseV1>, ApiError> {
     state
         .auth_service
-        .logout(&principal, &context(&state, &headers, peer))
+        .logout(&principal, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
@@ -143,7 +140,7 @@ async fn logout_all(
 ) -> Result<Json<AcceptedResponseV1>, ApiError> {
     state
         .auth_service
-        .logout_all(&principal, &context(&state, &headers, peer))
+        .logout_all(&principal, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
@@ -157,7 +154,7 @@ async fn change_password(
 ) -> Result<Json<AcceptedResponseV1>, ApiError> {
     state
         .auth_service
-        .change_password(&principal, request, &context(&state, &headers, peer))
+        .change_password(&principal, request, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
@@ -178,7 +175,7 @@ async fn revoke_session(
 ) -> Result<Json<AcceptedResponseV1>, ApiError> {
     state
         .auth_service
-        .revoke_session(&principal, &session_id, &context(&state, &headers, peer))
+        .revoke_session(&principal, &session_id, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
@@ -212,7 +209,7 @@ async fn revoke_device(
 ) -> Result<Json<AcceptedResponseV1>, ApiError> {
     state
         .auth_service
-        .revoke_device(&principal, &device_id, &context(&state, &headers, peer))
+        .revoke_device(&principal, &device_id, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
@@ -229,7 +226,7 @@ async fn revoke_device_group(
         .revoke_device_group(
             &principal,
             &device_group_id,
-            &context(&state, &headers, peer),
+            &super::context(&state, &headers, peer),
         )
         .await
         .map(Json)
@@ -256,7 +253,7 @@ async fn update_grant(
             &principal,
             &app_id,
             request,
-            &context(&state, &headers, peer),
+            &super::context(&state, &headers, peer),
         )
         .await
         .map(Json)
@@ -271,7 +268,7 @@ async fn revoke_grant(
 ) -> Result<Json<AcceptedResponseV1>, ApiError> {
     state
         .auth_service
-        .revoke_grant(&principal, &app_id, &context(&state, &headers, peer))
+        .revoke_grant(&principal, &app_id, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
