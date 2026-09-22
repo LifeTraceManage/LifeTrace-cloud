@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use lifetrace_contracts::UserId;
 use mail_parser::MessageParser;
 use sqlx::PgPool;
@@ -7,6 +9,7 @@ use uuid::Uuid;
 use super::credential::CredentialCipher;
 use super::domain::MailAccountSecret;
 use super::protocol;
+use crate::Config;
 
 const MAX_ATTACHMENT_BYTES: i64 = 25 * 1024 * 1024;
 const MAX_RAW_MESSAGE_BYTES: i64 = 64 * 1024 * 1024;
@@ -62,13 +65,15 @@ struct AttachmentSource {
 pub struct AttachmentReader {
     pool: PgPool,
     database_enabled: bool,
+    config: Arc<Config>,
 }
 
 impl AttachmentReader {
-    pub fn new(pool: PgPool, database_enabled: bool) -> Self {
+    pub fn new(pool: PgPool, database_enabled: bool, config: Arc<Config>) -> Self {
         Self {
             pool,
             database_enabled,
+            config,
         }
     }
 
@@ -111,7 +116,8 @@ impl AttachmentReader {
             .parse()
             .map_err(|_| AttachmentReadError::InvalidPart)?;
         let account = self.account_secret(user_id, source.account_id).await?;
-        let cipher = CredentialCipher::from_env().map_err(|_| AttachmentReadError::Credential)?;
+        let cipher = CredentialCipher::from_config(&self.config)
+            .map_err(|_| AttachmentReadError::Credential)?;
         let secret = cipher
             .decrypt(&account.credential_ciphertext, &account.credential_nonce)
             .map_err(|_| AttachmentReadError::Credential)?;
