@@ -6,23 +6,16 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
-use chrono::{DateTime, Utc};
 use lifetrace_contracts::auth::v1::{
     AcceptedResponseV1, CsrfResponseV1, DeviceInstallationV1, DeviceListV1, Scope, SessionListV1,
     UpdateDeviceRequestV1, WebLoginRequestV1, WebSessionResponseV1,
 };
-use lifetrace_contracts::ErrorCode;
 use serde::Deserialize;
-use serde_json::json;
-use sqlx::{Postgres, Row, Transaction};
-use uuid::Uuid;
 
-use crate::auth::password::PasswordManager;
 use crate::auth::security::{
     build_session_cookie, clear_session_cookie, cookie_value, PeerAddr, RequestContext,
 };
-use crate::auth::token::TokenKind;
-use crate::auth::{AuthCredential, AuthService, AuthenticatedPrincipal};
+use crate::auth::{AuthCredential, AuthenticatedPrincipal};
 use crate::error::ApiError;
 use crate::state::AppState;
 
@@ -61,17 +54,6 @@ fn context(state: &AppState, headers: &HeaderMap, peer: PeerAddr) -> RequestCont
     RequestContext::from_headers(headers, peer.0, &state.config)
 }
 
-fn auth_error(code: ErrorCode, message: impl Into<String>, status: StatusCode) -> ApiError {
-    ApiError::new(code, message, status)
-}
-
-fn database_error(error: sqlx::Error) -> ApiError {
-    auth_error(
-        ErrorCode::TemporarilyUnavailable,
-        format!("authentication database operation failed: {error}"),
-        StatusCode::SERVICE_UNAVAILABLE,
-    )
-}
 
 async fn web_principal(
     state: &AppState,
