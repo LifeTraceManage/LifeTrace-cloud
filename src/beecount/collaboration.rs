@@ -5,7 +5,7 @@ use lifetrace_contracts::ErrorCode;
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use crate::beecount_compat::lifetrace_entity_id;
+use crate::beecount::compat::lifetrace_entity_id;
 use crate::error::ApiError;
 
 pub const ROLE_OWNER: &str = "owner";
