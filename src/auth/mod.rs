@@ -1,4 +1,4 @@
-//! EPIC-04 authentication, authorization and security boundary.
+//! Authentication, authorization and account security boundary.
 
 pub mod database;
 pub mod development;
