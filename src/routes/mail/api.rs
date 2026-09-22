@@ -54,7 +54,7 @@ pub fn router() -> Router<AppState> {
 }
 
 fn service(state: &AppState) -> MailService {
-    MailService::new(state.pool.clone(), state.database_enabled)
+    MailService::new(state.pool.clone(), state.database_enabled, state.config.clone())
 }
 
 fn map_error(error: MailServiceError) -> ApiError {
