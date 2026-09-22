@@ -13,7 +13,7 @@ use lifetrace_contracts::auth::v1::{
 use serde::Deserialize;
 
 use crate::auth::security::{
-    build_session_cookie, clear_session_cookie, cookie_value, PeerAddr, RequestContext,
+    build_session_cookie, clear_session_cookie, cookie_value, PeerAddr,
 };
 use crate::auth::{AuthCredential, AuthenticatedPrincipal};
 use crate::error::ApiError;
@@ -50,9 +50,6 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/web/sessions/{session_id}", delete(revoke_session))
 }
 
-fn context(state: &AppState, headers: &HeaderMap, peer: PeerAddr) -> RequestContext {
-    RequestContext::from_headers(headers, peer.0, &state.config)
-}
 
 
 async fn web_principal(
@@ -92,7 +89,7 @@ async fn register(
     headers: HeaderMap,
     Json(request): Json<WebRegisterRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let request_context = context(&state, &headers, peer);
+    let request_context = super::context(&state, &headers, peer);
     let display_name = request
         .display_name
         .as_deref()
@@ -142,7 +139,7 @@ async fn login(
 ) -> Result<impl IntoResponse, ApiError> {
     let (body, raw_cookie) = state
         .auth_service
-        .web_login(request, &context(&state, &headers, peer))
+        .web_login(request, &super::context(&state, &headers, peer))
         .await?;
     let max_age = if body.session.public_device {
         state.config.auth_public_device_ttl_seconds
@@ -185,7 +182,7 @@ async fn rotate(
     let principal = verified_web_principal(&state, &headers).await?;
     let (body, next_cookie) = state
         .auth_service
-        .rotate_web_session(&principal, &raw_session, &context(&state, &headers, peer))
+        .rotate_web_session(&principal, &raw_session, &super::context(&state, &headers, peer))
         .await?;
     let max_age = if body.session.public_device {
         state.config.auth_public_device_ttl_seconds
@@ -208,7 +205,7 @@ async fn logout(
     let principal = verified_web_principal(&state, &headers).await?;
     let body: AcceptedResponseV1 = state
         .auth_service
-        .web_logout(&principal, &context(&state, &headers, peer))
+        .web_logout(&principal, &super::context(&state, &headers, peer))
         .await?;
     let mut response = Json(body).into_response();
     response
@@ -248,7 +245,7 @@ async fn revoke_device(
     let principal = verified_web_principal(&state, &headers).await?;
     state
         .auth_service
-        .revoke_device(&principal, &device_id, &context(&state, &headers, peer))
+        .revoke_device(&principal, &device_id, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
@@ -270,7 +267,7 @@ async fn revoke_session(
     let principal = verified_web_principal(&state, &headers).await?;
     state
         .auth_service
-        .revoke_session(&principal, &session_id, &context(&state, &headers, peer))
+        .revoke_session(&principal, &session_id, &super::context(&state, &headers, peer))
         .await
         .map(Json)
 }
