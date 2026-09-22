@@ -455,7 +455,7 @@ fn verify_challenge_key(headers: &HeaderMap) -> Result<(), ApiError> {
     Ok(())
 }
 
-async fn challenge_owner(state: &AppState) -> Result<UserId, ApiError> {
+pub(super) async fn challenge_owner(state: &AppState) -> Result<UserId, ApiError> {
     if !state.database_enabled {
         return Err(ApiError::new(
             ErrorCode::TemporarilyUnavailable,
@@ -500,7 +500,7 @@ async fn web_principal(
         .await
 }
 
-async fn load_stats(state: &AppState, owner: &UserId) -> Result<ChallengeStats, ApiError> {
+pub(super) async fn load_stats(state: &AppState, owner: &UserId) -> Result<ChallengeStats, ApiError> {
     let owner_uuid = user_uuid(owner)?;
     let row = sqlx::query(
         "SELECT COUNT(*) AS total,COUNT(*) FILTER (WHERE qualified) AS high_count,COALESCE(AVG(score),0)::float8 AS average_score \
