@@ -4,17 +4,16 @@
 //! defined by `lifetrace-contracts`; domain-specific HTTP adapters are grouped
 //! behind explicit modules.
 
-pub mod api_rate_limit;
 pub mod auth;
 pub mod beecount;
 
 pub mod config;
 pub mod error;
+pub mod http;
 pub mod mail;
 pub mod object_storage;
 pub mod repository;
 pub mod routes;
-pub mod security;
 pub mod state;
 pub mod sync;
 
@@ -74,22 +73,22 @@ pub fn app(state: AppState) -> Router {
     };
 
     let production = state.config.is_production();
-    let rate_limiter = api_rate_limit::ApiRateLimiter::from_config(&state.config);
+    let rate_limiter = http::rate_limit::ApiRateLimiter::from_config(&state.config);
     let mut router = routes::router(state.clone())
         .layer(middleware::from_fn_with_state(
             rate_limiter,
-            api_rate_limit::middleware,
+            http::rate_limit::middleware,
         ))
         .with_state(state)
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(cors);
 
-    for layer in security::response_security_layers() {
+    for layer in http::security::response_security_layers() {
         router = router.layer(layer);
     }
     if production {
-        router = router.layer(security::hsts_layer());
+        router = router.layer(http::security::hsts_layer());
     }
     router
 }
