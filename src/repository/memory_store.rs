@@ -1,14 +1,9 @@
-//! In-memory per-user sync server state machine.
+//! In-memory per-user Sync v1 state machine.
 //!
-//! This is the production-shaped counterpart of the reference testkit in
-//! `lifetrace-contracts`: it implements the same protocol semantics
-//! (push idempotency, base-version conflicts, tombstones, cursor ordering,
-//! snapshot consistency, atomic groups) but is wired behind an HTTP API and
-//! keyed per user so multi-tenant isolation logic is explicit.
-//!
-//! Persistence is intentionally out of scope for this prototype: a future
-//! PostgreSQL-backed implementation replaces the in-memory maps while
-//! keeping the same public methods.
+//! This implementation exists for protocol tests and the no-database harness.
+//! Production persistence is implemented by `PostgresRepository`; this module
+//! mirrors the same push/pull/snapshot semantics without presenting a second
+//! production storage path.
 
 use std::collections::HashMap;
 use std::sync::Arc;
