@@ -22,7 +22,6 @@ pub mod repository;
 pub mod routes;
 pub mod security;
 pub mod state;
-pub mod store;
 pub mod sync;
 
 pub use config::Config;
