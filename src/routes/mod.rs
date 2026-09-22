@@ -3,12 +3,19 @@
 pub mod assistant;
 pub mod auth;
 pub mod beecount;
-pub mod beecount_account;
-pub mod beecount_attachments;
-pub mod beecount_compat;
-pub mod beecount_stats;
-pub mod beecount_web;
-pub mod beecount_ws;
+
+#[doc(hidden)]
+pub use beecount::account as beecount_account;
+#[doc(hidden)]
+pub use beecount::attachments as beecount_attachments;
+#[doc(hidden)]
+pub use beecount::compat as beecount_compat;
+#[doc(hidden)]
+pub use beecount::stats as beecount_stats;
+#[doc(hidden)]
+pub use beecount::web as beecount_web;
+#[doc(hidden)]
+pub use beecount::ws as beecount_ws;
 pub mod files;
 pub mod finance;
 pub mod health;
@@ -38,14 +45,9 @@ pub fn router(state: AppState) -> Router<AppState> {
     let mut router = Router::<AppState>::new()
         .merge(health::router())
         .merge(auth::router())
-        .merge(beecount_web::router())
-        .merge(beecount_account::router())
-        .merge(beecount_attachments::router(
+        .merge(beecount::router(
             state.config.beecount_attachment_max_upload_bytes,
         ))
-        .merge(beecount_compat::router())
-        .merge(beecount_stats::router())
-        .merge(beecount_ws::router())
         .merge(web_auth::router())
         .merge(assistant::router())
         .merge(meta::router())
