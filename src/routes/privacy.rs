@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::auth::extract::authenticate_bearer_or_web_session;
 use crate::auth::scope;
 use crate::auth::security::{clear_session_cookie, cookie_value};
 use crate::auth::{AuthCredential, AuthenticatedPrincipal};
@@ -52,26 +53,6 @@ fn db_error(error: sqlx::Error) -> ApiError {
         format!("privacy database operation failed: {error}"),
         StatusCode::SERVICE_UNAVAILABLE,
     )
-}
-
-async fn read_principal(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<AuthenticatedPrincipal, ApiError> {
-    let authorization = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok());
-    if authorization.is_some() {
-        return state
-            .auth
-            .authenticate(AuthCredential::Bearer(authorization))
-            .await;
-    }
-    let raw = cookie_value(headers, &state.config.auth_cookie_name);
-    state
-        .auth
-        .authenticate(AuthCredential::WebSession(raw.as_deref()))
-        .await
 }
 
 async fn write_principal(
@@ -334,7 +315,7 @@ async fn export_all(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    let principal = read_principal(&state, &headers).await?;
+    let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     principal.require_scope("account:read")?;
     build_export(&state, &principal, None).await.map(Json)
 }
@@ -344,7 +325,7 @@ async fn export_module(
     headers: HeaderMap,
     Path(module): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let principal = read_principal(&state, &headers).await?;
+    let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     build_export(&state, &principal, Some(module.as_str()))
         .await
         .map(Json)
@@ -354,7 +335,7 @@ async fn policy(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    let principal = read_principal(&state, &headers).await?;
+    let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     principal.require_scope("account:read")?;
     Ok(Json(json!({
         "policyVersion": 1,
