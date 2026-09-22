@@ -11,7 +11,6 @@ pub mod meta;
 pub mod photo;
 pub mod privacy;
 pub mod sync;
-pub mod web_auth;
 
 use axum::Router;
 
@@ -28,7 +27,6 @@ pub fn router(state: AppState) -> Router<AppState> {
         .merge(beecount::router(
             state.config.beecount_attachment_max_upload_bytes,
         ))
-        .merge(web_auth::router())
         .merge(assistant::router())
         .merge(meta::router())
         .merge(files::router())
