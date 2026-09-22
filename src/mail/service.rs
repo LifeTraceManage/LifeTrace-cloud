@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::{Duration, Utc};
@@ -7,6 +8,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use lifetrace_contracts::UserId;
+
+use crate::Config;
 
 use super::credential::{CredentialCipher, CredentialError};
 use super::domain::{
@@ -67,13 +70,15 @@ impl From<MailProtocolError> for MailServiceError {
 pub struct MailService {
     pool: PgPool,
     database_enabled: bool,
+    config: Arc<Config>,
 }
 
 impl MailService {
-    pub fn new(pool: PgPool, database_enabled: bool) -> Self {
+    pub fn new(pool: PgPool, database_enabled: bool, config: Arc<Config>) -> Self {
         Self {
             pool,
             database_enabled,
+            config,
         }
     }
 
@@ -156,7 +161,7 @@ impl MailService {
         self.require_database()?;
         let user_id = Self::user_uuid(user_id)?;
         let resolved = Self::resolve_input(&input)?;
-        let cipher = CredentialCipher::from_env()?;
+        let cipher = CredentialCipher::from_config(&self.config)?;
         let (credential_ciphertext, credential_nonce) =
             cipher.encrypt(&input.authorization_code)?;
         let id = Uuid::new_v4();
@@ -244,8 +249,8 @@ impl MailService {
         .ok_or(MailServiceError::AccountNotFound)
     }
 
-    fn decrypt_secret(account: &MailAccountSecret) -> Result<String, MailServiceError> {
-        Ok(CredentialCipher::from_env()?
+    fn decrypt_secret(&self, account: &MailAccountSecret) -> Result<String, MailServiceError> {
+        Ok(CredentialCipher::from_config(&self.config)?
             .decrypt(&account.credential_ciphertext, &account.credential_nonce)?)
     }
 
@@ -265,7 +270,7 @@ impl MailService {
         account_id: Uuid,
     ) -> Result<ConnectionTestResult, MailServiceError> {
         let account = self.account_secret(user_id, account_id).await?;
-        let secret = Self::decrypt_secret(&account)?;
+        let secret = self.decrypt_secret(&account)?;
         let imap_probe = protocol::probe_imap(account.clone(), secret.clone()).await;
         let smtp_probe = protocol::probe_smtp(&account, &secret).await;
         let imap_ok = imap_probe.is_ok();
@@ -429,7 +434,7 @@ impl MailService {
         account_id: Uuid,
     ) -> Result<usize, MailServiceError> {
         let account = self.account_secret(user_id, account_id).await?;
-        let secret = Self::decrypt_secret(&account)?;
+        let secret = self.decrypt_secret(&account)?;
         let folders = sqlx::query_as::<_, MailFolder>(
             r#"
             SELECT id,account_id,remote_name,normalized_role,uidvalidity,uidnext,last_seen_uid,last_sync_at,sync_enabled
@@ -653,7 +658,7 @@ impl MailService {
         let user_id = Self::user_uuid(user_id)?;
         let remote = self.remote_message_ref(user_id, message_id).await?;
         let account = self.account_secret(user_id, remote.account_id).await?;
-        let secret = Self::decrypt_secret(&account)?;
+        let secret = self.decrypt_secret(&account)?;
         protocol::set_seen(account, secret, remote.folder_name, remote.uid as u32, read).await?;
         sqlx::query(
             "UPDATE mail_messages SET is_read=$3,updated_at=now() WHERE user_id=$1 AND id=$2",
@@ -684,7 +689,7 @@ impl MailService {
         .await?;
         let archive_folder = archive_folder.ok_or(MailServiceError::ArchiveUnavailable)?;
         let account = self.account_secret(user_id, remote.account_id).await?;
-        let secret = Self::decrypt_secret(&account)?;
+        let secret = self.decrypt_secret(&account)?;
         protocol::archive_message(
             account,
             secret,
@@ -734,7 +739,7 @@ impl MailService {
             return Err(MailServiceError::InvalidAccount);
         }
         let account = self.account_secret(user_id, account_id).await?;
-        let secret = Self::decrypt_secret(&account)?;
+        let secret = self.decrypt_secret(&account)?;
         let domain = account
             .email_address
             .split('@')
