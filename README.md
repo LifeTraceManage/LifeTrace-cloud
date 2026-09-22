@@ -36,7 +36,7 @@ Application state
 - `src/beecount/`：BeeCount 兼容与财务集成领域
 - `src/mail/`：邮件协议、解析、凭据与服务
 - `src/postgres_repository/`：Sync v1 PostgreSQL 持久化
-- `src/repository/`：同步仓库的非生产实现与内部细节
+- `src/repository/`：同步仓库抽象与仅用于测试/协议 harness 的内存实现
 - `src/sync/`：游标、分页令牌、哈希等同步基础设施
 - `src/bin/`：独立 worker / admin / migration 二进制
 - `crates/lifetrace-contracts/`：共享协议与领域契约
