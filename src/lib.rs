@@ -1,7 +1,8 @@
-//! LifeTrace EPIC-03 sync server.
+//! LifeTrace cloud backend.
 //!
-//! The production path is backed by PostgreSQL through SQLx. The protocol
-//! surface remains the v1 contract defined in `lifetrace-contracts`.
+//! PostgreSQL is the production persistence path. Sync wire compatibility is
+//! defined by `lifetrace-contracts`; domain-specific HTTP adapters are grouped
+//! behind explicit modules.
 
 pub mod api_rate_limit;
 pub mod auth;
@@ -9,8 +10,6 @@ pub mod beecount;
 
 // Transitional public aliases keep existing internal/external paths stable
 // while the implementation lives under the BeeCount domain module.
-#[doc(hidden)]
-pub use beecount::adapter as beecount_adapter;
 #[doc(hidden)]
 pub use beecount::attachments as beecount_attachments;
 #[doc(hidden)]
