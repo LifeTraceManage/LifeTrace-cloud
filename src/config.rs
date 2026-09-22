@@ -294,7 +294,6 @@ impl Config {
         }
         Ok(())
     }
-
 }
 
 fn env_var(name: &str) -> Option<String> {
@@ -383,7 +382,6 @@ mod tests {
         };
         assert!(config.validate().unwrap_err().contains("PEPPER"));
     }
-
 
     #[test]
     fn beecount_attachment_limit_is_bounded() {
