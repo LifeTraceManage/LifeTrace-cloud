@@ -4,18 +4,6 @@ pub mod assistant;
 pub mod auth;
 pub mod beecount;
 
-#[doc(hidden)]
-pub use beecount::account as beecount_account;
-#[doc(hidden)]
-pub use beecount::attachments as beecount_attachments;
-#[doc(hidden)]
-pub use beecount::compat as beecount_compat;
-#[doc(hidden)]
-pub use beecount::stats as beecount_stats;
-#[doc(hidden)]
-pub use beecount::web as beecount_web;
-#[doc(hidden)]
-pub use beecount::ws as beecount_ws;
 pub mod files;
 pub mod finance;
 pub mod health;
