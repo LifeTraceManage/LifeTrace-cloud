@@ -67,6 +67,20 @@ pub struct Config {
     pub file_object_storage_secret_access_key: Option<String>,
     pub file_object_storage_presign_ttl_seconds: u32,
     pub file_max_upload_bytes: i64,
+
+    pub mail_credential_key: Option<String>,
+
+    pub deepseek_api_key: Option<String>,
+    pub deepseek_base_url: String,
+    pub deepseek_model: String,
+
+    pub zhipu_api_key: Option<String>,
+    pub zhipu_base_url: String,
+    pub photo_challenge_model: String,
+    pub photo_challenge_access_key: Option<String>,
+    pub photo_challenge_owner_email: Option<String>,
+    pub photo_staging_ttl_hours: Option<i64>,
+    pub photo_staging_dir: String,
 }
 
 impl Default for Config {
@@ -128,6 +142,17 @@ impl Default for Config {
             file_object_storage_secret_access_key: None,
             file_object_storage_presign_ttl_seconds: 900,
             file_max_upload_bytes: 256 * 1024 * 1024,
+            mail_credential_key: None,
+            deepseek_api_key: None,
+            deepseek_base_url: "https://api.deepseek.com".to_owned(),
+            deepseek_model: "deepseek-chat".to_owned(),
+            zhipu_api_key: None,
+            zhipu_base_url: "https://open.bigmodel.cn/api/paas/v4".to_owned(),
+            photo_challenge_model: "glm-4v-flash".to_owned(),
+            photo_challenge_access_key: None,
+            photo_challenge_owner_email: None,
+            photo_staging_ttl_hours: None,
+            photo_staging_dir: "./data/photo-staging".to_owned(),
         }
     }
 }
@@ -251,6 +276,30 @@ impl Config {
             .and_then(|value| value.parse::<i64>().ok())
             .filter(|value| *value > 0)
             .unwrap_or(c.file_max_upload_bytes);
+
+        c.mail_credential_key = env_var("MAIL_CREDENTIAL_KEY");
+
+        c.deepseek_api_key = env_var("DEEPSEEK_API_KEY");
+        c.deepseek_base_url = env_string("DEEPSEEK_BASE_URL", &c.deepseek_base_url);
+        c.deepseek_model = env_string("DEEPSEEK_MODEL", &c.deepseek_model);
+
+        c.zhipu_api_key = env_var("ZHIPU_API_KEY");
+        c.zhipu_base_url = env_string("ZHIPU_BASE_URL", &c.zhipu_base_url);
+        c.photo_challenge_model =
+            env_string("PHOTO_CHALLENGE_MODEL", &c.photo_challenge_model);
+        c.photo_challenge_access_key = env_var("PHOTO_CHALLENGE_ACCESS_KEY");
+        c.photo_challenge_owner_email = env_var("PHOTO_CHALLENGE_OWNER_EMAIL");
+        c.photo_staging_ttl_hours = env_var("PHOTO_STAGING_TTL_HOURS")
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|hours| *hours > 0)
+            .map(|hours| hours.min(24 * 3650));
+        c.photo_staging_dir = env_var("PHOTO_STAGING_DIR").unwrap_or_else(|| {
+            if c.is_production() {
+                "/data/photo-staging".to_owned()
+            } else {
+                "./data/photo-staging".to_owned()
+            }
+        });
         c
     }
 
