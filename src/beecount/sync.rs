@@ -9,10 +9,10 @@ use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use crate::beecount_collaboration::{
+use crate::beecount::collaboration::{
     ensure_owner_registry_tx, resolve_ledger_access_tx, ROLE_OWNER,
 };
-use crate::beecount_compat::{
+use crate::beecount::compat::{
     beecount_payload, beecount_wire_id, canonical_payload, clamp_client_updated_at,
     incoming_clock_wins, lifetrace_entity_id, BeeCountBoundaryError, BeeCountConflictSample,
     BeeCountEntityKind, BeeCountReadLedgerOut, BeeCountScope, BeeCountSyncChangeOut,
@@ -45,7 +45,7 @@ impl BeeCountSyncService {
         }
         let actor_uuid = user_uuid(user_id)?;
         let actor_wire_user_id =
-            crate::beecount_collaboration::beecount_user_id(&self.pool, actor_uuid).await?;
+            crate::beecount::collaboration::beecount_user_id(&self.pool, actor_uuid).await?;
         let device_uuid = Uuid::parse_str(session_device_id)
             .map_err(|_| unauthorized("invalid BeeCount session device"))?;
         let mut tx = self.pool.begin().await.map_err(db_error)?;
@@ -542,7 +542,7 @@ impl BeeCountSyncService {
         ledger_id: &str,
     ) -> Result<BeeCountSyncFullResponse, ApiError> {
         let actor_uuid = user_uuid(user_id)?;
-        let access = crate::beecount_collaboration::resolve_ledger_access(
+        let access = crate::beecount::collaboration::resolve_ledger_access(
             &self.pool, actor_uuid, ledger_id, false,
         )
         .await?;
@@ -913,13 +913,13 @@ fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
 fn valid_external_id(value: &str) -> bool {
     let trimmed = value.trim();
     let native_suffix_is_valid = value
-        .strip_prefix(crate::beecount_compat::NATIVE_WIRE_ID_PREFIX)
+        .strip_prefix(crate::beecount::compat::NATIVE_WIRE_ID_PREFIX)
         .map_or(true, |suffix| !suffix.is_empty());
     trimmed == value
         && !trimmed.is_empty()
         && trimmed.len() <= 256
         && value.chars().all(|character| !character.is_control())
-        && !trimmed.starts_with(crate::beecount_compat::ENTITY_ID_PREFIX)
+        && !trimmed.starts_with(crate::beecount::compat::ENTITY_ID_PREFIX)
         && native_suffix_is_valid
 }
 
