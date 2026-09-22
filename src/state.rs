@@ -7,7 +7,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
 use crate::auth::{AuthProvider, AuthService, DatabaseAuthProvider, DevelopmentAuthProvider};
-use crate::beecount_realtime::BeeCountRealtimeHub;
+use crate::beecount::realtime::BeeCountRealtimeHub;
 use crate::config::Config;
 use crate::postgres_repository::PostgresRepository;
 use crate::repository::{MemoryRepository, SyncRepository};
