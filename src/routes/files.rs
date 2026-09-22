@@ -1,4 +1,4 @@
-//! EPIC-12 unified file metadata and signed object-storage transfer API.
+//! Unified file metadata and signed object-storage transfer API.
 
 use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::StatusCode;
