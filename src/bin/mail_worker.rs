@@ -26,17 +26,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("mail worker requires DATABASE_URL".into());
     }
     // Fail before entering the worker loop when the external envelope key is absent or malformed.
-    CredentialCipher::from_env()?;
+    let credential_cipher = CredentialCipher::from_config(&state.config)?;
 
-    let service = MailService::new(state.pool.clone(), true);
+    let service = MailService::new(state.pool.clone(), true, state.config.clone());
     println!("[lifetrace-mail-worker] started");
 
     loop {
         let idle_accounts = load_idle_accounts(&state, MAX_IDLE_ACCOUNTS).await?;
         let mut idle_tasks = JoinSet::new();
         for account in idle_accounts.iter().cloned() {
+            let cipher = credential_cipher.clone();
             idle_tasks.spawn(async move {
-                let cipher = CredentialCipher::from_env().ok()?;
                 let secret = cipher
                     .decrypt(&account.credential_ciphertext, &account.credential_nonce)
                     .ok()?;
