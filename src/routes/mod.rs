@@ -8,9 +8,7 @@ pub mod files;
 pub mod health;
 pub mod mail;
 pub mod meta;
-pub mod photo_challenge;
-pub mod photo_challenge_desktop;
-pub mod photo_staging;
+pub mod photo;
 pub mod privacy;
 pub mod sync;
 pub mod web_auth;
@@ -34,9 +32,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .merge(assistant::router())
         .merge(meta::router())
         .merge(files::router())
-        .merge(photo_staging::router())
-        .merge(photo_challenge::router())
-        .merge(photo_challenge_desktop::router())
+        .merge(photo::router())
         .merge(mail::router())
         .merge(privacy::router())
         .merge(sync::router())
