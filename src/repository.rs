@@ -4,6 +4,8 @@
 //! available for fast protocol unit tests only; production configuration
 //! requires PostgreSQL.
 
+mod memory_store;
+
 use async_trait::async_trait;
 use lifetrace_contracts::sync::v1::{
     CapabilitiesResponseV1, EntitySnapshotV1, PullRequestV1, PullResponseV1, PushRequestV1,
@@ -13,11 +15,10 @@ use lifetrace_contracts::{EntityId, EntityType, ServerVersion, UserId};
 use tokio::sync::RwLock;
 
 use crate::error::ApiError;
-mod memory_store;
-use memory_store::Store;
 use crate::sync::cursor_codec::CursorCodec;
 use crate::sync::page_token::PageTokenCodec;
 use crate::Config;
+use memory_store::Store;
 
 #[derive(Debug, Clone)]
 pub struct StoredEntityRecord {
