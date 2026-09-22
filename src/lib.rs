@@ -5,14 +5,22 @@
 
 pub mod api_rate_limit;
 pub mod auth;
-pub mod beecount_adapter;
-pub mod beecount_attachments;
-pub mod beecount_collaboration;
-#[allow(clippy::too_many_arguments)]
-pub mod beecount_compat;
-pub mod beecount_realtime;
-#[allow(clippy::unnecessary_map_or)]
-pub mod beecount_sync;
+pub mod beecount;
+
+// Transitional public aliases keep existing internal/external paths stable
+// while the implementation lives under the BeeCount domain module.
+#[doc(hidden)]
+pub use beecount::adapter as beecount_adapter;
+#[doc(hidden)]
+pub use beecount::attachments as beecount_attachments;
+#[doc(hidden)]
+pub use beecount::collaboration as beecount_collaboration;
+#[doc(hidden)]
+pub use beecount::compat as beecount_compat;
+#[doc(hidden)]
+pub use beecount::realtime as beecount_realtime;
+#[doc(hidden)]
+pub use beecount::sync as beecount_sync;
 pub mod config;
 pub mod error;
 pub mod mail;
