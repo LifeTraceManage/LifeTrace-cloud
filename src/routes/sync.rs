@@ -16,7 +16,7 @@ use lifetrace_contracts::{EntityType, ErrorCode};
 use crate::auth::scope;
 use crate::auth::security::cookie_value;
 use crate::auth::{AuthCredential, AuthenticatedPrincipal};
-use crate::beecount_compat::{beecount_wire_id, USER_GLOBAL_LEDGER_SENTINEL};
+use crate::beecount::compat::{beecount_wire_id, USER_GLOBAL_LEDGER_SENTINEL};
 use crate::error::ApiError;
 use crate::state::AppState;
 
@@ -217,7 +217,7 @@ async fn publish_native_sync_change(
             );
             continue;
         }
-        let users = crate::beecount_collaboration::member_user_ids(&state.pool, &ledger_id)
+        let users = crate::beecount::collaboration::member_user_ids(&state.pool, &ledger_id)
             .await
             .unwrap_or_else(|_| Vec::new());
         if users.is_empty() {
