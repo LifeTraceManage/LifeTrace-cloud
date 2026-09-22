@@ -21,12 +21,10 @@ use axum::Router;
 
 use crate::state::AppState;
 
-/// Assemble all routes into one router.
+/// Assemble the public Cloud HTTP surface.
 ///
-/// Database-backed Cloud deployments expose finance only through the BeeCount
-/// surfaces. LifeTrace Web reads the same PostgreSQL BeeCount-compatible entity
-/// store used by the stock BeeCount client. The historical LifeTrace finance
-/// CRUD routes remain mounted solely for the in-memory protocol test harness.
+/// Finance is exposed through the BeeCount-compatible PostgreSQL-backed routes;
+/// the retired in-memory Finance CRUD example is no longer part of the router.
 pub fn router(state: AppState) -> Router<AppState> {
     Router::<AppState>::new()
         .merge(health::router())
