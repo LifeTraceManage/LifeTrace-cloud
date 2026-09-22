@@ -2,7 +2,7 @@
 name = "lifetrace-cloud"
 version = "0.1.0"
 edition = "2021"
-description = "LifeTrace EPIC-03 independent cloud sync server (Rust + Axum + PostgreSQL)"
+description = "LifeTrace cloud backend (Rust + Axum + PostgreSQL)"
 license = "MIT"
 
 [dependencies]
