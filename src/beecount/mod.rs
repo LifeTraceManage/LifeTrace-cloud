@@ -1,6 +1,5 @@
 //! BeeCount finance compatibility and integration domain.
 
-pub mod adapter;
 pub mod attachments;
 pub mod collaboration;
 #[allow(clippy::too_many_arguments)]
