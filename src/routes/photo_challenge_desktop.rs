@@ -13,18 +13,7 @@ use crate::auth::AuthenticatedPrincipal;
 use crate::error::ApiError;
 use crate::state::AppState;
 
-const REQUIRED_HIGH_SCORE_COUNT: usize = 501;
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ChallengeStats {
-    total: usize,
-    high_score_count: usize,
-    remaining: usize,
-    target: usize,
-    achieved: bool,
-    average_score: f64,
-}
+use super::photo_challenge::{challenge_owner, load_stats, ChallengeStats};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,33 +54,8 @@ async fn desktop_admin(
         ));
     }
 
-    let owner_email = std::env::var("PHOTO_CHALLENGE_OWNER_EMAIL")
-        .ok()
-        .map(|value| value.trim().to_lowercase())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            ApiError::new(
-                ErrorCode::TemporarilyUnavailable,
-                "摄影挑战尚未配置所属账号",
-                StatusCode::SERVICE_UNAVAILABLE,
-            )
-        })?;
-    let owner_id = sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM cloud_users WHERE email_normalized=$1 AND status='active' LIMIT 1",
-    )
-    .bind(owner_email)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(database_error)?
-    .ok_or_else(|| {
-        ApiError::new(
-            ErrorCode::InvalidRequest,
-            "摄影挑战所属账号不存在",
-            StatusCode::NOT_FOUND,
-        )
-    })?;
-
-    if principal.user_id.as_str() != owner_id.to_string() {
+    let owner = challenge_owner(&state).await?;
+    if principal.user_id != owner {
         return Err(ApiError::new(
             ErrorCode::AuthScopeDenied,
             "只有摄影挑战所属账号可以查看详情",
@@ -99,33 +63,14 @@ async fn desktop_admin(
         ));
     }
 
-    let stat_row = sqlx::query(
-        "SELECT COUNT(*) AS total,COUNT(*) FILTER (WHERE qualified) AS high_count,COALESCE(AVG(score),0)::float8 AS average_score \
-         FROM photo_challenge_scores WHERE user_id=$1",
-    )
-    .bind(owner_id)
-    .fetch_one(&state.pool)
-    .await
-    .map_err(database_error)?;
-    let total = stat_row
-        .try_get::<i64, _>("total")
-        .map_err(database_error)?
-        .max(0) as usize;
-    let high_score_count = stat_row
-        .try_get::<i64, _>("high_count")
-        .map_err(database_error)?
-        .max(0) as usize;
-    let average_score = stat_row
-        .try_get::<f64, _>("average_score")
-        .map_err(database_error)?;
-    let stats = ChallengeStats {
-        total,
-        high_score_count,
-        remaining: REQUIRED_HIGH_SCORE_COUNT.saturating_sub(high_score_count),
-        target: REQUIRED_HIGH_SCORE_COUNT,
-        achieved: high_score_count >= REQUIRED_HIGH_SCORE_COUNT,
-        average_score: (average_score * 10.0).round() / 10.0,
-    };
+    let stats = load_stats(&state, &owner).await?;
+    let owner_id = Uuid::parse_str(owner.as_str()).map_err(|_| {
+        ApiError::new(
+            ErrorCode::InvalidRequest,
+            "摄影挑战所属账号编号无效",
+            StatusCode::BAD_REQUEST,
+        )
+    })?;
 
     let rows = sqlx::query(
         "SELECT id,file_name,captured_at,score,qualified,breakdown,feedback,model,thumbnail_data_url,scored_at,staging_id \
