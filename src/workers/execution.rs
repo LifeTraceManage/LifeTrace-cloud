@@ -17,14 +17,32 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send
     let owner = Uuid::new_v4();
     println!("[lifetrace-execution-worker] started owner={owner}");
     loop {
-        if acquire_lease(&state, owner).await? {
-            let reminders = fire_due_reminders(&state).await?;
-            let task_occurrences = materialize_task_occurrences(&state).await?;
-            let calendar_occurrences = materialize_calendar_occurrences(&state).await?;
-            if reminders + task_occurrences + calendar_occurrences > 0 {
-                println!(
-                    "[lifetrace-execution-worker] cycle reminders={reminders} task_occurrences={task_occurrences} calendar_occurrences={calendar_occurrences}"
-                );
+        match acquire_lease(&state, owner).await {
+            Ok(true) => {
+                let cycle = async {
+                    let reminders = fire_due_reminders(&state).await?;
+                    let task_occurrences = materialize_task_occurrences(&state).await?;
+                    let calendar_occurrences = materialize_calendar_occurrences(&state).await?;
+                    Ok::<_, sqlx::Error>((reminders, task_occurrences, calendar_occurrences))
+                }
+                .await;
+
+                match cycle {
+                    Ok((reminders, task_occurrences, calendar_occurrences)) => {
+                        if reminders + task_occurrences + calendar_occurrences > 0 {
+                            println!(
+                                "[lifetrace-execution-worker] cycle reminders={reminders} task_occurrences={task_occurrences} calendar_occurrences={calendar_occurrences}"
+                            );
+                        }
+                    }
+                    Err(error) => {
+                        eprintln!("[lifetrace-execution-worker] cycle failed error={error}");
+                    }
+                }
+            }
+            Ok(false) => {}
+            Err(error) => {
+                eprintln!("[lifetrace-execution-worker] lease failed error={error}");
             }
         }
         tokio::time::sleep(LOOP_SLEEP).await;
