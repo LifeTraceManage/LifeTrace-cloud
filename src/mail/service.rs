@@ -1171,6 +1171,116 @@ impl MailService {
         Ok(())
     }
 
+    pub async fn list_draft_attachments(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+    ) -> Result<Vec<MailDraftAttachment>, MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        let draft = self.draft_by_id(user_id, draft_id).await?;
+        if draft.state != "draft" {
+            return Err(MailServiceError::DraftNotFound);
+        }
+        sqlx::query_as::<_, MailDraftAttachment>(
+            r#"
+            SELECT id,draft_id,filename,mime_type,size_bytes,content,created_at
+            FROM mail_draft_attachments
+            WHERE user_id=$1 AND draft_id=$2
+            ORDER BY created_at ASC
+            "#,
+        )
+        .bind(user_id)
+        .bind(draft_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn add_draft_attachment(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+        filename: String,
+        mime_type: String,
+        content: Vec<u8>,
+    ) -> Result<MailDraftAttachment, MailServiceError> {
+        self.require_database()?;
+        const MAX_TOTAL_BYTES: i64 = 18 * 1024 * 1024;
+        let user_id = Self::user_uuid(user_id)?;
+        let draft = self.draft_by_id(user_id, draft_id).await?;
+        if draft.state != "draft" || content.is_empty() {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let size = i64::try_from(content.len()).map_err(|_| MailServiceError::InvalidAccount)?;
+        if size > MAX_TOTAL_BYTES {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let current_total: i64 = sqlx::query_scalar(
+            "SELECT coalesce(sum(size_bytes),0) FROM mail_draft_attachments WHERE user_id=$1 AND draft_id=$2",
+        )
+        .bind(user_id)
+        .bind(draft_id)
+        .fetch_one(&self.pool)
+        .await?;
+        if current_total.saturating_add(size) > MAX_TOTAL_BYTES {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let filename = filename.trim();
+        if filename.is_empty() || filename.chars().count() > 255 {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let mime_type = mime_type.trim();
+        if mime_type.is_empty() || mime_type.chars().count() > 160 {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let id = Uuid::new_v4();
+        sqlx::query_as::<_, MailDraftAttachment>(
+            r#"
+            INSERT INTO mail_draft_attachments (
+                id,user_id,draft_id,filename,mime_type,size_bytes,content
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+            RETURNING id,draft_id,filename,mime_type,size_bytes,content,created_at
+            "#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(draft_id)
+        .bind(filename)
+        .bind(mime_type)
+        .bind(size)
+        .bind(content)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn delete_draft_attachment(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+        attachment_id: Uuid,
+    ) -> Result<(), MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        let draft = self.draft_by_id(user_id, draft_id).await?;
+        if draft.state != "draft" {
+            return Err(MailServiceError::DraftNotFound);
+        }
+        let result = sqlx::query(
+            "DELETE FROM mail_draft_attachments WHERE user_id=$1 AND draft_id=$2 AND id=$3",
+        )
+        .bind(user_id)
+        .bind(draft_id)
+        .bind(attachment_id)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(MailServiceError::MessageNotFound);
+        }
+        Ok(())
+    }
+
     pub async fn send_draft(
         &self,
         user_id: &UserId,
