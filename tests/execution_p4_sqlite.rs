@@ -105,9 +105,7 @@ async fn finish_before_start_is_server_authoritative_and_atomic_group_aware() {
         return;
     };
     let config = Config {
-        database_path: url,
-        migration_on_startup: true,
-        dev_auth_token: "execution-p4-token".to_owned(),
+        database_path: url,        dev_auth_token: "execution-p4-token".to_owned(),
         dev_auth_user_id: "execution-p4-user".to_owned(),
         dev_auth_device_id: "execution-p4-device".to_owned(),
         cursor_signing_key: Some("execution-p4-cursor-key".to_owned()),
