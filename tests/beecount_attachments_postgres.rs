@@ -113,7 +113,7 @@ async fn upload(
 
 #[tokio::test]
 async fn stock_attachment_routes_deduplicate_and_write_file_metadata() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_URL") else {
+    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
     let state = AppState::new(config(database_url));
