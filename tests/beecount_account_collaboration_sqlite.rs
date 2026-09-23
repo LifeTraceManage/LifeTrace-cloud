@@ -8,9 +8,9 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn config(database_url: String) -> Config {
+fn config(database_path: String) -> Config {
     Config {
-        database_path: database_url,
+        database_path,
         migration_on_startup: true,
         dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
@@ -83,10 +83,10 @@ async fn register(router: axum::Router, label: &str) -> (String, String, String)
 
 #[tokio::test]
 async fn stock_profile_devices_and_shared_ledger_flow_use_lifetrace_state() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
+    let Ok(database_path) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
-    let state = AppState::new(config(database_url));
+    let state = AppState::new(config(database_path));
     state.initialize().await.unwrap();
     let router = app(state.clone());
     let (owner_token, owner_id, owner_device) = register(router.clone(), "owner").await;
@@ -256,7 +256,7 @@ async fn stock_profile_devices_and_shared_ledger_flow_use_lifetrace_state() {
     let owner_internal = Uuid::parse_str(&owner_id).unwrap();
     let editor_internal = Uuid::parse_str(&editor_id).unwrap();
     let owner_rows: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM sync_entities WHERE user_id=$1 \
+        "SELECT COUNT(*) FROM sync_entities WHERE user_id=$1 \
          AND entity_type='finance.transaction' AND entity_id='beecount:editor-tx'",
     )
     .bind(owner_internal)
@@ -264,7 +264,7 @@ async fn stock_profile_devices_and_shared_ledger_flow_use_lifetrace_state() {
     .await
     .unwrap();
     let editor_rows: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM sync_entities WHERE user_id=$1 \
+        "SELECT COUNT(*) FROM sync_entities WHERE user_id=$1 \
          AND entity_type='finance.transaction' AND entity_id='beecount:editor-tx'",
     )
     .bind(editor_internal)
