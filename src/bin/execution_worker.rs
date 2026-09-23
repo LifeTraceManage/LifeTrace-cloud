@@ -94,7 +94,7 @@ async fn fire_due_reminders(state: &AppState) -> Result<usize, sqlx::Error> {
         let entity_id: String = row.get("entity_id");
         let version: i64 = row.get("server_version");
         let mut payload: Value = row.get("payload");
-        let now = Utc::CURRENT_TIMESTAMP.to_rfc3339_opts(SecondsFormat::Millis, true);
+        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
         payload["status"] = json!("fired");
         payload["lastFiredAt"] = json!(now);
         payload["snoozedUntil"] = Value::Null;
@@ -262,7 +262,7 @@ async fn materialize_calendar_occurrences(state: &AppState) -> Result<usize, sql
 }
 
 fn occurrence_dates(anchor: NaiveDate, rule: &Value, horizon_days: i64) -> Vec<NaiveDate> {
-    let today = Utc::CURRENT_TIMESTAMP.date_naive();
+    let today = Utc::now().date_naive();
     let until = json_date(rule.get("untilAt"));
     let interval = rule
         .get("intervalValue")
@@ -417,7 +417,7 @@ fn shifted_timestamp(value: Option<&Value>, days: i64) -> Option<String> {
 }
 
 fn server_meta(user_id: Uuid, entity_id: String) -> Value {
-    let now = Utc::CURRENT_TIMESTAMP.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     json!({
         "id": entity_id,
         "userId": user_id.to_string(),
@@ -570,7 +570,7 @@ async fn publish_entity(
 ) -> Result<(), sqlx::Error> {
     let bytes = serde_json::to_vec(&payload).expect("JSON payload must serialize");
     let payload_hash = Sha256::digest(bytes).to_vec();
-    let now = Utc::CURRENT_TIMESTAMP;
+    let now = Utc::now();
     let cursor = sqlx::query_scalar::<_, i64>(
         "INSERT INTO sync_change_log(user_id,entity_type,entity_id,operation,entity_schema_version,server_version,payload,payload_hash,server_modified_at) VALUES($1,$2,$3,'upsert',1,$4,$5,$6,$7) RETURNING cursor",
     )
