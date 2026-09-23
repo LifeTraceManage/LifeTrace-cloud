@@ -86,7 +86,7 @@ async fn clone_without_beecount_provenance(
 
 #[tokio::test]
 async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_URL") else {
+    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
     let state = AppState::new(config(database_url));
