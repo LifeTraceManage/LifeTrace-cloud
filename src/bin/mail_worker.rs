@@ -22,9 +22,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
     let state = AppState::new(config);
     state.initialize().await?;
-    if !state.database_enabled {
-        return Err("mail worker requires DATABASE_URL".into());
-    }
     // Fail before entering the worker loop when the external envelope key is absent or malformed.
     let credential_cipher = CredentialCipher::from_config(&state.config)?;
 
