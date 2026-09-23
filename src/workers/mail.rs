@@ -6,7 +6,6 @@ use crate::mail::{protocol, MailService};
 use crate::AppState;
 use lifetrace_contracts::UserId;
 use tokio::task::JoinSet;
-use uuid::Uuid;
 
 const IDLE_WINDOW: Duration = Duration::from_secs(55);
 const EMPTY_IDLE_SLEEP: Duration = Duration::from_secs(30);
@@ -89,6 +88,3 @@ async fn load_idle_accounts(
     .fetch_all(&state.pool)
     .await
 }
-
-#[allow(dead_code)]
-fn _assert_uuid_is_send_sync(_: Uuid) {}
