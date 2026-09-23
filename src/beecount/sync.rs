@@ -7,7 +7,7 @@ use lifetrace_contracts::{ErrorCode, UserId};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::{SqlitePool, Sqlite, Row, Transaction};
-use uuid;
+use uuid::Uuid;
 
 use crate::beecount::collaboration::{
     ensure_owner_registry_tx, resolve_ledger_access_tx, ROLE_OWNER,
