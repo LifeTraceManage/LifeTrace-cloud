@@ -1371,6 +1371,13 @@ impl MailService {
             .await?
         };
         let from_address = identity.as_ref().map(|value| value.email_address.as_str());
+        let from_name = identity
+            .as_ref()
+            .and_then(|value| value.display_name.as_deref())
+            .or(account.display_name.as_deref());
+        let reply_to_address = identity
+            .as_ref()
+            .and_then(|value| value.reply_to.as_deref());
         if let Some(signature) = identity
             .as_ref()
             .and_then(|value| value.signature_html.as_deref())
@@ -1464,6 +1471,8 @@ impl MailService {
             &account,
             &secret,
             from_address,
+            from_name,
+            reply_to_address,
             &input,
             &message_id,
             in_reply_to.as_deref(),
