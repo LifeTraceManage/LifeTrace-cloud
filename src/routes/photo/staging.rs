@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::fs;
-use uuid::Uuid;
+use uuid;
 
 use crate::auth::AuthenticatedPrincipal;
 use crate::error::ApiError;
@@ -237,7 +237,7 @@ pub(crate) async fn stage_for_user(
     let expires_at = state
         .config
         .photo_staging_ttl_hours
-        .map(|hours| Utc::now() + Duration::hours(hours));
+        .map(|hours| Utc::CURRENT_TIMESTAMP + Duration::hours(hours));
     let storage_name = format!("{owner}/{id}.blob");
     let storage_path = resolve_storage_path(state, &storage_name)?;
     let parent = storage_path
@@ -300,7 +300,7 @@ async fn existing_client_asset(
     owner: Uuid,
     source: &str,
     client_asset_id: &str,
-) -> Result<Option<sqlx::postgres::PgRow>, ApiError> {
+) -> Result<Option<sqlx::sqlite::SqliteRow>, ApiError> {
     sqlx::query(
         "SELECT id,source,client_asset_id,sha256,original_name,media_type,mime_type,size_bytes,captured_at,created_at,expires_at \
          FROM photo_staging_items WHERE user_id=$1 AND source=$2 AND client_asset_id=$3",
@@ -411,7 +411,7 @@ fn validate_input(input: &mut StageInput) -> Result<(), ApiError> {
     Ok(())
 }
 
-fn row_to_metadata(row: &sqlx::postgres::PgRow) -> Result<StagedPhoto, ApiError> {
+fn row_to_metadata(row: &sqlx::sqlite::SqliteRow) -> Result<StagedPhoto, ApiError> {
     Ok(StagedPhoto {
         id: row
             .try_get::<Uuid, _>("id")
@@ -433,7 +433,7 @@ fn row_to_metadata(row: &sqlx::postgres::PgRow) -> Result<StagedPhoto, ApiError>
 async fn cleanup_expired(state: &AppState) -> Result<(), ApiError> {
     ensure_database(state)?;
     let rows = sqlx::query(
-        "DELETE FROM photo_staging_items WHERE expires_at IS NOT NULL AND expires_at<=now() RETURNING storage_name",
+        "DELETE FROM photo_staging_items WHERE expires_at IS NOT NULL AND expires_at<=CURRENT_TIMESTAMP RETURNING storage_name",
     )
     .fetch_all(&state.pool)
     .await
