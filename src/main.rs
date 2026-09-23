@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
 use axum::{extract::Request, middleware, response::Response};
-use lifetrace_cloud::{app, security, Config};
+use lifetrace_cloud::{app, Config};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -10,11 +10,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         eprintln!("[lifetrace-cloud] invalid configuration: {message}");
         message
     })?;
-    security::validate_config(&config).map_err(|message| {
-        eprintln!("[lifetrace-cloud] insecure production configuration: {message}");
-        message
-    })?;
-
     let state = lifetrace_cloud::AppState::new(config.clone());
     state.initialize().await?;
 
