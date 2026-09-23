@@ -125,6 +125,9 @@ async fn send(
         .await
         .unwrap();
     let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    if status.is_server_error() {
+        eprintln!("sync test server error {method} {uri}: {body}");
+    }
     (status, body)
 }
 
