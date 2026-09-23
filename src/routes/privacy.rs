@@ -211,6 +211,17 @@ async fn database_section(
                 user_id,
             )
             .await?;
+            let identities = json_array(
+                state,
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'accountId',account_id,'emailAddress',email_address,
+                    'displayName',display_name,'replyTo',reply_to,'signature',signature_html,
+                    'isDefault',is_default,'createdAt',created_at,'updatedAt',updated_at,
+                    'deletedAt',deleted_at
+                )), '[]') FROM mail_identities WHERE user_id=$1 ORDER BY created_at",
+                user_id,
+            )
+            .await?;
             let messages = json_array(
                 state,
                 "SELECT COALESCE(json_group_array(json_object(
@@ -233,17 +244,28 @@ async fn database_section(
             let drafts = json_array(
                 state,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',id,'accountId',account_id,'subject',subject,'bodyText',body_text,
-                    'state',state,'createdAt',created_at,'updatedAt',updated_at
+                    'id',id,'accountId',account_id,'identityId',identity_id,'subject',subject,
+                    'bodyText',body_text,'state',state,'createdAt',created_at,'updatedAt',updated_at
                 )), '[]') FROM mail_drafts WHERE user_id=$1 ORDER BY created_at",
+                user_id,
+            )
+            .await?;
+            let draft_attachments = json_array(
+                state,
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'draftId',draft_id,'filename',filename,'mimeType',mime_type,
+                    'sizeBytes',size_bytes,'createdAt',created_at
+                )), '[]') FROM mail_draft_attachments WHERE user_id=$1 ORDER BY created_at",
                 user_id,
             )
             .await?;
             Ok(Some(json!({
                 "accounts": accounts,
+                "identities": identities,
                 "messages": messages,
                 "attachments": attachments,
-                "drafts": drafts
+                "drafts": drafts,
+                "draftAttachments": draft_attachments
             })))
         }
         _ => Ok(None),
