@@ -11,7 +11,7 @@ use lifetrace_contracts::UserId;
 use super::credential::{CredentialCipher, CredentialError};
 use super::domain::{
     provider_preset, ConnectionTestResult, MailAccount, MailAccountInput, MailAccountSecret,
-    MailAttachment, MailDraft, MailDraftInput, MailFolder, MailIdentity, MailIdentityInput,
+    MailAttachment, MailDraft, MailDraftAttachment, MailDraftInput, MailFolder, MailIdentity, MailIdentityInput,
     MailListQuery, MailMessage, MailSecurity, MailThread, SendMailInput,
 };
 use super::parser::{parse_message, ParsedMessage};
@@ -1191,6 +1191,7 @@ impl MailService {
                 draft.account_id,
                 SendMailInput {
                     identity_id: draft.identity_id,
+                    attachment_draft_id: Some(draft_id),
                     to,
                     cc,
                     bcc,
@@ -1300,6 +1301,26 @@ impl MailService {
         } else {
             None
         };
+        let attachments = if let Some(draft_id) = input.attachment_draft_id {
+            let draft = self.draft_by_id(user_id, draft_id).await?;
+            if draft.account_id != account_id {
+                return Err(MailServiceError::InvalidAccount);
+            }
+            sqlx::query_as::<_, MailDraftAttachment>(
+                r#"
+                SELECT id,draft_id,filename,mime_type,size_bytes,content,created_at
+                FROM mail_draft_attachments
+                WHERE user_id=$1 AND draft_id=$2
+                ORDER BY created_at ASC
+                "#,
+            )
+            .bind(user_id)
+            .bind(draft_id)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            Vec::new()
+        };
         match protocol::send_mail(
             &account,
             &secret,
@@ -1307,6 +1328,7 @@ impl MailService {
             &input,
             &message_id,
             in_reply_to.as_deref(),
+            &attachments,
         )
         .await
         {
@@ -1315,6 +1337,15 @@ impl MailService {
                     .bind(existing.0)
                     .execute(&self.pool)
                     .await?;
+                if let Some(draft_id) = input.attachment_draft_id {
+                    sqlx::query(
+                        "DELETE FROM mail_draft_attachments WHERE user_id=$1 AND draft_id=$2",
+                    )
+                    .bind(user_id)
+                    .bind(draft_id)
+                    .execute(&self.pool)
+                    .await?;
+                }
                 Ok(message_id)
             }
             Err(_) => {
