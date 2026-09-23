@@ -61,6 +61,7 @@ impl SqliteRepository {
                         .collect()
                 })
                 .unwrap_or_default();
+            let filters_json = serde_json::to_string(&filters).map_err(Self::internal_error)?;
             let inserted = if request.entity_types.is_some() {
                 sqlx::query(
                     r#"
@@ -74,12 +75,12 @@ impl SqliteRepository {
                     FROM sync_entities
                     WHERE user_id = $2
                       AND is_deleted = FALSE
-                      AND entity_type = ANY($3)
+                      AND entity_type IN (SELECT value FROM json_each($3))
                     "#,
                 )
                 .bind(snapshot_uuid)
                 .bind(user_uuid)
-                .bind(&filters)
+                .bind(&filters_json)
                 .execute(&mut *tx)
                 .await
                 .map_err(Self::db_error)?
