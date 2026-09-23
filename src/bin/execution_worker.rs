@@ -5,7 +5,7 @@ use lifetrace_cloud::{AppState, Config};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::{Sqlite, Row, Transaction};
-use uuid;
+use uuid::Uuid;
 
 const LEASE_NAME: &str = "execution-maintenance-v1";
 const LEASE_SECONDS: i64 = 45;
