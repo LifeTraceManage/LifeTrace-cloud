@@ -95,6 +95,17 @@
     "name": {
       "type": "string"
     },
+    "parentFolderId": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EntityId"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional parent folder for hierarchical Notes organization."
+    },
     "sortOrder": {
       "format": "int64",
       "type": "integer"
