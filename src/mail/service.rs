@@ -5,7 +5,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::{Duration, Utc};
 use sqlx::{SqlitePool, Sqlite, Transaction};
 use thiserror::Error;
-use uuid;
+use uuid::Uuid;
 
 use lifetrace_contracts::UserId;
 
