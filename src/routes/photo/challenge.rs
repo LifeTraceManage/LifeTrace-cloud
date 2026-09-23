@@ -462,13 +462,6 @@ fn verify_challenge_key(state: &AppState, headers: &HeaderMap) -> Result<(), Api
 }
 
 pub(super) async fn challenge_owner(state: &AppState) -> Result<UserId, ApiError> {
-    if !state.database_enabled {
-        return Err(ApiError::new(
-            ErrorCode::TemporarilyUnavailable,
-            "摄影挑战云端模式需要 PostgreSQL",
-            StatusCode::SERVICE_UNAVAILABLE,
-        ));
-    }
     let email = state
         .config
         .photo_challenge_owner_email
