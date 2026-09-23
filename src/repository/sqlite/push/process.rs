@@ -260,7 +260,7 @@ impl SqliteRepository {
                 server_version,
                 noop,
             } => {
-                let now = Self::CURRENT_TIMESTAMP;
+                let now = Self::now();
                 if noop {
                     let cursor = self.latest_cursor_raw(&mut **tx, user_uuid).await?;
                     let result = PushChangeResultV1::Accepted {
