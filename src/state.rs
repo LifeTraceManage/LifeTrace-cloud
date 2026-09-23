@@ -1,6 +1,7 @@
 //! Shared application state.
 
 use std::sync::Arc;
+use std::time::Duration;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::SqlitePool;
 
@@ -54,13 +55,18 @@ impl AppState {
                 let _ = std::fs::create_dir_all(parent);
             }
         }
-        let connect_options = SqliteConnectOptions::new()
+        let mut connect_options = SqliteConnectOptions::new()
             .filename(&config.database_path)
             .create_if_missing(true)
             .foreign_keys(true)
-            .journal_mode(SqliteJournalMode::Wal)
+            .busy_timeout(Duration::from_secs(5))
             .synchronous(SqliteSynchronous::Normal);
-        let max_connections = if config.database_path == ":memory:" { 1 } else { 4 };
+        let max_connections = if config.database_path == ":memory:" {
+            1
+        } else {
+            connect_options = connect_options.journal_mode(SqliteJournalMode::Wal);
+            4
+        };
         let pool = SqlitePoolOptions::new()
             .max_connections(max_connections)
             .connect_lazy_with(connect_options);
