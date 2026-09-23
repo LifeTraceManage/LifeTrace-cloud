@@ -109,7 +109,7 @@ impl SqliteRepository {
         let current = sqlx::query(
             "SELECT server_version, payload, is_deleted \
              FROM sync_entities \
-             WHERE user_id = $1 AND entity_type = $2 AND entity_id = $3 \",
+             WHERE user_id = $1 AND entity_type = $2 AND entity_id = $3",
         )
         .bind(user_uuid)
         .bind(change.entity_type.as_str())
