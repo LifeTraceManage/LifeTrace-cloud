@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use lifetrace_contracts::UserId;
 use mail_parser::MessageParser;
-use sqlx::PgPool;
+use sqlx::SqlitePool;
 use thiserror::Error;
-use uuid::Uuid;
+use uuid;
 
 use super::credential::CredentialCipher;
 use super::domain::MailAccountSecret;
@@ -63,13 +63,13 @@ struct AttachmentSource {
 
 #[derive(Clone)]
 pub struct AttachmentReader {
-    pool: PgPool,
+    pool: SqlitePool,
     database_enabled: bool,
     config: Arc<Config>,
 }
 
 impl AttachmentReader {
-    pub fn new(pool: PgPool, database_enabled: bool, config: Arc<Config>) -> Self {
+    pub fn new(pool: SqlitePool, database_enabled: bool, config: Arc<Config>) -> Self {
         Self {
             pool,
             database_enabled,
