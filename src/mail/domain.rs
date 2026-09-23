@@ -239,6 +239,19 @@ pub struct MailDraft {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct MailDraftAttachment {
+    pub id: Uuid,
+    pub draft_id: Uuid,
+    pub filename: String,
+    pub mime_type: String,
+    pub size_bytes: i64,
+    #[serde(skip_serializing)]
+    pub content: Vec<u8>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MailDraftInput {
