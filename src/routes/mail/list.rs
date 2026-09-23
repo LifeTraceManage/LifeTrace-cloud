@@ -51,13 +51,6 @@ async fn list_messages(
     Query(query): Query<MessageListQuery>,
 ) -> Result<Json<Value>, ApiError> {
     principal.require_scope("mail:read")?;
-    if !state.database_enabled {
-        return Err(ApiError::new(
-            ErrorCode::TemporarilyUnavailable,
-            "mail storage requires PostgreSQL",
-            StatusCode::SERVICE_UNAVAILABLE,
-        ));
-    }
 
     let user_id = Uuid::parse_str(principal.user_id.as_str()).map_err(|_| {
         ApiError::new(
