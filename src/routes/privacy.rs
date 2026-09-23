@@ -228,17 +228,31 @@ async fn database_section(
                 user_id,
             )
             .await?;
+            let identities = jsonb_array(
+                state,
+                "SELECT COALESCE(jsonb_agg(to_jsonb(i) ORDER BY i.created_at), '[]'::jsonb) FROM mail_identities i WHERE user_id=$1",
+                user_id,
+            )
+            .await?;
             let drafts = jsonb_array(
                 state,
                 "SELECT COALESCE(jsonb_agg(to_jsonb(d) ORDER BY d.created_at), '[]'::jsonb) FROM mail_drafts d WHERE user_id=$1",
                 user_id,
             )
             .await?;
+            let draft_attachments = jsonb_array(
+                state,
+                "SELECT COALESCE(jsonb_agg((to_jsonb(a) - 'content') ORDER BY a.created_at), '[]'::jsonb) FROM mail_draft_attachments a WHERE user_id=$1",
+                user_id,
+            )
+            .await?;
             Ok(Some(json!({
                 "accounts": accounts,
+                "identities": identities,
                 "messages": messages,
                 "attachments": attachments,
-                "drafts": drafts
+                "drafts": drafts,
+                "draftAttachments": draft_attachments
             })))
         }
         _ => Ok(None),

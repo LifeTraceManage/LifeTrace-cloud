@@ -11,8 +11,8 @@ use lifetrace_contracts::UserId;
 use super::credential::{CredentialCipher, CredentialError};
 use super::domain::{
     provider_preset, ConnectionTestResult, MailAccount, MailAccountInput, MailAccountSecret,
-    MailAttachment, MailFolder, MailListQuery, MailMessage, MailSecurity, MailThread,
-    SendMailInput,
+    MailAttachment, MailDraft, MailDraftAttachment, MailDraftInput, MailFolder, MailIdentity, MailIdentityInput,
+    MailListQuery, MailMessage, MailSecurity, MailThread, SendMailInput,
 };
 use super::parser::{parse_message, ParsedMessage};
 use super::protocol::{self, MailProtocolError, RemoteFolderSnapshot};
@@ -31,8 +31,14 @@ pub enum MailServiceError {
     MessageNotFound,
     #[error("mail thread not found")]
     ThreadNotFound,
+    #[error("mail identity not found")]
+    IdentityNotFound,
+    #[error("mail draft not found")]
+    DraftNotFound,
     #[error("archive folder is unavailable")]
     ArchiveUnavailable,
+    #[error("destination mail folder is unavailable")]
+    DestinationUnavailable,
     #[error("mail credential is unavailable")]
     Credential,
     #[error("mail protocol operation failed")]
@@ -193,6 +199,30 @@ impl MailService {
         .execute(&self.pool)
         .await?;
 
+        // Every connected account starts with one usable default sending identity.
+        // Using the account UUID keeps the backfilled and newly-created default
+        // identity stable and avoids a second identifier lookup for the common case.
+        sqlx::query(
+            r#"
+            INSERT INTO mail_identities (
+                id,user_id,account_id,email_address,display_name,is_default
+            ) VALUES ($1,$2,$1,$3,$4,TRUE)
+            ON CONFLICT DO NOTHING
+            "#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(&resolved.email)
+        .bind(
+            input
+                .display_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
+        .execute(&self.pool)
+        .await?;
+
         let _ = self.test_account_uuid(user_id, id).await;
         self.account_by_id(user_id, id).await
     }
@@ -334,6 +364,27 @@ impl MailService {
         if result.rows_affected() == 0 {
             return Err(MailServiceError::AccountNotFound);
         }
+        sqlx::query(
+            "UPDATE mail_identities SET deleted_at=now(),is_default=FALSE,updated_at=now() WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL",
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await?;
+        sqlx::query(
+            "DELETE FROM mail_draft_attachments WHERE user_id=$1 AND draft_id IN (SELECT id FROM mail_drafts WHERE user_id=$1 AND account_id=$2 AND state='draft')",
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await?;
+        sqlx::query(
+            "UPDATE mail_drafts SET state='canceled',updated_at=now() WHERE user_id=$1 AND account_id=$2 AND state='draft'",
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -667,40 +718,113 @@ impl MailService {
         Ok(())
     }
 
+    pub async fn set_message_starred(
+        &self,
+        user_id: &UserId,
+        message_id: Uuid,
+        starred: bool,
+    ) -> Result<(), MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        let remote = self.remote_message_ref(user_id, message_id).await?;
+        let account = self.account_secret(user_id, remote.account_id).await?;
+        let secret = Self::decrypt_secret(&account)?;
+        protocol::set_flag(
+            account,
+            secret,
+            remote.folder_name,
+            remote.uid as u32,
+            "\\Flagged",
+            starred,
+        )
+        .await?;
+
+        let current: serde_json::Value = sqlx::query_scalar(
+            "SELECT flags_json FROM mail_messages WHERE user_id=$1 AND id=$2",
+        )
+        .bind(user_id)
+        .bind(message_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let mut flags = current.as_array().cloned().unwrap_or_default();
+        flags.retain(|value| match value.as_str() {
+            Some(flag) => {
+                !flag.eq_ignore_ascii_case("\\Flagged") && !flag.eq_ignore_ascii_case("Flagged")
+            }
+            None => true,
+        });
+        if starred {
+            flags.push(serde_json::Value::String("\\Flagged".to_owned()));
+        }
+        sqlx::query(
+            "UPDATE mail_messages SET flags_json=$3,updated_at=now() WHERE user_id=$1 AND id=$2",
+        )
+        .bind(user_id)
+        .bind(message_id)
+        .bind(serde_json::Value::Array(flags))
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn move_message(
+        &self,
+        user_id: &UserId,
+        message_id: Uuid,
+        destination_role: &str,
+    ) -> Result<(), MailServiceError> {
+        self.require_database()?;
+        if !matches!(destination_role, "archive" | "trash" | "inbox") {
+            return Err(MailServiceError::DestinationUnavailable);
+        }
+        let user_id = Self::user_uuid(user_id)?;
+        let remote = self.remote_message_ref(user_id, message_id).await?;
+        let destination: Option<(Uuid, String)> = sqlx::query_as(
+            "SELECT id,remote_name FROM mail_folders WHERE user_id=$1 AND account_id=$2 AND normalized_role=$3 LIMIT 1",
+        )
+        .bind(user_id)
+        .bind(remote.account_id)
+        .bind(destination_role)
+        .fetch_optional(&self.pool)
+        .await?;
+        let (_destination_id, destination_name) = destination.ok_or_else(|| {
+            if destination_role == "archive" {
+                MailServiceError::ArchiveUnavailable
+            } else {
+                MailServiceError::DestinationUnavailable
+            }
+        })?;
+
+        let account = self.account_secret(user_id, remote.account_id).await?;
+        let secret = Self::decrypt_secret(&account)?;
+        protocol::move_message(
+            account,
+            secret,
+            remote.folder_name,
+            remote.uid as u32,
+            destination_name,
+        )
+        .await?;
+
+        // A remote MOVE may allocate a new UID in the destination folder. Remove
+        // the stale local row and immediately reconcile the account so we never
+        // keep a row with an invalid (folder, UID) tuple.
+        sqlx::query("DELETE FROM mail_messages WHERE user_id=$1 AND id=$2")
+            .bind(user_id)
+            .bind(message_id)
+            .execute(&self.pool)
+            .await?;
+        refresh_thread_pool(&self.pool, remote.thread_id).await?;
+        let _ = self.sync_account_uuid(user_id, remote.account_id).await;
+        Ok(())
+    }
+
     pub async fn archive_message(
         &self,
         user_id: &UserId,
         message_id: Uuid,
     ) -> Result<(), MailServiceError> {
-        self.require_database()?;
-        let user_id = Self::user_uuid(user_id)?;
-        let remote = self.remote_message_ref(user_id, message_id).await?;
-        let archive_folder: Option<String> = sqlx::query_scalar(
-            "SELECT remote_name FROM mail_folders WHERE user_id=$1 AND account_id=$2 AND normalized_role='archive' LIMIT 1",
-        )
-        .bind(user_id)
-        .bind(remote.account_id)
-        .fetch_optional(&self.pool)
-        .await?;
-        let archive_folder = archive_folder.ok_or(MailServiceError::ArchiveUnavailable)?;
-        let account = self.account_secret(user_id, remote.account_id).await?;
-        let secret = Self::decrypt_secret(&account)?;
-        protocol::archive_message(
-            account,
-            secret,
-            remote.folder_name,
-            remote.uid as u32,
-            archive_folder,
-        )
-        .await?;
-        sqlx::query(
-            "UPDATE mail_messages SET is_archived=TRUE,updated_at=now() WHERE user_id=$1 AND id=$2",
-        )
-        .bind(user_id)
-        .bind(message_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        self.move_message(user_id, message_id, "archive").await
     }
 
     async fn remote_message_ref(
@@ -722,11 +846,518 @@ impl MailService {
         .ok_or(MailServiceError::MessageNotFound)
     }
 
+    pub async fn list_identities(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Vec<MailIdentity>, MailServiceError> {
+        self.require_database()?;
+        sqlx::query_as::<_, MailIdentity>(
+            r#"
+            SELECT id,account_id,email_address,display_name,reply_to,signature_html,
+                   is_default,created_at,updated_at
+            FROM mail_identities
+            WHERE user_id=$1 AND deleted_at IS NULL
+            ORDER BY is_default DESC,created_at ASC
+            "#,
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn identity_by_id(
+        &self,
+        user_id: Uuid,
+        identity_id: Uuid,
+    ) -> Result<MailIdentity, MailServiceError> {
+        sqlx::query_as::<_, MailIdentity>(
+            r#"
+            SELECT id,account_id,email_address,display_name,reply_to,signature_html,
+                   is_default,created_at,updated_at
+            FROM mail_identities
+            WHERE user_id=$1 AND id=$2 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .bind(identity_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(MailServiceError::IdentityNotFound)
+    }
+
+    fn validate_identity_input(input: &MailIdentityInput) -> Result<(), MailServiceError> {
+        let email = input.email_address.trim();
+        if email.is_empty() || !email.contains('@') {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        if input
+            .reply_to
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty() && !value.contains('@'))
+        {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        Ok(())
+    }
+
+    pub async fn create_identity(
+        &self,
+        user_id: &UserId,
+        input: MailIdentityInput,
+    ) -> Result<MailIdentity, MailServiceError> {
+        self.require_database()?;
+        Self::validate_identity_input(&input)?;
+        let user_id = Self::user_uuid(user_id)?;
+        self.account_by_id(user_id, input.account_id).await?;
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM mail_identities WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL",
+        )
+        .bind(user_id)
+        .bind(input.account_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let make_default = input.is_default || count == 0;
+        let mut transaction = self.pool.begin().await?;
+        if make_default {
+            sqlx::query(
+                "UPDATE mail_identities SET is_default=FALSE,updated_at=now() WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL",
+            )
+            .bind(user_id)
+            .bind(input.account_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        let id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO mail_identities (
+                id,user_id,account_id,email_address,display_name,reply_to,signature_html,is_default
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            "#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(input.account_id)
+        .bind(input.email_address.trim().to_ascii_lowercase())
+        .bind(input.display_name.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(input.reply_to.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(input.signature_html.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(make_default)
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        self.identity_by_id(user_id, id).await
+    }
+
+    pub async fn update_identity(
+        &self,
+        user_id: &UserId,
+        identity_id: Uuid,
+        input: MailIdentityInput,
+    ) -> Result<MailIdentity, MailServiceError> {
+        self.require_database()?;
+        Self::validate_identity_input(&input)?;
+        let user_id = Self::user_uuid(user_id)?;
+        let current = self.identity_by_id(user_id, identity_id).await?;
+        if current.account_id != input.account_id {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM mail_identities WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL",
+        )
+        .bind(user_id)
+        .bind(input.account_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let make_default = input.is_default || count <= 1;
+        let mut transaction = self.pool.begin().await?;
+        if make_default {
+            sqlx::query(
+                "UPDATE mail_identities SET is_default=FALSE,updated_at=now() WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL",
+            )
+            .bind(user_id)
+            .bind(input.account_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        sqlx::query(
+            r#"
+            UPDATE mail_identities
+            SET email_address=$3,display_name=$4,reply_to=$5,signature_html=$6,
+                is_default=$7,updated_at=now()
+            WHERE user_id=$1 AND id=$2 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .bind(identity_id)
+        .bind(input.email_address.trim().to_ascii_lowercase())
+        .bind(input.display_name.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(input.reply_to.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(input.signature_html.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(make_default)
+        .execute(&mut *transaction)
+        .await?;
+        if current.is_default && !make_default {
+            sqlx::query(
+                r#"
+                UPDATE mail_identities SET is_default=TRUE,updated_at=now()
+                WHERE id=(
+                    SELECT id FROM mail_identities
+                    WHERE user_id=$1 AND account_id=$2 AND id<>$3 AND deleted_at IS NULL
+                    ORDER BY created_at ASC LIMIT 1
+                )
+                "#,
+            )
+            .bind(user_id)
+            .bind(input.account_id)
+            .bind(identity_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        transaction.commit().await?;
+        self.identity_by_id(user_id, identity_id).await
+    }
+
+    pub async fn delete_identity(
+        &self,
+        user_id: &UserId,
+        identity_id: Uuid,
+    ) -> Result<(), MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        let current = self.identity_by_id(user_id, identity_id).await?;
+        sqlx::query(
+            "UPDATE mail_identities SET deleted_at=now(),is_default=FALSE,updated_at=now() WHERE user_id=$1 AND id=$2",
+        )
+        .bind(user_id)
+        .bind(identity_id)
+        .execute(&self.pool)
+        .await?;
+        if current.is_default {
+            sqlx::query(
+                r#"
+                UPDATE mail_identities SET is_default=TRUE,updated_at=now()
+                WHERE id=(
+                    SELECT id FROM mail_identities
+                    WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL
+                    ORDER BY created_at ASC LIMIT 1
+                )
+                "#,
+            )
+            .bind(user_id)
+            .bind(current.account_id)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn list_drafts(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Vec<MailDraft>, MailServiceError> {
+        self.require_database()?;
+        sqlx::query_as::<_, MailDraft>(
+            r#"
+            SELECT id,account_id,identity_id,thread_id,in_reply_to_message_id,
+                   to_json,cc_json,bcc_json,subject,body_text,state,created_at,updated_at
+            FROM mail_drafts
+            WHERE user_id=$1 AND state='draft'
+            ORDER BY updated_at DESC
+            "#,
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn draft_by_id(
+        &self,
+        user_id: Uuid,
+        draft_id: Uuid,
+    ) -> Result<MailDraft, MailServiceError> {
+        sqlx::query_as::<_, MailDraft>(
+            r#"
+            SELECT id,account_id,identity_id,thread_id,in_reply_to_message_id,
+                   to_json,cc_json,bcc_json,subject,body_text,state,created_at,updated_at
+            FROM mail_drafts
+            WHERE user_id=$1 AND id=$2
+            "#,
+        )
+        .bind(user_id)
+        .bind(draft_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(MailServiceError::DraftNotFound)
+    }
+
+    async fn validate_draft_input(
+        &self,
+        user_id: Uuid,
+        input: &MailDraftInput,
+    ) -> Result<(), MailServiceError> {
+        self.account_by_id(user_id, input.account_id).await?;
+        if let Some(identity_id) = input.identity_id {
+            let identity = self.identity_by_id(user_id, identity_id).await?;
+            if identity.account_id != input.account_id {
+                return Err(MailServiceError::InvalidAccount);
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn create_draft(
+        &self,
+        user_id: &UserId,
+        input: MailDraftInput,
+    ) -> Result<MailDraft, MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        self.validate_draft_input(user_id, &input).await?;
+        let id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO mail_drafts (
+                id,user_id,account_id,identity_id,in_reply_to_message_id,
+                to_json,cc_json,bcc_json,subject,body_text,state
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'draft')
+            "#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(input.account_id)
+        .bind(input.identity_id)
+        .bind(input.in_reply_to_message_id)
+        .bind(serde_json::to_value(&input.to).unwrap_or_default())
+        .bind(serde_json::to_value(&input.cc).unwrap_or_default())
+        .bind(serde_json::to_value(&input.bcc).unwrap_or_default())
+        .bind(input.subject)
+        .bind(input.body_text)
+        .execute(&self.pool)
+        .await?;
+        self.draft_by_id(user_id, id).await
+    }
+
+    pub async fn update_draft(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+        input: MailDraftInput,
+    ) -> Result<MailDraft, MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        self.validate_draft_input(user_id, &input).await?;
+        let result = sqlx::query(
+            r#"
+            UPDATE mail_drafts
+            SET account_id=$3,identity_id=$4,in_reply_to_message_id=$5,
+                to_json=$6,cc_json=$7,bcc_json=$8,subject=$9,body_text=$10,updated_at=now()
+            WHERE user_id=$1 AND id=$2 AND state='draft'
+            "#,
+        )
+        .bind(user_id)
+        .bind(draft_id)
+        .bind(input.account_id)
+        .bind(input.identity_id)
+        .bind(input.in_reply_to_message_id)
+        .bind(serde_json::to_value(&input.to).unwrap_or_default())
+        .bind(serde_json::to_value(&input.cc).unwrap_or_default())
+        .bind(serde_json::to_value(&input.bcc).unwrap_or_default())
+        .bind(input.subject)
+        .bind(input.body_text)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(MailServiceError::DraftNotFound);
+        }
+        self.draft_by_id(user_id, draft_id).await
+    }
+
+    pub async fn delete_draft(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+    ) -> Result<(), MailServiceError> {
+        self.require_database()?;
+        sqlx::query(
+            "DELETE FROM mail_draft_attachments WHERE user_id=$1 AND draft_id=$2",
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .bind(draft_id)
+        .execute(&self.pool)
+        .await?;
+        let result = sqlx::query(
+            "UPDATE mail_drafts SET state='canceled',updated_at=now() WHERE user_id=$1 AND id=$2 AND state='draft'",
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .bind(draft_id)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(MailServiceError::DraftNotFound);
+        }
+        Ok(())
+    }
+
+    pub async fn list_draft_attachments(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+    ) -> Result<Vec<MailDraftAttachment>, MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        let draft = self.draft_by_id(user_id, draft_id).await?;
+        if draft.state != "draft" {
+            return Err(MailServiceError::DraftNotFound);
+        }
+        sqlx::query_as::<_, MailDraftAttachment>(
+            r#"
+            SELECT id,draft_id,filename,mime_type,size_bytes,content,created_at
+            FROM mail_draft_attachments
+            WHERE user_id=$1 AND draft_id=$2
+            ORDER BY created_at ASC
+            "#,
+        )
+        .bind(user_id)
+        .bind(draft_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn add_draft_attachment(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+        filename: String,
+        mime_type: String,
+        content: Vec<u8>,
+    ) -> Result<MailDraftAttachment, MailServiceError> {
+        self.require_database()?;
+        const MAX_TOTAL_BYTES: i64 = 18 * 1024 * 1024;
+        let user_id = Self::user_uuid(user_id)?;
+        let draft = self.draft_by_id(user_id, draft_id).await?;
+        if draft.state != "draft" || content.is_empty() {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let size = i64::try_from(content.len()).map_err(|_| MailServiceError::InvalidAccount)?;
+        if size > MAX_TOTAL_BYTES {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let current_total: i64 = sqlx::query_scalar(
+            "SELECT coalesce(sum(size_bytes),0) FROM mail_draft_attachments WHERE user_id=$1 AND draft_id=$2",
+        )
+        .bind(user_id)
+        .bind(draft_id)
+        .fetch_one(&self.pool)
+        .await?;
+        if current_total.saturating_add(size) > MAX_TOTAL_BYTES {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let filename = filename.trim();
+        if filename.is_empty() || filename.chars().count() > 255 {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let mime_type = mime_type.trim();
+        if mime_type.is_empty() || mime_type.chars().count() > 160 {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let id = Uuid::new_v4();
+        sqlx::query_as::<_, MailDraftAttachment>(
+            r#"
+            INSERT INTO mail_draft_attachments (
+                id,user_id,draft_id,filename,mime_type,size_bytes,content
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+            RETURNING id,draft_id,filename,mime_type,size_bytes,content,created_at
+            "#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(draft_id)
+        .bind(filename)
+        .bind(mime_type)
+        .bind(size)
+        .bind(content)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn delete_draft_attachment(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+        attachment_id: Uuid,
+    ) -> Result<(), MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        let draft = self.draft_by_id(user_id, draft_id).await?;
+        if draft.state != "draft" {
+            return Err(MailServiceError::DraftNotFound);
+        }
+        let result = sqlx::query(
+            "DELETE FROM mail_draft_attachments WHERE user_id=$1 AND draft_id=$2 AND id=$3",
+        )
+        .bind(user_id)
+        .bind(draft_id)
+        .bind(attachment_id)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(MailServiceError::MessageNotFound);
+        }
+        Ok(())
+    }
+
+    pub async fn send_draft(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+    ) -> Result<String, MailServiceError> {
+        self.require_database()?;
+        let user_uuid = Self::user_uuid(user_id)?;
+        let draft = self.draft_by_id(user_uuid, draft_id).await?;
+        if draft.state != "draft" {
+            return Err(MailServiceError::DraftNotFound);
+        }
+        let to: Vec<String> = serde_json::from_value(draft.to_json.clone()).unwrap_or_default();
+        let cc: Vec<String> = serde_json::from_value(draft.cc_json.clone()).unwrap_or_default();
+        let bcc: Vec<String> = serde_json::from_value(draft.bcc_json.clone()).unwrap_or_default();
+        let message_id = self
+            .send(
+                user_id,
+                draft.account_id,
+                SendMailInput {
+                    identity_id: draft.identity_id,
+                    attachment_draft_id: Some(draft_id),
+                    to,
+                    cc,
+                    bcc,
+                    subject: draft.subject.clone(),
+                    body_text: draft.body_text.clone(),
+                    in_reply_to_message_id: draft.in_reply_to_message_id,
+                    idempotency_key: format!("draft:{draft_id}"),
+                },
+            )
+            .await?;
+        sqlx::query(
+            "UPDATE mail_drafts SET state='sent',updated_at=now() WHERE user_id=$1 AND id=$2",
+        )
+        .bind(user_uuid)
+        .bind(draft_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(message_id)
+    }
+
     pub async fn send(
         &self,
         user_id: &UserId,
         account_id: Uuid,
-        input: SendMailInput,
+        mut input: SendMailInput,
     ) -> Result<String, MailServiceError> {
         self.require_database()?;
         let user_id = Self::user_uuid(user_id)?;
@@ -735,6 +1366,50 @@ impl MailService {
         }
         let account = self.account_secret(user_id, account_id).await?;
         let secret = Self::decrypt_secret(&account)?;
+        let identity = if let Some(identity_id) = input.identity_id {
+            let identity = self.identity_by_id(user_id, identity_id).await?;
+            if identity.account_id != account_id {
+                return Err(MailServiceError::InvalidAccount);
+            }
+            Some(identity)
+        } else {
+            sqlx::query_as::<_, MailIdentity>(
+                r#"
+                SELECT id,account_id,email_address,display_name,reply_to,signature_html,
+                       is_default,created_at,updated_at
+                FROM mail_identities
+                WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL
+                ORDER BY is_default DESC,created_at ASC LIMIT 1
+                "#,
+            )
+            .bind(user_id)
+            .bind(account_id)
+            .fetch_optional(&self.pool)
+            .await?
+        };
+        let from_address = identity.as_ref().map(|value| value.email_address.as_str());
+        let from_name = identity
+            .as_ref()
+            .and_then(|value| value.display_name.as_deref())
+            .or(account.display_name.as_deref());
+        let reply_to_address = identity
+            .as_ref()
+            .and_then(|value| value.reply_to.as_deref());
+        if let Some(signature) = identity
+            .as_ref()
+            .and_then(|value| value.signature_html.as_deref())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            let body = input.body_text.trim_end().to_owned();
+            input.body_text = if body.is_empty() {
+                signature.to_owned()
+            } else if body.ends_with(signature) {
+                body
+            } else {
+                format!("{body}\n\n{signature}")
+            };
+        }
         let domain = account
             .email_address
             .split('@')
@@ -766,15 +1441,6 @@ impl MailService {
         if existing.1 == "sent" {
             return Ok(existing.2.unwrap_or(generated_message_id));
         }
-        let claimed = sqlx::query(
-            "UPDATE mail_outbox SET state='sending',attempt=attempt+1,updated_at=now() WHERE id=$1 AND state IN ('queued','retry_wait','failed')",
-        )
-        .bind(existing.0)
-        .execute(&self.pool)
-        .await?;
-        if claimed.rows_affected() == 0 {
-            return Err(MailServiceError::SendInProgress);
-        }
         let message_id = existing.2.unwrap_or(generated_message_id);
         let in_reply_to = if let Some(source_id) = input.in_reply_to_message_id {
             sqlx::query_scalar::<_, Option<String>>(
@@ -789,20 +1455,89 @@ impl MailService {
         } else {
             None
         };
+        let sent_folder: Option<String> = sqlx::query_scalar(
+            "SELECT remote_name FROM mail_folders WHERE user_id=$1 AND account_id=$2 AND normalized_role='sent' LIMIT 1",
+        )
+        .bind(user_id)
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let attachments = if let Some(draft_id) = input.attachment_draft_id {
+            let draft = self.draft_by_id(user_id, draft_id).await?;
+            if draft.account_id != account_id {
+                return Err(MailServiceError::InvalidAccount);
+            }
+            sqlx::query_as::<_, MailDraftAttachment>(
+                r#"
+                SELECT id,draft_id,filename,mime_type,size_bytes,content,created_at
+                FROM mail_draft_attachments
+                WHERE user_id=$1 AND draft_id=$2
+                ORDER BY created_at ASC
+                "#,
+            )
+            .bind(user_id)
+            .bind(draft_id)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            Vec::new()
+        };
+
+        // Claim the outbox only after every local validation/query above has
+        // succeeded. From this point forward, the only expected failure is the
+        // actual provider send, which explicitly moves the row to retry_wait.
+        let claimed = sqlx::query(
+            "UPDATE mail_outbox SET state='sending',attempt=attempt+1,updated_at=now() WHERE id=$1 AND state IN ('queued','retry_wait','failed')",
+        )
+        .bind(existing.0)
+        .execute(&self.pool)
+        .await?;
+        if claimed.rows_affected() == 0 {
+            return Err(MailServiceError::SendInProgress);
+        }
+
         match protocol::send_mail(
             &account,
             &secret,
+            from_address,
+            from_name,
+            reply_to_address,
             &input,
             &message_id,
             in_reply_to.as_deref(),
+            &attachments,
         )
         .await
         {
-            Ok(()) => {
+            Ok(raw) => {
                 sqlx::query("UPDATE mail_outbox SET state='sent',sent_at=now(),updated_at=now(),last_error_code=NULL WHERE id=$1")
                     .bind(existing.0)
                     .execute(&self.pool)
                     .await?;
+                if let Some(draft_id) = input.attachment_draft_id {
+                    sqlx::query(
+                        "DELETE FROM mail_draft_attachments WHERE user_id=$1 AND draft_id=$2",
+                    )
+                    .bind(user_id)
+                    .bind(draft_id)
+                    .execute(&self.pool)
+                    .await?;
+                }
+
+                // SMTP delivery is authoritative. Sent-copy persistence is
+                // deliberately best-effort so an IMAP APPEND failure can never
+                // put the outbox back into retry and send the message twice.
+                if let Some(sent_folder) = sent_folder {
+                    let _ = protocol::ensure_sent_copy(
+                        account.clone(),
+                        secret.clone(),
+                        sent_folder,
+                        message_id.clone(),
+                        raw,
+                    )
+                    .await;
+                }
                 Ok(message_id)
             }
             Err(_) => {
