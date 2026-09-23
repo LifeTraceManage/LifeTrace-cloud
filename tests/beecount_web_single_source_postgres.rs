@@ -1,5 +1,5 @@
 //! Proves that stock BeeCount writes and LifeTrace Web finance reads use one
-//! PostgreSQL authoritative store. No external BeeCount adapter is configured.
+//! SQLite authoritative store. No external BeeCount adapter is configured.
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Method, Request, StatusCode};
@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 fn config(database_url: String) -> Config {
     Config {
-        database_url: Some(database_url),
+        database_path: database_url,
         migration_on_startup: true,
         dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
@@ -253,7 +253,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     .await;
     assert_eq!(status, StatusCode::OK, "{integration}");
     assert_eq!(integration["enabled"], true);
-    assert_eq!(integration["storage"], "lifetrace-postgresql");
+    assert_eq!(integration["storage"], "lifetrace-sqlite");
     assert_eq!(integration["upstreamReachable"], true);
 
     let (status, ledgers) = send(
@@ -265,7 +265,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{ledgers}");
-    assert_eq!(ledgers["storage"], "lifetrace-postgresql");
+    assert_eq!(ledgers["storage"], "lifetrace-sqlite");
     assert_eq!(ledgers["items"].as_array().unwrap().len(), 1);
     assert_eq!(ledgers["items"][0]["sourceId"], "ledger-web-1");
     assert_eq!(ledgers["items"][0]["transactionCount"], 1);
@@ -280,7 +280,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{snapshot}");
-    assert_eq!(snapshot["storage"], "lifetrace-postgresql");
+    assert_eq!(snapshot["storage"], "lifetrace-sqlite");
     assert_eq!(snapshot["ledger"]["name"], "共同账本");
     assert_eq!(snapshot["transactions"]["items"][0]["amountCents"], 1234);
     assert_eq!(snapshot["transactions"]["items"][0]["accountName"], "现金");
