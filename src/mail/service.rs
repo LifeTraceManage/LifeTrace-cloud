@@ -11,8 +11,8 @@ use lifetrace_contracts::UserId;
 use super::credential::{CredentialCipher, CredentialError};
 use super::domain::{
     provider_preset, ConnectionTestResult, MailAccount, MailAccountInput, MailAccountSecret,
-    MailAttachment, MailFolder, MailListQuery, MailMessage, MailSecurity, MailThread,
-    SendMailInput,
+    MailAttachment, MailDraft, MailDraftInput, MailFolder, MailIdentity, MailIdentityInput,
+    MailListQuery, MailMessage, MailSecurity, MailThread, SendMailInput,
 };
 use super::parser::{parse_message, ParsedMessage};
 use super::protocol::{self, MailProtocolError, RemoteFolderSnapshot};
