@@ -1,4 +1,4 @@
-//! Transactional BeeCount sync facade over LifeTrace's PostgreSQL entity log.
+//! Transactional BeeCount sync facade over LifeTrace's SQLite entity log.
 
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
@@ -374,14 +374,14 @@ impl BeeCountSyncService {
                     JOIN beecount_shared_ledgers s ON s.ledger_id=m.ledger_id \
                     WHERE m.user_id=$1 AND s.storage_user_id=l.user_id \
                       AND c.scope='ledger' AND c.ledger_id=m.ledger_id)) \
-               AND (l.entity_type = ANY($3) \
+               AND (l.entity_type IN (SELECT value FROM json_each($3)) \
                     OR (l.entity_type='user.preference' AND l.entity_id LIKE 'beecount:%')) \
-               AND ($4 IS NULL OR l.origin_device_external_id IS DISTINCT FROM $4) \
+               AND ($4 IS NULL OR l.origin_device_external_id IS NOT $4) \
              ORDER BY l.cursor ASC LIMIT $5",
         )
         .bind(user_uuid)
         .bind(since)
-        .bind(&supported_entity_types)
+        .bind(&supported_entity_types_json)
         .bind(device_id)
         .bind(limit + 1)
         .fetch_all(&self.pool)
@@ -411,12 +411,12 @@ impl BeeCountSyncService {
                      WHERE t.user_id=e.user_id AND t.entity_type='finance.transaction' \
                        AND t.is_deleted=FALSE \
                        AND COALESCE(t.payload->>'beecountLedgerId','') = \
-                           COALESCE(e.payload->>'beecountLedgerId',substring(e.entity_id from 10))) \
+                           COALESCE(e.payload->>'beecountLedgerId',substr(e.entity_id,10))) \
                     AS tx_count \
              FROM sync_entities e \
              LEFT JOIN beecount_shared_ledgers s ON s.storage_user_id=e.user_id \
                AND s.ledger_id=COALESCE(e.payload->>'beecountLedgerId', \
-                 CASE WHEN e.entity_id LIKE 'beecount:%' THEN substring(e.entity_id from 10) \
+                 CASE WHEN e.entity_id LIKE 'beecount:%' THEN substr(e.entity_id,10) \
                       ELSE 'lifetrace:' || e.entity_id END) \
              LEFT JOIN beecount_ledger_members m ON m.ledger_id=s.ledger_id AND m.user_id=$1 \
              WHERE e.entity_type='finance.ledger' AND e.is_deleted=FALSE \
@@ -444,7 +444,7 @@ impl BeeCountSyncService {
                     updated_at: row.try_get("server_modified_at").ok(),
                     size: 512 + tx_count * 300,
                     metadata: json!({
-                        "source": "lifetrace-postgresql",
+                        "source": "lifetrace-sqlite",
                         "ledgerName": payload.get("name"),
                         "currency": payload.get("currency"),
                         "monthStartDay": payload.get("monthStartDay"),
@@ -666,7 +666,7 @@ impl BeeCountSyncService {
                 action: "upsert".to_owned(),
                 payload: json!({
                     "content": serde_json::to_string(&content).map_err(internal)?,
-                    "metadata": {"source": "lifetrace-postgresql"},
+                    "metadata": {"source": "lifetrace-sqlite"},
                 }),
                 updated_at: snapshot_updated,
                 updated_by_device_id: None,
