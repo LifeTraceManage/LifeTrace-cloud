@@ -2,8 +2,8 @@
 
 FROM node:22-alpine AS web-builder
 WORKDIR /web
-COPY apps/web/package.json apps/web/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+COPY apps/web/package.json ./
+RUN --mount=type=cache,target=/root/.npm npm install --no-audit --no-fund
 COPY apps/web/ ./
 RUN npm run typecheck \
     && npm test \
