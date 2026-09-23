@@ -98,6 +98,17 @@
     "sortOrder": {
       "format": "int64",
       "type": "integer"
+    },
+    "parentFolderId": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EntityId"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional parent folder for hierarchical Notes organization."
     }
   },
   "required": [
