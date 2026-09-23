@@ -24,6 +24,7 @@ const DOMAINS: &[&str] = &[
     "photos",
     "workout_imports",
     "backups",
+    "mail_outbound_attachments",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -463,6 +464,25 @@ fn mime_allowed(domain: &str, mime: &str) -> bool {
                 | "application/json"
                 | "application/octet-stream"
         ),
+        "mail_outbound_attachments" => {
+            mime.starts_with("image/")
+                || mime.starts_with("audio/")
+                || mime.starts_with("video/")
+                || mime.starts_with("text/")
+                || matches!(
+                    mime,
+                    "application/pdf"
+                        | "application/zip"
+                        | "application/gzip"
+                        | "application/octet-stream"
+                        | "application/msword"
+                        | "application/vnd.ms-excel"
+                        | "application/vnd.ms-powerpoint"
+                        | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        | "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                )
+        }
         _ => false,
     }
 }
