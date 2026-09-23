@@ -165,13 +165,13 @@ impl AuthProvider for DatabaseAuthProvider {
             .into_iter()
             .filter(|scope| grant_scopes.contains(scope))
             .collect();
-        let session_id: uuid = row
+        let session_id: Uuid = row
             .try_get("session_id")
             .map_err(|_| Self::error(ErrorCode::AuthInvalid, "invalid credential"))?;
-        let user_id: uuid = row
+        let user_id: Uuid = row
             .try_get("user_id")
             .map_err(|_| Self::error(ErrorCode::AuthInvalid, "invalid credential"))?;
-        let device_id: uuid = row
+        let device_id: Uuid = row
             .try_get("device_id")
             .map_err(|_| Self::error(ErrorCode::AuthInvalid, "invalid credential"))?;
         let app_id: String = row
