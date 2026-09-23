@@ -1,4 +1,4 @@
-//! BeeCount attachment protocol checks backed by PostgreSQL.
+//! BeeCount attachment protocol checks backed by SQLite.
 
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Method, Request, StatusCode};
@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 fn config(database_url: String) -> Config {
     Config {
-        database_url: Some(database_url),
+        database_path: database_url,
         migration_on_startup: true,
         dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
