@@ -18,6 +18,8 @@ pub struct NoteFolder {
     pub name: String,
     pub icon: String,
     pub color: String,
+    /// Optional parent folder for hierarchical Notes organization.
+    pub parent_folder_id: Option<EntityId>,
     pub sort_order: i64,
 }
 
