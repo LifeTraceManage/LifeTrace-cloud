@@ -56,17 +56,18 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Refresh Cargo.lock
-        run: cargo generate-lockfile
 
-      - name: Commit refreshed Cargo.lock on this PR branch
+      - name: Apply rustfmt
+        run: cargo fmt
+
+      - name: Commit rustfmt changes on this PR branch
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          if [ -n "$(git status --porcelain -- Cargo.lock)" ]; then
+          if [ -n "$(git status --porcelain -- '*.rs')" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add Cargo.lock
-            git commit -m "chore: refresh Cargo.lock"
+            git add '**/*.rs'
+            git commit -m "style: apply rustfmt"
             git fetch origin "${{ github.head_ref }}"
             git rebase "origin/${{ github.head_ref }}"
             git push origin HEAD:"${{ github.head_ref }}"
