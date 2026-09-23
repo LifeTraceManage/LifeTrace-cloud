@@ -1210,6 +1210,28 @@ impl MailService {
         }
         let account = self.account_secret(user_id, account_id).await?;
         let secret = Self::decrypt_secret(&account)?;
+        let identity = if let Some(identity_id) = input.identity_id {
+            let identity = self.identity_by_id(user_id, identity_id).await?;
+            if identity.account_id != account_id {
+                return Err(MailServiceError::InvalidAccount);
+            }
+            Some(identity)
+        } else {
+            sqlx::query_as::<_, MailIdentity>(
+                r#"
+                SELECT id,account_id,email_address,display_name,reply_to,signature_html,
+                       is_default,created_at,updated_at
+                FROM mail_identities
+                WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL
+                ORDER BY is_default DESC,created_at ASC LIMIT 1
+                "#,
+            )
+            .bind(user_id)
+            .bind(account_id)
+            .fetch_optional(&self.pool)
+            .await?
+        };
+        let from_address = identity.as_ref().map(|value| value.email_address.as_str());
         let domain = account
             .email_address
             .split('@')
@@ -1267,6 +1289,7 @@ impl MailService {
         match protocol::send_mail(
             &account,
             &secret,
+            from_address,
             &input,
             &message_id,
             in_reply_to.as_deref(),
