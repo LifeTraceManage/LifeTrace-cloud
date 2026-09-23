@@ -167,7 +167,7 @@ async fn push(
         )
     });
     let response = state.store.push(&principal.user_id, &request).await?;
-    if state.database_enabled && notify_beecount {
+    if notify_beecount {
         publish_native_sync_change(&state, &principal, notify_user_global).await;
     }
     Ok(Json(response))
@@ -182,7 +182,7 @@ async fn publish_native_sync_change(
         return;
     };
     let Ok(server_cursor) = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(cursor),0)::BIGINT FROM sync_change_log WHERE user_id=$1",
+        "SELECT COALESCE(MAX(cursor),0) FROM sync_change_log WHERE user_id=$1",
     )
     .bind(user_uuid)
     .fetch_one(&state.pool)
