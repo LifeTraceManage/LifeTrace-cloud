@@ -274,6 +274,8 @@ pub struct MailDraftInput {
 #[serde(rename_all = "camelCase")]
 pub struct SendMailInput {
     pub identity_id: Option<Uuid>,
+    #[serde(default)]
+    pub attachment_draft_id: Option<Uuid>,
     pub to: Vec<String>,
     #[serde(default)]
     pub cc: Vec<String>,
