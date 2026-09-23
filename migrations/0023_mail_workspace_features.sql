@@ -45,15 +45,16 @@ CREATE INDEX idx_mail_drafts_user_updated
 ON mail_drafts(user_id, updated_at DESC)
 WHERE state='draft';
 
+CREATE TABLE mail_draft_attachments (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES cloud_users(id) ON DELETE CASCADE,
+    draft_id UUID NOT NULL REFERENCES mail_drafts(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+    size_bytes BIGINT NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 26214400),
+    content BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
--- Allow the unified file service to hold outbound draft attachments.
-ALTER TABLE file_objects DROP CONSTRAINT file_objects_domain_check;
-ALTER TABLE file_objects ADD CONSTRAINT file_objects_domain_check CHECK (domain IN (
-    'finance_imports',
-    'notes_attachments',
-    'english_audio',
-    'photos',
-    'workout_imports',
-    'backups',
-    'mail_outbound_attachments'
-));
+CREATE INDEX idx_mail_draft_attachments_draft
+ON mail_draft_attachments(user_id, draft_id, created_at);
