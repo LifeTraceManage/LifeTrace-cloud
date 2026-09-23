@@ -1,92 +1,97 @@
 # LifeTrace Cloud
 
-LifeTrace 的独立云端后端，使用 Rust、Axum、SQLx 与 PostgreSQL。仓库负责跨端同步、认证、文件元数据与对象存储签名、BeeCount 财务兼容、邮件能力以及少量云端任务，不包含 Flutter / Desktop 客户端源码。
+LifeTrace 的轻量自托管云端服务。当前运行时只使用 Rust、Axum、SQLx 与 SQLite；Web 静态资源、BeeCount 兼容入口、邮件后台同步和 Execution 后台任务都由同一个 Cloud 进程提供。
 
-## 架构边界
+目标不是做通用云平台，而是让个人服务器上的 LifeTrace 具备可靠同步、认证和少量云端能力，同时尽可能降低部署和维护成本。
+
+## 当前架构
 
 ```text
-Client
-  │
-  ▼
-Axum routes
-  │
-  ├─ auth / security
-  ├─ sync v1
-  ├─ files / privacy
-  ├─ BeeCount compatibility
-  ├─ mail
-  └─ photo / assistant support
-  │
-  ▼
-Application state
-  │
-  ├─ PostgreSQL repositories        production
-  ├─ object storage signer
-  ├─ auth service
-  └─ in-memory sync repository      tests / protocol harness only
+Browser / Mobile / Desktop / BeeCount
+               │
+        ┌──────┴──────┐
+        │ LifeTrace   │
+        │ Cloud       │
+        │             │
+        │ Axum API    │ :8787
+        │ BeeCount    │ :8869
+        │ Web static  │
+        │ Mail jobs   │
+        │ Exec jobs   │
+        │ SQLite      │
+        └──────┬──────┘
+               │
+         /data/lifetrace.db
 ```
 
-生产同步路径只使用 PostgreSQL。内存同步实现保留在 `src/repository/memory_store.rs`，用于无数据库的协议测试与快速验证，不属于生产持久化方案。
+生产环境只有一个常驻应用进程和一个持久化数据目录。没有 PostgreSQL、Caddy、migration container、mail worker container 或 execution worker container。
+
+SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行。
 
 ## 目录
 
-- `src/`：服务端入口、配置、安全与通用基础设施
-- `src/routes/`：HTTP 路由层
-- `src/auth/`：认证、授权、Session、Token 与密码逻辑
-- `src/beecount/`：BeeCount 兼容与财务集成领域
-- `src/mail/`：邮件协议、解析、凭据与服务
-- `src/repository/`：Sync 仓库抽象、PostgreSQL 生产实现与仅用于测试/协议 harness 的内存实现
-- `src/sync/`：游标、分页令牌、哈希等同步基础设施
-- `src/bin/`：独立 worker 与 admin 二进制
-- `crates/lifetrace-contracts/`：共享协议与领域契约
-- `crates/lifetrace-sync-client/`：Rust Sync v1 客户端库
-- `contracts/`：由 contract exporter 生成的跨语言契约产物
-- `migrations/`：PostgreSQL migration
-- `deploy/cloud/`：Docker Compose、Caddy 与生产部署示例
-- `openspec/`：当前有效规范与变更记录
-- `tests/`：服务端集成测试
+- `src/routes/`：HTTP API
+- `src/auth/`：认证、Session、Token 与密码逻辑
+- `src/beecount/`：BeeCount 兼容和财务同步
+- `src/mail/`：邮件协议、解析和邮件服务
+- `src/workers/`：随 Cloud 进程启动的后台任务
+- `src/repository/sqlite/`：Sync v1 SQLite 持久化
+- `src/sync/`：游标、分页令牌和 payload hash
+- `migrations/0001_sqlite.sql`：当前 SQLite 基线 schema
+- `apps/web/`：随 Cloud 镜像构建的 Web 前端
+- `apps/photo-challenge-pwa/`：摄影挑战静态页面
+- `deploy/cloud/`：唯一生产 Compose 与环境变量模板
+- `crates/lifetrace-contracts/`：共享协议和领域契约
+- `crates/lifetrace-sync-client/`：Rust Sync v1 客户端
+- `contracts/`：生成的跨语言契约
 
-## 核心 API
+## HTTP 入口
 
-稳定的公共能力按以下前缀组织：
+主服务监听 `8787`，生产 Compose 映射为宿主机 `80`。
 
-| 前缀 | 作用 |
+| 路径 | 能力 |
 | --- | --- |
-| `/health/*` | liveness / readiness |
-| `/api/v1/meta/*` | 版本与元信息 |
-| `/api/v1/auth/*` | 认证与账号能力 |
-| `/api/v1/sync/*` | Push / Pull / Snapshot / capabilities |
-| `/api/v1/files/*` | 文件元数据、上传/下载签名 |
-| `/api/v1/privacy/*` | 导出、保留策略与账号删除 |
-| `/api/v1/integrations/beecount/*` | LifeTrace 对 BeeCount 的只读集成 |
-| BeeCount compatibility routes | BeeCount 原生客户端兼容接口 |
-| mail routes | 邮件列表、消息与附件 |
-| photo routes | 临时照片中转与挑战能力 |
+| `/health/*` | 健康检查 |
+| `/api/v1/auth/*` | 登录、Session、Token |
+| `/api/v1/sync/*` | Push / Pull / Snapshot |
+| `/api/v1/files/*` | 文件元数据和对象存储签名 |
+| `/api/v1/privacy/*` | 数据导出和账号删除 |
+| `/api/v1/integrations/beecount/*` | LifeTrace Web 财务接口 |
+| `/api/v1/mail/*` | 邮件 |
+| `/api/v1/photo-*/*` | 照片相关能力 |
+| 其他路径 | Web SPA 静态资源 |
 
-Sync v1 的具体对象类型和字段以 `lifetrace-contracts` 与生成后的 `contracts/` 为准，不在 README 重复维护第二份协议定义。
+BeeCount 兼容监听 `8869`。该监听器只负责把 BeeCount 原始 `/api/v1/*` 和 `/ws` 请求重写到内部兼容路由，不需要 Caddy。
 
 ## 本地运行
 
-应用启动要求提供 `DATABASE_URL`：
+默认数据库文件：
 
-```bash
-export DATABASE_URL=postgres://lifetrace:password@127.0.0.1:5432/lifetrace
-cargo run
+```text
+./data/lifetrace.db
 ```
 
-无数据库的内存仓库只通过测试/协议 harness 直接构造 `AppState` 使用，不是可启动的 Cloud 运行模式。
-
-数据库 migration 随 Cloud 启动自动执行；仅保留 `lifetrace-admin` 作为必要的运维 CLI：
+直接运行：
 
 ```bash
-cargo run --bin lifetrace-admin
+cargo run --bin lifetrace-cloud
 ```
 
-## 测试与质量门禁
-
-CI 的核心检查可在本地复现：
+自定义数据库位置：
 
 ```bash
+export LIFETRACE_DATABASE_PATH=/tmp/lifetrace.db
+cargo run --bin lifetrace-cloud
+```
+
+首次启动会创建 SQLite 文件并执行 `migrations/0001_sqlite.sql`。
+
+## 测试
+
+测试不需要 PostgreSQL 或其他外部数据库服务：
+
+```bash
+export TEST_DATABASE_PATH=/tmp/lifetrace-test.db
 cargo fmt --check
 cargo test --locked -- --test-threads=1
 cargo clippy --locked --all-targets -- -D warnings
@@ -95,54 +100,50 @@ cargo test --manifest-path crates/lifetrace-sync-client/Cargo.toml
 cargo run --manifest-path tools/contract-exporter/Cargo.toml
 ```
 
-生成契约后，`contracts/` 必须保持无未提交差异。
+## 单容器部署
 
-## Docker 与部署
-
-生产部署只保留一条路径：`deploy/cloud/docker-compose.production.yml`。
-
-运行栈：
+生产部署只有一个 service：
 
 ```text
-PostgreSQL
-    ↑
-LifeTrace Cloud ── mail worker
-    └───────────── execution worker
-    ↑
-Web/Caddy (:80 / :8869)
+lifetrace container
+├── lifetrace-cloud
+├── built Web assets
+└── /data
+    ├── lifetrace.db
+    └── photo-staging/
 ```
 
-Cloud 在启动时执行数据库 migration，因此生产环境不再维护单独的 migration 容器。部署配置只使用 `deploy/cloud/.env.production` 一份环境文件。
-
-首次部署或更新：
+首次部署：
 
 ```bash
 cp deploy/cloud/.env.production.example deploy/cloud/.env.production
-# 编辑 .env.production
+# 编辑密钥
+
 bash deploy/cloud/deploy-production.sh
 ```
 
-如果服务器已经固定在某个 checkout，不希望脚本切换到 `main`：
+等价的核心命令只有：
 
 ```bash
-bash deploy/cloud/deploy-production.sh --skip-git-update
-```
-
-底层实际只有三步：
-
-```bash
+cd deploy/cloud
 docker compose --env-file .env.production -f docker-compose.production.yml pull
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans --wait
-docker compose --env-file .env.production -f docker-compose.production.yml ps
 ```
 
-不再维护 WSL 专用 Compose、production example Compose 或多套 Caddy 模板。开发环境使用 `docker-compose.local.yml`，CI 数据库测试使用 `docker-compose.test.yml`。
+服务端口：
+
+```text
+80   -> container:8787   LifeTrace Web + API
+8869 -> container:8869   BeeCount compatibility
+```
+
+持久化只需要备份 Docker volume 中的 `/data`。数据库主体是 `lifetrace.db`；使用 WAL 时，在线备份应通过 SQLite backup/checkpoint 语义完成，而不是在高写入期间只复制主数据库文件。
 
 ## 对象存储
 
-长期文件使用 `file_objects` 元数据 + S3 兼容对象存储。Cloud 只签发短时上传/下载 URL，不代理大文件字节；`file.metadata` 继续通过 Sync v1 跨端同步。
+较大的长期文件仍可使用 S3 兼容对象存储。SQLite 保存 `file_objects` 元数据，Cloud 签发短期上传/下载 URL，不代理长期对象字节。
 
-主要配置包括：
+相关可选配置：
 
 ```text
 FILE_OBJECT_STORAGE_ENDPOINT
@@ -154,14 +155,15 @@ FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS
 FILE_MAX_UPLOAD_BYTES
 ```
 
-私密本地加密数据不得通过普通文件服务上传。
+没有配置对象存储时，不影响核心同步、认证、Web、邮件和 BeeCount 功能。
 
-## 兼容性约束
+## 设计原则
 
-本仓库正在逐步收拢历史模块，但重构遵循以下边界：
+当前 Cloud 明确按单实例个人服务器优化：
 
-1. 不改变已发布的 Sync v1 wire contract。
-2. 不在纯目录重构中修改数据库 schema。
-3. BeeCount 兼容接口在替换前保持现有路径和字段语义。
-4. 生成契约只由 `lifetrace-contracts` 派生，避免手工维护重复 schema。
-5. 生产业务使用 PostgreSQL；内存实现只服务测试与协议 harness。
+1. SQLite 是唯一数据库后端，不维护 PostgreSQL / SQLite 双栈。
+2. 测试同样使用 SQLite，不维护第二套内存数据库实现。
+3. 后台任务运行在 Cloud Tokio runtime 内，不拆独立 worker 服务。
+4. Web 静态资源由 Axum 提供，不增加 Caddy/Nginx 依赖。
+5. 数据库 schema 以当前 SQLite 基线为准，不保留 PostgreSQL 历史 migration 链。
+6. Sync v1 wire contract 保持兼容，数据库实现细节不暴露给客户端。
