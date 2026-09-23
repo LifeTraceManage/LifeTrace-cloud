@@ -1539,7 +1539,7 @@ impl AuthService {
         let csrf = self.tokens.generate(TokenKind::Csrf);
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
         sqlx::query("INSERT INTO auth_sessions (id,user_id,device_id,app_id,scopes,session_type,status,idle_expires_at,absolute_expires_at,login_ip,last_ip,user_agent,public_device) VALUES ($1,$2,$3,$4,$5,'web','active',$6,$7,$8,$8,$9,$10)")
-            .bind(session_id).bind(verified.user_id).bind(verified.device_id).bind(&verified.app_id).bind(&verified.scopes)
+            .bind(session_id).bind(verified.user_id).bind(verified.device_id).bind(&verified.app_id).bind(Self::encode_scopes(&verified.scopes))
             .bind(now+Duration::seconds(idle_seconds as i64)).bind(now+Duration::seconds(absolute_seconds as i64)).bind(Self::ip(context)).bind(&context.user_agent).bind(input.public_device)
             .execute(&mut *tx).await.map_err(Self::db)?;
         sqlx::query("INSERT INTO auth_web_sessions (id,session_id,token_hash,csrf_hash,expires_at) VALUES ($1,$2,$3,$4,$5)")
