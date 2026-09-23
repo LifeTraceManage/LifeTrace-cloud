@@ -1,4 +1,4 @@
-//! LifeTrace Web finance facade over the BeeCount-compatible PostgreSQL entity store.
+//! LifeTrace Web finance facade over the BeeCount-compatible SQLite entity store.
 //!
 //! This route intentionally does not call an external BeeCount Cloud instance.
 //! BeeCount Android compatibility writes and LifeTrace Web finance reads both use
@@ -52,11 +52,11 @@ async fn status(
     let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     principal.require_scope("finance:read")?;
     Ok(Json(json!({
-        "enabled": state.database_enabled,
+        "enabled": true,
         "readOnly": true,
         "source": "beecount-cloud",
         "storage": "lifetrace-sqlite",
-        "upstreamReachable": state.database_enabled,
+        "upstreamReachable": true,
         "upstreamVersion": {
             "name": "LifeTrace BeeCount compatibility",
             "version": 1,
