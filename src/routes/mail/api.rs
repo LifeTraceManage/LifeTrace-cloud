@@ -51,6 +51,14 @@ pub fn router() -> Router<AppState> {
             "/api/v1/mail/messages/{id}/archive",
             axum::routing::post(archive_message),
         )
+        .route(
+            "/api/v1/mail/messages/{id}/star",
+            axum::routing::post(set_starred),
+        )
+        .route(
+            "/api/v1/mail/messages/{id}/move",
+            axum::routing::post(move_message),
+        )
 }
 
 fn service(state: &AppState) -> MailService {
@@ -59,18 +67,19 @@ fn service(state: &AppState) -> MailService {
 
 fn map_error(error: MailServiceError) -> ApiError {
     let (status, message) = match error {
-        MailServiceError::DatabaseRequired => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "mail storage is unavailable",
-        ),
         MailServiceError::InvalidUser | MailServiceError::InvalidAccount => {
             (StatusCode::BAD_REQUEST, "invalid mail request")
         }
         MailServiceError::AccountNotFound => (StatusCode::NOT_FOUND, "mail account not found"),
+        MailServiceError::IdentityNotFound => (StatusCode::NOT_FOUND, "mail identity not found"),
+        MailServiceError::DraftNotFound => (StatusCode::NOT_FOUND, "mail draft not found"),
         MailServiceError::MessageNotFound => (StatusCode::NOT_FOUND, "mail message not found"),
         MailServiceError::ThreadNotFound => (StatusCode::NOT_FOUND, "mail thread not found"),
         MailServiceError::ArchiveUnavailable => {
             (StatusCode::CONFLICT, "archive folder is unavailable")
+        }
+        MailServiceError::DestinationUnavailable => {
+            (StatusCode::CONFLICT, "destination mail folder is unavailable")
         }
         MailServiceError::Credential => (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -174,7 +183,11 @@ async fn sync_account(
         .sync_account(&principal.user_id, id)
         .await
         .map_err(map_error)?;
-    Ok(Json(json!({ "ok": true, "persisted": persisted })))
+    Ok(Json(json!({
+        "ok": true,
+        "persisted": persisted,
+        "syncedMessages": persisted
+    })))
 }
 
 async fn list_folders(
@@ -273,6 +286,46 @@ async fn archive_message(
         .await
         .map_err(map_error)?;
     Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StarInput {
+    starred: bool,
+}
+
+async fn set_starred(
+    State(state): State<AppState>,
+    principal: AuthenticatedPrincipal,
+    Path(id): Path<Uuid>,
+    Json(input): Json<StarInput>,
+) -> Result<Json<Value>, ApiError> {
+    principal.require_scope("mail:write")?;
+    service(&state)
+        .set_message_starred(&principal.user_id, id, input.starred)
+        .await
+        .map_err(map_error)?;
+    Ok(Json(json!({ "ok": true, "starred": input.starred })))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MoveInput {
+    destination_role: String,
+}
+
+async fn move_message(
+    State(state): State<AppState>,
+    principal: AuthenticatedPrincipal,
+    Path(id): Path<Uuid>,
+    Json(input): Json<MoveInput>,
+) -> Result<Json<Value>, ApiError> {
+    principal.require_scope("mail:write")?;
+    service(&state)
+        .move_message(&principal.user_id, id, input.destination_role.trim())
+        .await
+        .map_err(map_error)?;
+    Ok(Json(json!({ "ok": true, "destinationRole": input.destination_role })))
 }
 
 async fn send_mail(
