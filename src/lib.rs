@@ -16,6 +16,7 @@ pub mod repository;
 pub mod routes;
 pub mod state;
 pub mod sync;
+pub mod workers;
 
 pub use config::Config;
 pub use error::ApiError;
