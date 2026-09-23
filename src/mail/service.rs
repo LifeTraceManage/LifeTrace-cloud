@@ -1464,6 +1464,14 @@ impl MailService {
         } else {
             None
         };
+        let sent_folder: Option<String> = sqlx::query_scalar(
+            "SELECT remote_name FROM mail_folders WHERE user_id=$1 AND account_id=$2 AND normalized_role='sent' LIMIT 1",
+        )
+        .bind(user_id)
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
         let attachments = if let Some(draft_id) = input.attachment_draft_id {
             let draft = self.draft_by_id(user_id, draft_id).await?;
             if draft.account_id != account_id {
@@ -1497,7 +1505,7 @@ impl MailService {
         )
         .await
         {
-            Ok(()) => {
+            Ok(raw) => {
                 sqlx::query("UPDATE mail_outbox SET state='sent',sent_at=now(),updated_at=now(),last_error_code=NULL WHERE id=$1")
                     .bind(existing.0)
                     .execute(&self.pool)
@@ -1510,6 +1518,20 @@ impl MailService {
                     .bind(draft_id)
                     .execute(&self.pool)
                     .await?;
+                }
+
+                // SMTP delivery is authoritative. Sent-copy persistence is
+                // deliberately best-effort so an IMAP APPEND failure can never
+                // put the outbox back into retry and send the message twice.
+                if let Some(sent_folder) = sent_folder {
+                    let _ = protocol::ensure_sent_copy(
+                        account.clone(),
+                        secret.clone(),
+                        sent_folder,
+                        message_id.clone(),
+                        raw,
+                    )
+                    .await;
                 }
                 Ok(message_id)
             }
