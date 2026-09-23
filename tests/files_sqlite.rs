@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn database_url() -> Option<String> {
+fn database_path() -> Option<String> {
     std::env::var("TEST_DATABASE_PATH").ok()
 }
 
@@ -31,7 +31,7 @@ fn config(url: String) -> Config {
 }
 
 async fn state() -> Option<AppState> {
-    let url = database_url()?;
+    let url = database_path()?;
     let state = AppState::new(config(url));
     state.initialize().await.unwrap();
     Some(state)
