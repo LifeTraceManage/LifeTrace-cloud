@@ -27,7 +27,7 @@ fn config(url: String) -> Config {
 }
 
 async fn state() -> Option<AppState> {
-    let url = std::env::var("TEST_DATABASE_URL").ok()?;
+    let url = std::env::var("TEST_DATABASE_PATH").ok()?;
     let state = AppState::new(config(url));
     state.initialize().await.unwrap();
     sqlx::query(
