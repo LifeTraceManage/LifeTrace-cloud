@@ -25,7 +25,7 @@ WHERE is_default=TRUE AND deleted_at IS NULL;
 INSERT INTO mail_identities (
     id,user_id,account_id,email_address,display_name,is_default
 )
-SELECT gen_random_uuid(),user_id,id,email_address,display_name,TRUE
+SELECT id,user_id,id,email_address,display_name,TRUE
 FROM mail_accounts
 WHERE deleted_at IS NULL
 ON CONFLICT DO NOTHING;
