@@ -2,7 +2,7 @@
 name = "lifetrace-cloud"
 version = "0.1.0"
 edition = "2021"
-description = "LifeTrace cloud backend (Rust + Axum + PostgreSQL)"
+description = "LifeTrace self-hosted cloud backend (Rust + Axum + SQLite)"
 license = "MIT"
 
 [dependencies]
@@ -29,7 +29,7 @@ sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio",
 subtle = "2"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.6", features = ["cors", "request-id", "set-header"] }
+tower-http = { version = "0.6", features = ["cors", "request-id", "set-header", "fs"] }
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
 url = "2"
 
