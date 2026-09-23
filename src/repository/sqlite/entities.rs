@@ -5,11 +5,11 @@ use lifetrace_contracts::{EntityId, ServerVersion, UserId};
 use serde_json::Value;
 use sqlx::Row;
 
-use super::PostgresRepository;
+use super::SqliteRepository;
 use crate::error::ApiError;
 use crate::repository::StoredEntityRecord;
 
-impl PostgresRepository {
+impl SqliteRepository {
     pub(super) async fn list_entities_impl(
         &self,
         user_id: &UserId,
@@ -110,7 +110,7 @@ impl PostgresRepository {
 
     pub(super) async fn change_count_impl(&self, user_id: &UserId) -> Result<usize, ApiError> {
         let count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM sync_change_log WHERE user_id = $1")
+            sqlx::query_scalar("SELECT COUNT(*) FROM sync_change_log WHERE user_id = $1")
                 .bind(Self::user_uuid(user_id))
                 .fetch_one(&self.pool)
                 .await

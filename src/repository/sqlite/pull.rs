@@ -6,11 +6,11 @@ use lifetrace_contracts::{Cursor, DeviceId, EntityId, ErrorCode, ServerVersion, 
 use serde_json::Value;
 use sqlx::Row;
 
-use super::PostgresRepository;
+use super::SqliteRepository;
 use crate::error::ApiError;
 use crate::sync::payload_hash::scope_hash;
 
-impl PostgresRepository {
+impl SqliteRepository {
     pub(super) async fn capabilities_impl(&self) -> Result<CapabilitiesResponseV1, ApiError> {
         Ok(CapabilitiesResponseV1 {
             protocol_version: lifetrace_contracts::PROTOCOL_VERSION,
@@ -31,7 +31,7 @@ impl PostgresRepository {
                 .iter()
                 .map(|descriptor| descriptor.entity_type.to_owned())
                 .collect(),
-            server_time: Self::now(),
+            server_time: Self::CURRENT_TIMESTAMP,
         })
     }
 
@@ -157,7 +157,7 @@ impl PostgresRepository {
             .unwrap_or(after);
         Ok(PullResponseV1 {
             request_id: request.request_id.clone(),
-            server_time: Self::now(),
+            server_time: Self::CURRENT_TIMESTAMP,
             changes,
             next_cursor: self.cursor_codec.encode(user_id, &scope, next_position),
             has_more,

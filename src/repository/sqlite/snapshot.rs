@@ -8,11 +8,11 @@ use serde_json::Value;
 use sqlx::Row;
 use uuid::Uuid;
 
-use super::PostgresRepository;
+use super::SqliteRepository;
 use crate::error::ApiError;
 use crate::sync::payload_hash::scope_hash;
 
-impl PostgresRepository {
+impl SqliteRepository {
     pub(super) async fn snapshot_impl(
         &self,
         user_id: &UserId,
@@ -33,13 +33,13 @@ impl PostgresRepository {
             let cursor = self.latest_cursor_raw(&mut *tx, user_uuid).await?;
             let scope = scope_hash(&request.entity_types);
             let scope_bytes = hex::decode(scope).map_err(Self::internal_error)?;
-            let expires_at = Self::now()
+            let expires_at = Self::CURRENT_TIMESTAMP
                 + Duration::seconds(self.config.snapshot_ttl_seconds.min(i64::MAX as u64) as i64);
             sqlx::query(
                 r#"
                 INSERT INTO sync_snapshots (
                     id, user_id, scope_hash, snapshot_cursor, status, created_at, expires_at
-                ) VALUES ($1, $2, $3, $4, 'building', now(), $5)
+                ) VALUES ($1, $2, $3, $4, 'building', CURRENT_TIMESTAMP, $5)
                 "#,
             )
             .bind(snapshot_uuid)
@@ -109,7 +109,7 @@ impl PostgresRepository {
             sqlx::query(
                 r#"
                 UPDATE sync_snapshots
-                SET status = 'ready', item_count = $2, completed_at = now()
+                SET status = 'ready', item_count = $2, completed_at = CURRENT_TIMESTAMP
                 WHERE id = $1
                 "#,
             )
@@ -143,7 +143,7 @@ impl PostgresRepository {
         let status: String = row.try_get("status").map_err(Self::internal_error)?;
         let expires_at: chrono::DateTime<Utc> =
             row.try_get("expires_at").map_err(Self::internal_error)?;
-        if status != "ready" || expires_at <= Self::now() {
+        if status != "ready" || expires_at <= Self::CURRENT_TIMESTAMP {
             return Err(ApiError::new(
                 ErrorCode::SnapshotRequired,
                 "snapshot is unavailable or expired",
@@ -218,7 +218,7 @@ impl PostgresRepository {
             items,
             next_page_token,
             completed,
-            server_time: Self::now(),
+            server_time: Self::CURRENT_TIMESTAMP,
         })
     }
 }

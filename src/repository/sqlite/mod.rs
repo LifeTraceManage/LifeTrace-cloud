@@ -1,6 +1,6 @@
-//! PostgreSQL-backed sync repository.
+//! SQLite-backed sync repository.
 //!
-//! Every protocol state transition is committed in PostgreSQL: identity and
+//! Every protocol state transition is committed in SQLite: identity and
 //! device touch, idempotency, conflict evaluation, entity mutation, change
 //! log append and processed result.
 
@@ -16,7 +16,7 @@ use axum::http::StatusCode;
 use chrono::Utc;
 use lifetrace_contracts::sync::v1::*;
 use lifetrace_contracts::{ChangeId, DeviceId, ErrorCode, SnapshotId, UserId};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{SqlitePool, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -26,16 +26,16 @@ use crate::sync::cursor_codec::CursorCodec;
 use crate::sync::page_token::PageTokenCodec;
 
 #[derive(Clone)]
-pub struct PostgresRepository {
-    pub(super) pool: PgPool,
+pub struct SqliteRepository {
+    pub(super) pool: SqlitePool,
     pub(super) config: Arc<Config>,
     pub(super) cursor_codec: Arc<CursorCodec>,
     pub(super) page_token_codec: Arc<PageTokenCodec>,
 }
 
-impl PostgresRepository {
+impl SqliteRepository {
     pub fn new(
-        pool: PgPool,
+        pool: SqlitePool,
         config: Config,
         cursor_codec: CursorCodec,
         page_token_codec: PageTokenCodec,
@@ -48,8 +48,8 @@ impl PostgresRepository {
         }
     }
 
-    fn now() -> chrono::DateTime<Utc> {
-        Utc::now()
+    fn CURRENT_TIMESTAMP -> chrono::DateTime<Utc> {
+        Utc::CURRENT_TIMESTAMP
     }
 
     fn stable_uuid(kind: &str, value: &str) -> Uuid {
@@ -136,14 +136,14 @@ impl PostgresRepository {
 
     async fn ensure_identity(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut Transaction<'_, Sqlite>,
         user_id: &UserId,
         client: &SyncClientInfo,
     ) -> Result<(), ApiError> {
         let user_uuid = Self::user_uuid(user_id);
         sqlx::query(
             "INSERT INTO cloud_users (id, status) VALUES ($1, 'active') \
-             ON CONFLICT (id) DO UPDATE SET updated_at = now()",
+             ON CONFLICT (id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP",
         )
         .bind(user_uuid)
         .execute(&mut **tx)
@@ -155,14 +155,14 @@ impl PostgresRepository {
             "INSERT INTO cloud_devices (\
                  id, user_id, app_id, platform, client_version, protocol_version, schema_version,\
                  status, external_device_id, first_seen_at, last_seen_at\
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, now(), now()) \
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) \
              ON CONFLICT (user_id, app_id, external_device_id) DO UPDATE SET \
                  client_version = EXCLUDED.client_version,\
                  protocol_version = EXCLUDED.protocol_version,\
                  schema_version = EXCLUDED.schema_version,\
                  platform = EXCLUDED.platform,\
                  external_device_id = EXCLUDED.external_device_id,\
-                 last_seen_at = now()",
+                 last_seen_at = CURRENT_TIMESTAMP",
         )
         .bind(device_uuid)
         .bind(user_uuid)
@@ -180,10 +180,10 @@ impl PostgresRepository {
 
     async fn latest_cursor_raw<'e, E>(&self, executor: E, user_uuid: Uuid) -> Result<u64, ApiError>
     where
-        E: sqlx::Executor<'e, Database = Postgres>,
+        E: sqlx::Executor<'e, Database = Sqlite>,
     {
         let value: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(MAX(cursor), 0)::BIGINT FROM sync_change_log WHERE user_id = $1",
+            "SELECT COALESCE(MAX(cursor), 0) FROM sync_change_log WHERE user_id = $1",
         )
         .bind(user_uuid)
         .fetch_one(executor)
@@ -194,10 +194,10 @@ impl PostgresRepository {
 
     async fn min_valid_cursor<'e, E>(&self, executor: E, user_uuid: Uuid) -> Result<u64, ApiError>
     where
-        E: sqlx::Executor<'e, Database = Postgres>,
+        E: sqlx::Executor<'e, Database = Sqlite>,
     {
         let value: Option<i64> = sqlx::query_scalar(
-            "SELECT MIN(cursor)::BIGINT FROM sync_change_log WHERE user_id = $1",
+            "SELECT MIN(cursor) FROM sync_change_log WHERE user_id = $1",
         )
         .bind(user_uuid)
         .fetch_one(executor)
@@ -240,7 +240,7 @@ impl PostgresRepository {
 
     async fn insert_processed(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut Transaction<'_, Sqlite>,
         user_id: &UserId,
         change: &SyncChangeV1,
         hash_bytes: &[u8],
@@ -268,7 +268,7 @@ impl PostgresRepository {
 }
 
 #[async_trait]
-impl SyncRepository for PostgresRepository {
+impl SyncRepository for SqliteRepository {
     async fn capabilities(&self) -> Result<CapabilitiesResponseV1, ApiError> {
         self.capabilities_impl().await
     }
