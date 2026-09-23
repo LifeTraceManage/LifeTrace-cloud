@@ -85,7 +85,7 @@ impl AuthProvider for DatabaseAuthProvider {
         if !self.tokens.verify(kind, &parsed, &hash) {
             return Err(Self::error(ErrorCode::AuthInvalid, "invalid credential"));
         }
-        let now = Utc::CURRENT_TIMESTAMP;
+        let now = Utc::now();
         let expires_at: chrono::DateTime<Utc> = row
             .try_get("expires_at")
             .map_err(|_| Self::error(ErrorCode::AuthInvalid, "invalid credential"))?;
