@@ -28,18 +28,15 @@ RUN sed -i \
     && apt-get install -y --no-install-recommends ca-certificates curl libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 lifetrace \
-    && mkdir -p /data/photo-staging /app/web /app/photo-challenge \
+    && mkdir -p /data/photo-staging /app/web \
     && chown -R lifetrace:lifetrace /data /app
 
 WORKDIR /app
 COPY --from=rust-builder /build/target/release/lifetrace-cloud /app/lifetrace-cloud
-COPY apps/photo-challenge-pwa/ /app/photo-challenge/
-
 # LifeTrace-web lives in its own private repository. Production Compose mounts
 # the independently built dist directory read-only at /app/web.
 ENV LIFETRACE_DATABASE_PATH=/data/lifetrace.db \
     LIFETRACE_WEB_ROOT=/app/web \
-    LIFETRACE_PHOTO_WEB_ROOT=/app/photo-challenge \
     PHOTO_STAGING_DIR=/data/photo-staging
 
 USER lifetrace
