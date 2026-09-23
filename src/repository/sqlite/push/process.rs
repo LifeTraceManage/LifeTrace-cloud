@@ -303,12 +303,25 @@ impl SqliteRepository {
                     .map_err(Self::internal_error)?;
 
                 let cursor: i64 = sqlx::query_scalar(
-                    "INSERT INTO sync_change_log (\
-                        user_id, entity_type, entity_id, operation, entity_schema_version,\
-                        server_version, payload, payload_hash, tombstone, origin_device_id,\
-                        origin_device_external_id, client_modified_at, server_modified_at\
-                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) \
-                     RETURNING cursor",
+                    r#"
+                    INSERT INTO sync_change_log (
+                        user_id,
+                        entity_type,
+                        entity_id,
+                        operation,
+                        entity_schema_version,
+                        server_version,
+                        payload,
+                        payload_hash,
+                        tombstone,
+                        origin_device_id,
+                        origin_device_external_id,
+                        client_modified_at,
+                        server_modified_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    RETURNING cursor
+                    "#,
                 )
                 .bind(user_uuid)
                 .bind(change.entity_type.as_str())
@@ -329,24 +342,38 @@ impl SqliteRepository {
 
                 if change.operation.as_str() == ChangeOperation::UPSERT {
                     sqlx::query(
-                        "INSERT INTO sync_entities (\
-                            user_id, entity_type, entity_id, entity_schema_version, server_version,\
-                            payload, payload_hash, is_deleted, deleted_at, origin_device_id,\
-                            origin_device_external_id, created_at, server_modified_at,\
-                            client_modified_at, last_cursor\
-                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, NULL, $8, $9, $10, $10, $11, $12) \
-                         ON CONFLICT (user_id, entity_type, entity_id) DO UPDATE SET \
-                            entity_schema_version = EXCLUDED.entity_schema_version,\
-                            server_version = EXCLUDED.server_version,\
-                            payload = EXCLUDED.payload,\
-                            payload_hash = EXCLUDED.payload_hash,\
-                            is_deleted = FALSE,\
-                            deleted_at = NULL,\
-                            origin_device_id = EXCLUDED.origin_device_id,\
-                            origin_device_external_id = EXCLUDED.origin_device_external_id,\
-                            server_modified_at = EXCLUDED.server_modified_at,\
-                            client_modified_at = EXCLUDED.client_modified_at,\
-                            last_cursor = EXCLUDED.last_cursor",
+                        r#"
+                        INSERT INTO sync_entities (
+                            user_id,
+                            entity_type,
+                            entity_id,
+                            entity_schema_version,
+                            server_version,
+                            payload,
+                            payload_hash,
+                            is_deleted,
+                            deleted_at,
+                            origin_device_id,
+                            origin_device_external_id,
+                            created_at,
+                            server_modified_at,
+                            client_modified_at,
+                            last_cursor
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, NULL, $8, $9, $10, $10, $11, $12)
+                        ON CONFLICT (user_id, entity_type, entity_id) DO UPDATE SET
+                            entity_schema_version = EXCLUDED.entity_schema_version,
+                            server_version = EXCLUDED.server_version,
+                            payload = EXCLUDED.payload,
+                            payload_hash = EXCLUDED.payload_hash,
+                            is_deleted = FALSE,
+                            deleted_at = NULL,
+                            origin_device_id = EXCLUDED.origin_device_id,
+                            origin_device_external_id = EXCLUDED.origin_device_external_id,
+                            server_modified_at = EXCLUDED.server_modified_at,
+                            client_modified_at = EXCLUDED.client_modified_at,
+                            last_cursor = EXCLUDED.last_cursor
+                        "#,
                     )
                     .bind(user_uuid)
                     .bind(change.entity_type.as_str())
@@ -365,12 +392,21 @@ impl SqliteRepository {
                     .map_err(Self::db_error)?;
                 } else {
                     sqlx::query(
-                        "UPDATE sync_entities SET \
-                            entity_schema_version = $4, server_version = $5, payload = NULL,\
-                            payload_hash = NULL, is_deleted = TRUE, deleted_at = $6,\
-                            origin_device_id = $7, origin_device_external_id = $8,\
-                            server_modified_at = $6, client_modified_at = $9, last_cursor = $10 \
-                         WHERE user_id = $1 AND entity_type = $2 AND entity_id = $3",
+                        r#"
+                        UPDATE sync_entities
+                        SET entity_schema_version = $4,
+                            server_version = $5,
+                            payload = NULL,
+                            payload_hash = NULL,
+                            is_deleted = TRUE,
+                            deleted_at = $6,
+                            origin_device_id = $7,
+                            origin_device_external_id = $8,
+                            server_modified_at = $6,
+                            client_modified_at = $9,
+                            last_cursor = $10
+                        WHERE user_id = $1 AND entity_type = $2 AND entity_id = $3
+                        "#,
                     )
                     .bind(user_uuid)
                     .bind(change.entity_type.as_str())
