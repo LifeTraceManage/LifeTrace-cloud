@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::fs;
-use uuid;
+use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
 use crate::error::ApiError;
