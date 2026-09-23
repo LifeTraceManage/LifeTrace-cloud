@@ -63,8 +63,9 @@ impl AppState {
             .foreign_keys(true)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal);
+        let max_connections = if config.database_path == ":memory:" { 1 } else { 4 };
         let pool = SqlitePoolOptions::new()
-            .max_connections(4)
+            .max_connections(max_connections)
             .connect_lazy_with(connect_options);
 
         let store: Arc<dyn SyncRepository> = Arc::new(SqliteRepository::new(
