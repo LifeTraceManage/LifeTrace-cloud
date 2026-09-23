@@ -6,7 +6,7 @@ LifeTrace Web 的正式源码位于 `LifeTrace-cloud/apps/web`，与 Rust Cloud 
 
 ```bash
 cd apps/web
-npm ci
+npm install
 npm run dev
 ```
 
