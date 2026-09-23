@@ -18,7 +18,7 @@ use crate::state::AppState;
 
 /// Assemble the public Cloud HTTP surface.
 ///
-/// Finance is exposed through the BeeCount-compatible PostgreSQL-backed routes;
+/// Finance is exposed through the BeeCount-compatible SQLite-backed routes;
 /// the retired in-memory Finance CRUD example is no longer part of the router.
 pub fn router(state: AppState) -> Router<AppState> {
     Router::<AppState>::new()
