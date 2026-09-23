@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::{Duration, Utc};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{SqlitePool, Sqlite, Transaction};
 use thiserror::Error;
-use uuid::Uuid;
+use uuid;
 
 use lifetrace_contracts::UserId;
 
@@ -68,13 +68,13 @@ impl From<MailProtocolError> for MailServiceError {
 
 #[derive(Clone)]
 pub struct MailService {
-    pool: PgPool,
+    pool: SqlitePool,
     database_enabled: bool,
     config: Arc<Config>,
 }
 
 impl MailService {
-    pub fn new(pool: PgPool, database_enabled: bool, config: Arc<Config>) -> Self {
+    pub fn new(pool: SqlitePool, database_enabled: bool, config: Arc<Config>) -> Self {
         Self {
             pool,
             database_enabled,
@@ -296,7 +296,7 @@ impl MailService {
         sqlx::query(
             r#"
             UPDATE mail_accounts
-            SET status=$3,idle_supported=$4,last_validated_at=now(),last_error_code=$5,updated_at=now()
+            SET status=$3,idle_supported=$4,last_validated_at=CURRENT_TIMESTAMP,last_error_code=$5,updated_at=CURRENT_TIMESTAMP
             WHERE user_id=$1 AND id=$2
             "#,
         )
@@ -328,7 +328,7 @@ impl MailService {
             r#"
             UPDATE mail_accounts
             SET status='disabled',credential_ciphertext=decode('', 'hex'),credential_nonce=decode('', 'hex'),
-                deleted_at=now(),updated_at=now()
+                deleted_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
             WHERE user_id=$1 AND id=$2 AND deleted_at IS NULL
             "#,
         )
@@ -357,7 +357,7 @@ impl MailService {
                 ON CONFLICT (account_id,remote_name)
                 DO UPDATE SET normalized_role=EXCLUDED.normalized_role,
                               sync_enabled=TRUE,
-                              updated_at=now()
+                              updated_at=CURRENT_TIMESTAMP
                 "#,
             )
             .bind(Uuid::new_v4())
@@ -412,7 +412,7 @@ impl MailService {
             r#"
             SELECT user_id,id FROM mail_accounts
             WHERE deleted_at IS NULL AND status IN ('active','degraded')
-              AND (last_sync_at IS NULL OR last_sync_at < now() - interval '2 minutes')
+              AND (last_sync_at IS NULL OR last_sync_at < CURRENT_TIMESTAMP - interval '2 minutes')
             ORDER BY last_sync_at NULLS FIRST LIMIT $1
             "#,
         )
@@ -453,11 +453,11 @@ impl MailService {
         }
 
         let mut total = 0;
-        let initial_since = Utc::now() - Duration::days(30);
+        let initial_since = Utc::CURRENT_TIMESTAMP - Duration::days(30);
         for folder in folders {
             let job_id = Uuid::new_v4();
             sqlx::query(
-                "INSERT INTO mail_sync_jobs (id,account_id,folder_id,kind,state,started_at,created_at) VALUES ($1,$2,$3,$4,'running',now(),now())",
+                "INSERT INTO mail_sync_jobs (id,account_id,folder_id,kind,state,started_at,created_at) VALUES ($1,$2,$3,$4,'running',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
             )
             .bind(job_id)
             .bind(account_id)
@@ -481,14 +481,14 @@ impl MailService {
                         .await?;
                     total += count;
                     sqlx::query(
-                        "UPDATE mail_sync_jobs SET state='success',finished_at=now() WHERE id=$1",
+                        "UPDATE mail_sync_jobs SET state='success',finished_at=CURRENT_TIMESTAMP WHERE id=$1",
                     )
                     .bind(job_id)
                     .execute(&self.pool)
                     .await?;
                 }
                 Err(error) => {
-                    sqlx::query("UPDATE mail_sync_jobs SET state='retry_wait',attempt=attempt+1,finished_at=now(),next_retry_at=now()+interval '3 minutes',error_code='MAIL_SYNC_FAILED',error_detail_redacted=$2 WHERE id=$1")
+                    sqlx::query("UPDATE mail_sync_jobs SET state='retry_wait',attempt=attempt+1,finished_at=CURRENT_TIMESTAMP,next_retry_at=CURRENT_TIMESTAMP+interval '3 minutes',error_code='MAIL_SYNC_FAILED',error_detail_redacted=$2 WHERE id=$1")
                         .bind(job_id)
                         .bind(error.to_string())
                         .execute(&self.pool)
@@ -496,7 +496,7 @@ impl MailService {
                 }
             }
         }
-        sqlx::query("UPDATE mail_accounts SET last_sync_at=now(),updated_at=now() WHERE user_id=$1 AND id=$2")
+        sqlx::query("UPDATE mail_accounts SET last_sync_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND id=$2")
             .bind(user_id)
             .bind(account_id)
             .execute(&self.pool)
@@ -545,7 +545,7 @@ impl MailService {
             }
         }
         sqlx::query(
-            "UPDATE mail_folders SET uidvalidity=$2,uidnext=$3,last_seen_uid=$4,last_sync_at=now(),updated_at=now() WHERE id=$1",
+            "UPDATE mail_folders SET uidvalidity=$2,uidnext=$3,last_seen_uid=$4,last_sync_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=$1",
         )
         .bind(folder.id)
         .bind(i64::from(snapshot.uidvalidity))
@@ -577,10 +577,10 @@ impl MailService {
             SELECT id,account_id,normalized_subject,latest_message_at,message_count,unread_count,participant_summary,snippet
             FROM mail_threads
             WHERE user_id=$1
-              AND ($2::uuid IS NULL OR account_id=$2)
-              AND ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM mail_messages m WHERE m.thread_id=mail_threads.id AND m.folder_id=$3))
-              AND ($4::text IS NULL OR normalized_subject ILIKE '%' || $4 || '%' OR coalesce(snippet,'') ILIKE '%' || $4 || '%')
-              AND ($5::boolean IS NULL OR ($5=TRUE AND unread_count>0) OR $5=FALSE)
+              AND ($2 IS NULL OR account_id=$2)
+              AND ($3 IS NULL OR EXISTS (SELECT 1 FROM mail_messages m WHERE m.thread_id=mail_threads.id AND m.folder_id=$3))
+              AND ($4 IS NULL OR normalized_subject ILIKE '%' || $4 || '%' OR coalesce(snippet,'') ILIKE '%' || $4 || '%')
+              AND ($5 IS NULL OR ($5=TRUE AND unread_count>0) OR $5=FALSE)
             ORDER BY latest_message_at DESC NULLS LAST
             LIMIT $6 OFFSET $7
             "#,
@@ -661,7 +661,7 @@ impl MailService {
         let secret = self.decrypt_secret(&account)?;
         protocol::set_seen(account, secret, remote.folder_name, remote.uid as u32, read).await?;
         sqlx::query(
-            "UPDATE mail_messages SET is_read=$3,updated_at=now() WHERE user_id=$1 AND id=$2",
+            "UPDATE mail_messages SET is_read=$3,updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND id=$2",
         )
         .bind(user_id)
         .bind(message_id)
@@ -699,7 +699,7 @@ impl MailService {
         )
         .await?;
         sqlx::query(
-            "UPDATE mail_messages SET is_archived=TRUE,updated_at=now() WHERE user_id=$1 AND id=$2",
+            "UPDATE mail_messages SET is_archived=TRUE,updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND id=$2",
         )
         .bind(user_id)
         .bind(message_id)
@@ -772,7 +772,7 @@ impl MailService {
             return Ok(existing.2.unwrap_or(generated_message_id));
         }
         let claimed = sqlx::query(
-            "UPDATE mail_outbox SET state='sending',attempt=attempt+1,updated_at=now() WHERE id=$1 AND state IN ('queued','retry_wait','failed')",
+            "UPDATE mail_outbox SET state='sending',attempt=attempt+1,updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND state IN ('queued','retry_wait','failed')",
         )
         .bind(existing.0)
         .execute(&self.pool)
@@ -804,14 +804,14 @@ impl MailService {
         .await
         {
             Ok(()) => {
-                sqlx::query("UPDATE mail_outbox SET state='sent',sent_at=now(),updated_at=now(),last_error_code=NULL WHERE id=$1")
+                sqlx::query("UPDATE mail_outbox SET state='sent',sent_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,last_error_code=NULL WHERE id=$1")
                     .bind(existing.0)
                     .execute(&self.pool)
                     .await?;
                 Ok(message_id)
             }
             Err(_) => {
-                sqlx::query("UPDATE mail_outbox SET state='retry_wait',next_retry_at=now()+interval '3 minutes',updated_at=now(),last_error_code='MAIL_SEND_FAILED' WHERE id=$1")
+                sqlx::query("UPDATE mail_outbox SET state='retry_wait',next_retry_at=CURRENT_TIMESTAMP+interval '3 minutes',updated_at=CURRENT_TIMESTAMP,last_error_code='MAIL_SEND_FAILED' WHERE id=$1")
                     .bind(existing.0)
                     .execute(&self.pool)
                     .await?;
@@ -872,7 +872,7 @@ FROM mail_messages WHERE user_id=$1 AND id=$2
 "#;
 
 async fn persist_message(
-    transaction: &mut Transaction<'_, Postgres>,
+    transaction: &mut Transaction<'_, Sqlite>,
     user_id: Uuid,
     folder: &MailFolder,
     uidvalidity: i64,
@@ -894,7 +894,7 @@ async fn persist_message(
         .any(|flag| flag.eq_ignore_ascii_case("\\Seen") || flag.eq_ignore_ascii_case("Seen"));
     if let Some(message_id) = existing {
         sqlx::query(
-            "UPDATE mail_messages SET flags_json=$2,is_read=$3,updated_at=now() WHERE id=$1",
+            "UPDATE mail_messages SET flags_json=$2,is_read=$3,updated_at=CURRENT_TIMESTAMP WHERE id=$1",
         )
         .bind(message_id)
         .bind(serde_json::to_value(&remote.flags).unwrap_or_default())
@@ -1009,7 +1009,7 @@ async fn persist_message(
 }
 
 async fn refresh_thread(
-    transaction: &mut Transaction<'_, Postgres>,
+    transaction: &mut Transaction<'_, Sqlite>,
     thread_id: Uuid,
 ) -> Result<(), MailServiceError> {
     sqlx::query(
@@ -1020,12 +1020,12 @@ async fn refresh_thread(
             unread_count=s.unread_count,
             snippet=s.snippet,
             participant_summary=s.participant_summary,
-            updated_at=now()
+            updated_at=CURRENT_TIMESTAMP
         FROM (
             SELECT thread_id,max(received_at) AS latest_message_at,count(*)::int AS message_count,
                    count(*) FILTER (WHERE NOT is_read)::int AS unread_count,
                    (array_agg(snippet ORDER BY received_at DESC))[1] AS snippet,
-                   (array_agg(from_json::text ORDER BY received_at DESC))[1] AS participant_summary
+                   (array_agg(from_json ORDER BY received_at DESC))[1] AS participant_summary
             FROM mail_messages WHERE thread_id=$1 GROUP BY thread_id
         ) s WHERE t.id=s.thread_id
         "#,
@@ -1036,17 +1036,17 @@ async fn refresh_thread(
     Ok(())
 }
 
-async fn refresh_thread_pool(pool: &PgPool, thread_id: Uuid) -> Result<(), MailServiceError> {
+async fn refresh_thread_pool(pool: &SqlitePool, thread_id: Uuid) -> Result<(), MailServiceError> {
     sqlx::query(
         r#"
         UPDATE mail_threads t SET
             latest_message_at=s.latest_message_at,message_count=s.message_count,unread_count=s.unread_count,
-            snippet=s.snippet,participant_summary=s.participant_summary,updated_at=now()
+            snippet=s.snippet,participant_summary=s.participant_summary,updated_at=CURRENT_TIMESTAMP
         FROM (
             SELECT thread_id,max(received_at) AS latest_message_at,count(*)::int AS message_count,
                    count(*) FILTER (WHERE NOT is_read)::int AS unread_count,
                    (array_agg(snippet ORDER BY received_at DESC))[1] AS snippet,
-                   (array_agg(from_json::text ORDER BY received_at DESC))[1] AS participant_summary
+                   (array_agg(from_json ORDER BY received_at DESC))[1] AS participant_summary
             FROM mail_messages WHERE thread_id=$1 GROUP BY thread_id
         ) s WHERE t.id=s.thread_id
         "#,

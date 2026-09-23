@@ -6,8 +6,8 @@ use lifetrace_contracts::{ErrorCode, UserId};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx::{PgPool, Postgres, Row, Transaction};
-use uuid::Uuid;
+use sqlx::{SqlitePool, Sqlite, Row, Transaction};
+use uuid;
 
 use crate::error::ApiError;
 
@@ -70,11 +70,11 @@ impl AttachmentKind {
 
 #[derive(Clone)]
 pub struct BeeCountAttachmentService {
-    pool: PgPool,
+    pool: SqlitePool,
 }
 
 impl BeeCountAttachmentService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
 
@@ -154,7 +154,7 @@ impl BeeCountAttachmentService {
         let file_uuid = Uuid::new_v4();
         let file_id = file_uuid.to_string();
         let file_entity_id = format!("{FILE_ENTITY_PREFIX}{file_id}");
-        let created_at = Utc::now();
+        let created_at = Utc::CURRENT_TIMESTAMP;
         let inserted = sqlx::query(
             "INSERT INTO cloud_file_blobs ( \
                 id,user_id,file_entity_id,ledger_id,attachment_kind,sha256,size_bytes, \
@@ -246,7 +246,7 @@ impl BeeCountAttachmentService {
             .cloned()
             .collect::<Vec<_>>();
         let rows = sqlx::query(
-            "SELECT id::text,sha256,size_bytes,mime_type FROM cloud_file_blobs \
+            "SELECT id,sha256,size_bytes,mime_type FROM cloud_file_blobs \
              WHERE user_id=$1 AND ledger_id=$2 \
                AND attachment_kind='transaction_attachment' AND sha256=ANY($3)",
         )
@@ -327,14 +327,14 @@ impl BeeCountAttachmentService {
 }
 
 async fn find_existing(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Sqlite>,
     user_id: Uuid,
     ledger_id: Option<&str>,
     kind: AttachmentKind,
     sha256: &str,
 ) -> Result<Option<AttachmentUploadOut>, ApiError> {
     let row = sqlx::query(
-        "SELECT id::text,ledger_id,sha256,size_bytes,mime_type,file_name,created_at \
+        "SELECT id,ledger_id,sha256,size_bytes,mime_type,file_name,created_at \
          FROM cloud_file_blobs WHERE user_id=$1 AND attachment_kind=$2 AND sha256=$3 \
            AND ledger_id IS NOT DISTINCT FROM $4 LIMIT 1",
     )
@@ -348,7 +348,7 @@ async fn find_existing(
     row.map(upload_from_row).transpose()
 }
 
-fn upload_from_row(row: sqlx::postgres::PgRow) -> Result<AttachmentUploadOut, ApiError> {
+fn upload_from_row(row: sqlx::sqlite::SqliteRow) -> Result<AttachmentUploadOut, ApiError> {
     Ok(AttachmentUploadOut {
         file_id: row.try_get("id").map_err(internal)?,
         ledger_id: row
@@ -365,7 +365,7 @@ fn upload_from_row(row: sqlx::postgres::PgRow) -> Result<AttachmentUploadOut, Ap
 
 #[allow(clippy::too_many_arguments)]
 async fn persist_file_metadata(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Sqlite>,
     user_id: Uuid,
     device_id: Uuid,
     external_device_id: &str,

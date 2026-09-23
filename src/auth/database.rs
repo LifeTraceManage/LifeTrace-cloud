@@ -6,7 +6,7 @@ use chrono::Utc;
 use lifetrace_contracts::auth::v1::{AppInstallationId, AuthSessionId};
 use lifetrace_contracts::sync::v1::AppId;
 use lifetrace_contracts::{ErrorCode, UserId};
-use sqlx::{PgPool, Row};
+use sqlx::{SqlitePool, Row};
 
 use crate::auth::token::{TokenKind, TokenManager};
 use crate::auth::{AuthCredential, AuthMethod, AuthProvider, AuthenticatedPrincipal};
@@ -14,12 +14,12 @@ use crate::error::ApiError;
 
 #[derive(Clone)]
 pub struct DatabaseAuthProvider {
-    pool: PgPool,
+    pool: SqlitePool,
     tokens: TokenManager,
 }
 
 impl DatabaseAuthProvider {
-    pub fn new(pool: PgPool, tokens: TokenManager) -> Self {
+    pub fn new(pool: SqlitePool, tokens: TokenManager) -> Self {
         Self { pool, tokens }
     }
 
@@ -85,7 +85,7 @@ impl AuthProvider for DatabaseAuthProvider {
         if !self.tokens.verify(kind, &parsed, &hash) {
             return Err(Self::error(ErrorCode::AuthInvalid, "invalid credential"));
         }
-        let now = Utc::now();
+        let now = Utc::CURRENT_TIMESTAMP;
         let expires_at: chrono::DateTime<Utc> = row
             .try_get("expires_at")
             .map_err(|_| Self::error(ErrorCode::AuthInvalid, "invalid credential"))?;
@@ -165,13 +165,13 @@ impl AuthProvider for DatabaseAuthProvider {
             .into_iter()
             .filter(|scope| grant_scopes.contains(scope))
             .collect();
-        let session_id: uuid::Uuid = row
+        let session_id: uuid = row
             .try_get("session_id")
             .map_err(|_| Self::error(ErrorCode::AuthInvalid, "invalid credential"))?;
-        let user_id: uuid::Uuid = row
+        let user_id: uuid = row
             .try_get("user_id")
             .map_err(|_| Self::error(ErrorCode::AuthInvalid, "invalid credential"))?;
-        let device_id: uuid::Uuid = row
+        let device_id: uuid = row
             .try_get("device_id")
             .map_err(|_| Self::error(ErrorCode::AuthInvalid, "invalid credential"))?;
         let app_id: String = row
@@ -179,12 +179,12 @@ impl AuthProvider for DatabaseAuthProvider {
             .map_err(|_| Self::error(ErrorCode::AuthInvalid, "invalid credential"))?;
 
         if kind == TokenKind::Access {
-            let _ = sqlx::query("UPDATE auth_access_tokens SET last_used_at = now() WHERE id = $1")
+            let _ = sqlx::query("UPDATE auth_access_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE id = $1")
                 .bind(parsed.id)
                 .execute(&self.pool)
                 .await;
         }
-        let _ = sqlx::query("UPDATE auth_sessions SET last_seen_at = now() WHERE id = $1")
+        let _ = sqlx::query("UPDATE auth_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1")
             .bind(session_id)
             .execute(&self.pool)
             .await;
