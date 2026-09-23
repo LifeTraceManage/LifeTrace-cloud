@@ -182,7 +182,7 @@ impl AuthService {
         normalized: &str,
         context: &RequestContext,
     ) -> Result<(), ApiError> {
-        let since = Utc::CURRENT_TIMESTAMP - Duration::seconds(self.config.auth_login_window_seconds as i64);
+        let since = Utc::now() - Duration::seconds(self.config.auth_login_window_seconds as i64);
         let account_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM auth_login_attempts WHERE email_hash=$1 AND succeeded=FALSE AND attempted_at >= $2"
         ).bind(self.hash_email(normalized)).bind(since).fetch_one(&self.pool).await.map_err(Self::db)?;
@@ -239,7 +239,7 @@ impl AuthService {
                 StatusCode::INTERNAL_SERVER_ERROR,
             )
         })?;
-        let expires: DateTime<Utc> = row.try_get("expires_at").unwrap_or_else(|_| Utc::CURRENT_TIMESTAMP);
+        let expires: DateTime<Utc> = row.try_get("expires_at").unwrap_or_else(|_| Utc::now());
         let restricted: Option<String> = row.try_get("email_normalized").ok();
         let unavailable = row
             .try_get::<Option<DateTime<Utc>>, _>("used_at")
@@ -251,7 +251,7 @@ impl AuthService {
                 .ok()
                 .flatten()
                 .is_some()
-            || expires <= Utc::CURRENT_TIMESTAMP
+            || expires <= Utc::now()
             || restricted
                 .as_deref()
                 .is_some_and(|value| value != normalized)
@@ -455,7 +455,7 @@ impl AuthService {
             .try_get::<Option<DateTime<Utc>>, _>("locked_until")
             .ok()
             .flatten()
-            .is_some_and(|until| until > Utc::CURRENT_TIMESTAMP)
+            .is_some_and(|until| until > Utc::now())
         {
             return Err(Self::error(
                 ErrorCode::AuthUserLocked,
@@ -549,7 +549,7 @@ impl AuthService {
         public_device: bool,
         context: &RequestContext,
     ) -> Result<TokenResponseV1, ApiError> {
-        let now = Utc::CURRENT_TIMESTAMP;
+        let now = Utc::now();
         let absolute_seconds = if public_device {
             self.config.auth_public_device_ttl_seconds
         } else {
@@ -667,7 +667,7 @@ impl AuthService {
                     StatusCode::UNAUTHORIZED,
                 )
             })?;
-        let now = Utc::CURRENT_TIMESTAMP;
+        let now = Utc::now();
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
         let row = sqlx::query(
             "SELECT rt.token_hash,rt.session_id,rt.family_id,rt.used_at,rt.replaced_by_token_id,rt.revoked_at,rt.idle_expires_at,rt.absolute_expires_at, \
@@ -1370,7 +1370,7 @@ impl AuthService {
             let mut tx = self.pool.begin().await.map_err(Self::db)?;
             sqlx::query("UPDATE auth_password_reset_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE user_id=$1 AND used_at IS NULL AND revoked_at IS NULL").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
             sqlx::query("INSERT INTO auth_password_reset_tokens (id,user_id,token_hash,expires_at,requested_ip) VALUES ($1,$2,$3,$4,CAST($5 AS inet))")
-                .bind(token.id).bind(user_id).bind(&token.hash).bind(Utc::CURRENT_TIMESTAMP+Duration::seconds(self.config.auth_reset_token_ttl_seconds as i64)).bind(Self::ip(context))
+                .bind(token.id).bind(user_id).bind(&token.hash).bind(Utc::now()+Duration::seconds(self.config.auth_reset_token_ttl_seconds as i64)).bind(Self::ip(context))
                 .execute(&mut *tx).await.map_err(Self::db)?;
             self.audit(
                 &mut *tx,
@@ -1448,8 +1448,8 @@ impl AuthService {
         }
         if row
             .try_get::<DateTime<Utc>, _>("expires_at")
-            .unwrap_or_else(|_| Utc::CURRENT_TIMESTAMP)
-            <= Utc::CURRENT_TIMESTAMP
+            .unwrap_or_else(|_| Utc::now())
+            <= Utc::now()
         {
             return Err(Self::error(
                 ErrorCode::AuthPasswordResetExpired,
@@ -1517,7 +1517,7 @@ impl AuthService {
             public_device: request.public_device,
         };
         let verified = self.verify_and_prepare_login(&input, context).await?;
-        let now = Utc::CURRENT_TIMESTAMP;
+        let now = Utc::now();
         let absolute_seconds = if input.public_device {
             self.config.auth_public_device_ttl_seconds
         } else {
@@ -1744,7 +1744,7 @@ impl AuthService {
         let token = self.tokens.generate(TokenKind::Invite);
         let normalized = email.map(Self::normalize_email);
         sqlx::query("INSERT INTO auth_registration_invites (id,token_hash,email_normalized,expires_at,created_by) VALUES ($1,$2,$3,$4,$5)")
-            .bind(token.id).bind(&token.hash).bind(normalized).bind(Utc::CURRENT_TIMESTAMP+Duration::seconds(expires_in_seconds as i64)).bind(created_by)
+            .bind(token.id).bind(&token.hash).bind(normalized).bind(Utc::now()+Duration::seconds(expires_in_seconds as i64)).bind(created_by)
             .execute(&self.pool).await.map_err(Self::db)?;
         Ok(token.raw)
     }
@@ -1776,7 +1776,7 @@ impl AuthService {
                 .try_get::<String, _>("auth_state")
                 .unwrap_or_else(|_| row.try_get::<String, _>("status").unwrap_or_default()),
             email_verified_at: row.try_get("email_verified_at").ok(),
-            created_at: row.try_get("created_at").unwrap_or_else(|_| Utc::CURRENT_TIMESTAMP),
+            created_at: row.try_get("created_at").unwrap_or_else(|_| Utc::now()),
             password_changed_at: row.try_get("password_changed_at").ok(),
         })
     }
