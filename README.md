@@ -100,15 +100,44 @@ cargo run --manifest-path tools/contract-exporter/Cargo.toml
 
 ## Docker 与部署
 
-根目录 `Dockerfile` 构建 Cloud 镜像。部署样例位于 `deploy/cloud/`：
+生产部署只保留一条路径：`deploy/cloud/docker-compose.production.yml`。
 
-- `docker-compose.local.yml`：本地开发
-- `docker-compose.test.yml`：测试
-- `docker-compose.production.yml`：生产 Compose
-- `Caddyfile.production`：生产反向代理
-- `deploy-production.sh`：生产部署脚本
+运行栈：
 
-生产环境至少需要 PostgreSQL、显式 HTTPS Origin、强随机认证密钥/pepper，并应关闭运行时自动 migration，使用独立 migration 身份执行数据库升级。
+```text
+PostgreSQL
+    ↑
+LifeTrace Cloud ── mail worker
+    └───────────── execution worker
+    ↑
+Web/Caddy (:80 / :8869)
+```
+
+Cloud 在启动时执行数据库 migration，因此生产环境不再维护单独的 migration 容器。部署配置只使用 `deploy/cloud/.env.production` 一份环境文件。
+
+首次部署或更新：
+
+```bash
+cp deploy/cloud/.env.production.example deploy/cloud/.env.production
+# 编辑 .env.production
+bash deploy/cloud/deploy-production.sh
+```
+
+如果服务器已经固定在某个 checkout，不希望脚本切换到 `main`：
+
+```bash
+bash deploy/cloud/deploy-production.sh --skip-git-update
+```
+
+底层实际只有三步：
+
+```bash
+docker compose --env-file .env.production -f docker-compose.production.yml pull
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans --wait
+docker compose --env-file .env.production -f docker-compose.production.yml ps
+```
+
+不再维护 WSL 专用 Compose、production example Compose 或多套 Caddy 模板。开发环境使用 `docker-compose.local.yml`，CI 数据库测试使用 `docker-compose.test.yml`。
 
 ## 对象存储
 
