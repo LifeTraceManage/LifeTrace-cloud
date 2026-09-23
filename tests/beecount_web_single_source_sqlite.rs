@@ -9,9 +9,9 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn config(database_url: String) -> Config {
+fn config(database_path: String) -> Config {
     Config {
-        database_path: database_url,
+        database_path,
         migration_on_startup: true,
         dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
@@ -72,7 +72,7 @@ async fn clone_without_beecount_provenance(
             payload_hash,is_deleted,deleted_at,NULL,NULL, \
             created_at,server_modified_at,client_modified_at,last_cursor \
          FROM sync_entities \
-         WHERE user_id=$1::uuid AND entity_type=$2 AND entity_id=$3",
+         WHERE user_id=$1 AND entity_type=$2 AND entity_id=$3",
     )
     .bind(user_id)
     .bind(entity_type)
@@ -86,10 +86,10 @@ async fn clone_without_beecount_provenance(
 
 #[tokio::test]
 async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
+    let Ok(database_path) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
-    let state = AppState::new(config(database_url));
+    let state = AppState::new(config(database_path));
     assert!(state.beecount_adapter.is_none());
     state.initialize().await.unwrap();
     let router = app(state.clone());
@@ -197,7 +197,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     assert_eq!(pushed["accepted"], 6);
 
     let stored: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM sync_entities WHERE user_id=$1::uuid AND entity_type LIKE 'finance.%' AND is_deleted=FALSE",
+        "SELECT COUNT(*) FROM sync_entities WHERE user_id=$1 AND entity_type LIKE 'finance.%' AND is_deleted=FALSE",
     )
     .bind(&user_id)
     .fetch_one(&state.pool)
@@ -234,8 +234,8 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     .await;
 
     let legacy_clock_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM beecount_entity_clocks \
-         WHERE user_id=$1::uuid AND lifetrace_entity_id LIKE 'legacy-%'",
+        "SELECT COUNT(*) FROM beecount_entity_clocks \
+         WHERE user_id=$1 AND lifetrace_entity_id LIKE 'legacy-%'",
     )
     .bind(&user_id)
     .fetch_one(&state.pool)
