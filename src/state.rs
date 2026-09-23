@@ -23,11 +23,8 @@ pub enum StartupError {
 /// Cloneable shared state for handlers.
 #[derive(Clone)]
 pub struct AppState {
-    /// A real SQLx pool is always present. Production and configured cloud
-    /// environments use it for every sync and authentication operation; the
-    /// memory repository is retained only for in-process protocol tests.
-    pub pool: PgPool,
-    pub database_enabled: bool,
+    /// Embedded SQLite pool shared by all persistent subsystems.
+    pub pool: SqlitePool,
     pub store: Arc<dyn SyncRepository>,
     pub config: Arc<Config>,
     pub auth: Arc<dyn AuthProvider>,
