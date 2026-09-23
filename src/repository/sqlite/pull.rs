@@ -31,7 +31,7 @@ impl SqliteRepository {
                 .iter()
                 .map(|descriptor| descriptor.entity_type.to_owned())
                 .collect(),
-            server_time: Self::CURRENT_TIMESTAMP,
+            server_time: Self::now(),
         })
     }
 
@@ -157,7 +157,7 @@ impl SqliteRepository {
             .unwrap_or(after);
         Ok(PullResponseV1 {
             request_id: request.request_id.clone(),
-            server_time: Self::CURRENT_TIMESTAMP,
+            server_time: Self::now(),
             changes,
             next_cursor: self.cursor_codec.encode(user_id, &scope, next_position),
             has_more,
