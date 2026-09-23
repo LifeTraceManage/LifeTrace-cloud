@@ -1,4 +1,4 @@
-//! PostgreSQL integration coverage for EPIC-03 runtime persistence.
+//! SQLite integration coverage for EPIC-03 runtime persistence.
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
@@ -89,12 +89,12 @@ fn push_request() -> PushRequestV1 {
 #[tokio::test]
 async fn postgres_runtime_migrates_persists_and_replays_idempotently() {
     let Some(url) = database_url() else {
-        eprintln!("TEST_DATABASE_URL not set; PostgreSQL integration test skipped");
+        eprintln!("TEST_DATABASE_URL not set; SQLite integration test skipped");
         return;
     };
 
     let config = Config {
-        database_url: Some(url),
+        database_path: url,
         migration_on_startup: true,
         dev_auth_token: "postgres-token".to_owned(),
         dev_auth_user_id: "postgres-user".to_owned(),
@@ -143,8 +143,8 @@ async fn postgres_runtime_migrates_persists_and_replays_idempotently() {
         .await
         .unwrap();
     let ready_json: Value = serde_json::from_slice(&ready_body).unwrap();
-    assert_eq!(ready_json["checks"]["storage"], "postgresql");
-    assert_eq!(ready_json["checks"]["postgresql"], true);
+    assert_eq!(ready_json["checks"]["storage"], "sqlite");
+    assert_eq!(ready_json["checks"]["sqlite"], true);
 
     drop(state);
 
