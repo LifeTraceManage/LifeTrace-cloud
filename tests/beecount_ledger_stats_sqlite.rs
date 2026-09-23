@@ -8,9 +8,9 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn config(database_url: String) -> Config {
+fn config(database_path: String) -> Config {
     Config {
-        database_path: database_url,
+        database_path,
         migration_on_startup: true,
         dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
@@ -81,10 +81,10 @@ async fn register(router: axum::Router) -> (String, String, String) {
 
 #[tokio::test]
 async fn stock_ledger_stats_match_current_ledger_and_user_totals() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
+    let Ok(database_path) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
-    let state = AppState::new(config(database_url));
+    let state = AppState::new(config(database_path));
     state.initialize().await.unwrap();
     let router = app(state.clone());
     let (token, external_device_id, user_id) = register(router.clone()).await;
