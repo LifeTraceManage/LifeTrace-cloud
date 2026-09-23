@@ -1,6 +1,3 @@
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
-
 CREATE TABLE cloud_users (
     id TEXT PRIMARY KEY,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
