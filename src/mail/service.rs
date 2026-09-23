@@ -372,6 +372,13 @@ impl MailService {
         .execute(&self.pool)
         .await?;
         sqlx::query(
+            "DELETE FROM mail_draft_attachments WHERE user_id=$1 AND draft_id IN (SELECT id FROM mail_drafts WHERE user_id=$1 AND account_id=$2 AND state='draft')",
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await?;
+        sqlx::query(
             "UPDATE mail_drafts SET state='canceled',updated_at=now() WHERE user_id=$1 AND account_id=$2 AND state='draft'",
         )
         .bind(Self::user_uuid(user_id)?)
@@ -1158,6 +1165,13 @@ impl MailService {
         draft_id: Uuid,
     ) -> Result<(), MailServiceError> {
         self.require_database()?;
+        sqlx::query(
+            "DELETE FROM mail_draft_attachments WHERE user_id=$1 AND draft_id=$2",
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .bind(draft_id)
+        .execute(&self.pool)
+        .await?;
         let result = sqlx::query(
             "UPDATE mail_drafts SET state='canceled',updated_at=now() WHERE user_id=$1 AND id=$2 AND state='draft'",
         )
@@ -1326,7 +1340,7 @@ impl MailService {
         &self,
         user_id: &UserId,
         account_id: Uuid,
-        input: SendMailInput,
+        mut input: SendMailInput,
     ) -> Result<String, MailServiceError> {
         self.require_database()?;
         let user_id = Self::user_uuid(user_id)?;
@@ -1357,6 +1371,21 @@ impl MailService {
             .await?
         };
         let from_address = identity.as_ref().map(|value| value.email_address.as_str());
+        if let Some(signature) = identity
+            .as_ref()
+            .and_then(|value| value.signature_html.as_deref())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            let body = input.body_text.trim_end();
+            input.body_text = if body.is_empty() {
+                signature.to_owned()
+            } else if body.ends_with(signature) {
+                input.body_text
+            } else {
+                format!("{body}\n\n{signature}")
+            };
+        }
         let domain = account
             .email_address
             .split('@')
