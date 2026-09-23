@@ -32,7 +32,7 @@ impl SqliteRepository {
                   FROM sync_change_log
                   WHERE user_id = $1
                   ORDER BY cursor DESC
-                  OFFSET $2 LIMIT 1
+                  LIMIT 1 OFFSET $2
               ), 0)
             "#,
         )
