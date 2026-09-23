@@ -22,26 +22,59 @@ jobs:
       AUTH_TOKEN_HASH_PEPPER: cloud-ci-token-pepper
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install Web dependencies
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck Web
+        working-directory: apps/web
+        run: npm run typecheck
+
+      - name: Test Web
+        working-directory: apps/web
+        run: npm test
+
+      - name: Build Web
+        working-directory: apps/web
+        run: npm run build
+
+      - name: Verify Web dist
+        run: test -s apps/web/dist/index.html
+
       - name: Validate OpenSpec repository
         run: npx --yes @fission-ai/openspec@1.13.0 validate --all --strict --no-interactive
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
           components: rustfmt, clippy
+
       - uses: Swatinem/rust-cache@v2
+
       - run: cargo fmt --check
       - run: cargo test --locked -- --test-threads=1
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --manifest-path crates/lifetrace-contracts/Cargo.toml
       - run: cargo test --manifest-path crates/lifetrace-sync-client/Cargo.toml
+
       - name: Regenerate contracts
         run: cargo run --manifest-path tools/contract-exporter/Cargo.toml
+
       - name: Upload generated contracts
         uses: actions/upload-artifact@v4
         with:
           name: generated-contracts
           path: contracts/
           if-no-files-found: error
+
       - name: Commit generated contracts on this PR branch
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
@@ -49,11 +82,12 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add contracts/
-            git commit -m "contracts: regenerate Assets Sync v1 artifacts"
+            git commit -m "contracts: regenerate generated artifacts"
             git fetch origin "${{ github.head_ref }}"
             git rebase "origin/${{ github.head_ref }}"
             git push origin HEAD:"${{ github.head_ref }}"
           fi
+
       - name: Require committed generated contracts
         run: |
           git diff --exit-code -- contracts/
@@ -61,7 +95,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
