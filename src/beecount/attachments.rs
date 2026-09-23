@@ -1,4 +1,4 @@
-//! BeeCount-compatible attachment persistence over LifeTrace PostgreSQL.
+//! BeeCount-compatible attachment persistence over LifeTrace SQLite.
 
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
@@ -245,14 +245,15 @@ impl BeeCountAttachmentService {
             .filter(|value| valid_sha256(value))
             .cloned()
             .collect::<Vec<_>>();
+        let query_hashes_json = serde_json::to_string(&query_hashes).map_err(internal)?;
         let rows = sqlx::query(
             "SELECT id,sha256,size_bytes,mime_type FROM cloud_file_blobs \
              WHERE user_id=$1 AND ledger_id=$2 \
-               AND attachment_kind='transaction_attachment' AND sha256=ANY($3)",
+               AND attachment_kind='transaction_attachment' AND sha256 IN (SELECT value FROM json_each($3))",
         )
         .bind(user_uuid)
         .bind(&request.ledger_id)
-        .bind(&query_hashes)
+        .bind(&query_hashes_json)
         .fetch_all(&mut *tx)
         .await
         .map_err(db_error)?;
