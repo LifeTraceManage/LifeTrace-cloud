@@ -187,7 +187,11 @@ async fn sync_account(
         .sync_account(&principal.user_id, id)
         .await
         .map_err(map_error)?;
-    Ok(Json(json!({ "ok": true, "persisted": persisted })))
+    Ok(Json(json!({
+        "ok": true,
+        "persisted": persisted,
+        "syncedMessages": persisted
+    })))
 }
 
 async fn list_folders(
