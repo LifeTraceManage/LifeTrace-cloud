@@ -355,6 +355,14 @@ impl Config {
             {
                 return Err("production requires HTTPS PUBLIC_WEB_BASE_URL".to_owned());
             }
+            for origin in &self.cors_allowed_origins {
+                let normalized = origin.trim().to_ascii_lowercase();
+                if normalized == "*" || normalized == "null" || !normalized.starts_with("https://") {
+                    return Err(format!(
+                        "production CORS origin must be an explicit HTTPS origin: {origin}"
+                    ));
+                }
+            }
             if self.auth_reset_notifier == "console" {
                 return Err(
                     "production must not use the console password reset notifier".to_owned(),
