@@ -698,10 +698,11 @@ impl MailService {
         .fetch_one(&self.pool)
         .await?;
         let mut flags = current.as_array().cloned().unwrap_or_default();
-        flags.retain(|value| {
-            value.as_str().is_none_or(|flag| {
+        flags.retain(|value| match value.as_str() {
+            Some(flag) => {
                 !flag.eq_ignore_ascii_case("\\Flagged") && !flag.eq_ignore_ascii_case("Flagged")
-            })
+            }
+            None => true,
         });
         if starred {
             flags.push(serde_json::Value::String("\\Flagged".to_owned()));
