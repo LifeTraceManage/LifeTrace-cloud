@@ -77,6 +77,13 @@ BeeCount 兼容监听 `8869`。该监听器只负责把 BeeCount 原始 `/api/v1
 cargo run --bin lifetrace-cloud
 ```
 
+管理命令也使用同一个二进制：
+
+```bash
+cargo run --bin lifetrace-cloud -- bootstrap-user --email you@example.com
+cargo run --bin lifetrace-cloud -- create-invite --email someone@example.com
+```
+
 自定义数据库位置：
 
 ```bash
@@ -164,6 +171,7 @@ FILE_MAX_UPLOAD_BYTES
 1. SQLite 是唯一数据库后端，不维护 PostgreSQL / SQLite 双栈。
 2. 测试同样使用 SQLite，不维护第二套内存数据库实现。
 3. 后台任务运行在 Cloud Tokio runtime 内，不拆独立 worker 服务。
-4. Web 静态资源由 Axum 提供，不增加 Caddy/Nginx 依赖。
-5. 数据库 schema 以当前 SQLite 基线为准，不保留 PostgreSQL 历史 migration 链。
-6. Sync v1 wire contract 保持兼容，数据库实现细节不暴露给客户端。
+4. 管理命令与服务端共用 `lifetrace-cloud` 一个二进制，不维护独立 admin/migration/worker 入口。
+5. Web 静态资源由 Axum 提供，不增加 Caddy/Nginx 依赖.
+6. 数据库 schema 以当前 SQLite 基线为准，不保留 PostgreSQL 历史 migration 链。
+7. Sync v1 wire contract 保持兼容，数据库实现细节不暴露给客户端。
