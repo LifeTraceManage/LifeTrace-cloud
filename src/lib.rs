@@ -1,6 +1,6 @@
 //! LifeTrace cloud backend.
 //!
-//! PostgreSQL is the production persistence path. Sync wire compatibility is
+//! SQLite is the single embedded persistence path. Sync wire compatibility is
 //! defined by `lifetrace-contracts`; domain-specific HTTP adapters are grouped
 //! behind explicit modules.
 
