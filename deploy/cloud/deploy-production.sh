@@ -6,6 +6,7 @@ ENV_FILE="${SCRIPT_DIR}/.env.production"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.production.yml"
 WEB_SOURCE_DIR="${LIFETRACE_WEB_SOURCE_DIR:-${SCRIPT_DIR}/../../../LifeTrace-web}"
 WEB_DIST_DIR="${SCRIPT_DIR}/.web-dist"
+DEPLOY_MODE="${LIFETRACE_DEPLOY_MODE:-build}"
 
 command -v docker >/dev/null 2>&1 || {
   echo "[LifeTrace deploy] docker is required" >&2
@@ -53,6 +54,26 @@ docker run --rm \
 
 cd "${SCRIPT_DIR}"
 compose=(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}")
-"${compose[@]}" pull
+
+case "${DEPLOY_MODE}" in
+  build)
+    echo "[LifeTrace deploy] building LifeTrace Cloud image from current checkout"
+    "${compose[@]}" build lifetrace
+    ;;
+  pull)
+    echo "[LifeTrace deploy] pulling prebuilt LifeTrace Cloud image"
+    if ! "${compose[@]}" pull lifetrace; then
+      echo "[LifeTrace deploy] failed to pull the configured image." >&2
+      echo "[LifeTrace deploy] for a private GHCR package, run: docker login ghcr.io" >&2
+      echo "[LifeTrace deploy] or use the default local build mode." >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "[LifeTrace deploy] LIFETRACE_DEPLOY_MODE must be 'build' or 'pull' (got: ${DEPLOY_MODE})" >&2
+    exit 1
+    ;;
+esac
+
 "${compose[@]}" up -d --remove-orphans --wait
 "${compose[@]}" ps
