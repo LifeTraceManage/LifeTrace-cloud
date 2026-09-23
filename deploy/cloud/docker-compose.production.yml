@@ -2,7 +2,12 @@ name: lifetrace
 
 services:
   lifetrace:
-    image: ${LIFETRACE_CLOUD_IMAGE:-ghcr.io/lifetracemanage/lifetrace-cloud:main}
+    image: ${LIFETRACE_CLOUD_IMAGE:-lifetrace-cloud:local}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-2}
     restart: unless-stopped
     env_file: .env.production
     environment:
