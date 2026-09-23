@@ -364,6 +364,20 @@ impl MailService {
         if result.rows_affected() == 0 {
             return Err(MailServiceError::AccountNotFound);
         }
+        sqlx::query(
+            "UPDATE mail_identities SET deleted_at=now(),is_default=FALSE,updated_at=now() WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL",
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await?;
+        sqlx::query(
+            "UPDATE mail_drafts SET state='canceled',updated_at=now() WHERE user_id=$1 AND account_id=$2 AND state='draft'",
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
