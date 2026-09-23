@@ -17,7 +17,7 @@ use lifetrace_contracts::{
 use serde_json::Value;
 use tower::ServiceExt;
 
-fn database_url() -> Option<String> {
+fn database_path() -> Option<String> {
     std::env::var("TEST_DATABASE_PATH").ok()
 }
 
@@ -88,7 +88,7 @@ fn push_request() -> PushRequestV1 {
 
 #[tokio::test]
 async fn sqlite_runtime_migrates_persists_and_replays_idempotently() {
-    let Some(url) = database_url() else {
+    let Some(url) = database_path() else {
         eprintln!("TEST_DATABASE_PATH not set; SQLite integration test skipped");
         return;
     };
