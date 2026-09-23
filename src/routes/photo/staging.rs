@@ -237,7 +237,7 @@ pub(crate) async fn stage_for_user(
     let expires_at = state
         .config
         .photo_staging_ttl_hours
-        .map(|hours| Utc::CURRENT_TIMESTAMP + Duration::hours(hours));
+        .map(|hours| Utc::now() + Duration::hours(hours));
     let storage_name = format!("{owner}/{id}.blob");
     let storage_path = resolve_storage_path(state, &storage_name)?;
     let parent = storage_path
