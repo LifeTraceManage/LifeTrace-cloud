@@ -16,8 +16,6 @@ const MAX_RAW_MESSAGE_BYTES: i64 = 64 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 pub enum AttachmentReadError {
-    #[error("mail storage requires PostgreSQL")]
-    DatabaseRequired,
     #[error("invalid authenticated user id")]
     InvalidUser,
     #[error("mail attachment not found")]
@@ -64,17 +62,12 @@ struct AttachmentSource {
 #[derive(Clone)]
 pub struct AttachmentReader {
     pool: SqlitePool,
-    database_enabled: bool,
     config: Arc<Config>,
 }
 
 impl AttachmentReader {
-    pub fn new(pool: SqlitePool, database_enabled: bool, config: Arc<Config>) -> Self {
-        Self {
-            pool,
-            database_enabled,
-            config,
-        }
+    pub fn new(pool: SqlitePool, config: Arc<Config>) -> Self {
+        Self { pool, config }
     }
 
     pub async fn read(
@@ -82,9 +75,6 @@ impl AttachmentReader {
         user_id: &UserId,
         attachment_id: Uuid,
     ) -> Result<AttachmentContent, AttachmentReadError> {
-        if !self.database_enabled {
-            return Err(AttachmentReadError::DatabaseRequired);
-        }
         let user_id =
             Uuid::parse_str(user_id.as_str()).map_err(|_| AttachmentReadError::InvalidUser)?;
         let source = sqlx::query_as::<_, AttachmentSource>(
