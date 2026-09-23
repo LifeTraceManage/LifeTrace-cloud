@@ -447,6 +447,24 @@ mod tests {
     }
 
     #[test]
+    fn production_rejects_insecure_cors_origin() {
+        let config = Config {
+            environment: "production".to_owned(),
+            dev_auth_enabled: false,
+            auth_cookie_secure: true,
+            public_web_base_url: Some("https://lifetrace.example".to_owned()),
+            cors_allowed_origins: vec!["http://lifetrace.example".to_owned()],
+            auth_reset_notifier: "smtp".to_owned(),
+            auth_password_pepper: Some("01234567890123456789012345678901".to_owned()),
+            auth_token_hash_pepper: Some("abcdefabcdefabcdefabcdefabcdefab".to_owned()),
+            cursor_signing_key: Some("cursor-production-key".to_owned()),
+            page_token_signing_key: Some("page-production-key".to_owned()),
+            ..Config::default()
+        };
+        assert!(config.validate().unwrap_err().contains("HTTPS origin"));
+    }
+
+    #[test]
     fn beecount_attachment_limit_is_bounded() {
         let config = Config {
             beecount_attachment_max_upload_bytes: 129 * 1024 * 1024,
