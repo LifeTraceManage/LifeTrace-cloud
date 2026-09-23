@@ -10,7 +10,7 @@ use lifetrace_contracts::{
 };
 use serde_json::{json, Value};
 
-fn database_url() -> Option<String> {
+fn database_path() -> Option<String> {
     std::env::var("TEST_DATABASE_PATH").ok()
 }
 
@@ -100,7 +100,7 @@ fn request(id: &str, changes: Vec<SyncChangeV1>) -> PushRequestV1 {
 
 #[tokio::test]
 async fn finish_before_start_is_server_authoritative_and_atomic_group_aware() {
-    let Some(url) = database_url() else {
+    let Some(url) = database_path() else {
         eprintln!("TEST_DATABASE_PATH not set; execution P4 SQLite test skipped");
         return;
     };
@@ -116,12 +116,26 @@ async fn finish_before_start_is_server_authoritative_and_atomic_group_aware() {
     };
     let state = AppState::new(config);
     state.initialize().await.unwrap();
-    sqlx::query(
-        "TRUNCATE TABLE sync_snapshot_items, sync_snapshots, sync_processed_changes, sync_change_log, sync_entities, cloud_devices, cloud_users RESTART IDENTITY CASCADE",
-    )
-    .execute(&state.pool)
-    .await
-    .unwrap();
+    {
+        for table in [
+            "auth_audit_log",
+            "auth_login_attempts",
+            "auth_registration_invites",
+            "auth_password_reset_tokens",
+            "auth_web_sessions",
+            "auth_refresh_tokens",
+            "auth_access_tokens",
+            "auth_sessions",
+            "auth_app_grants",
+            "cloud_devices",
+            "cloud_users",
+        ] {
+            sqlx::query(&format!("DELETE FROM {table}"))
+                .execute(&state.pool)
+                .await
+                .unwrap();
+        }
+    }
 
     let user = UserId::new("execution-p4-user");
     let seed = request(
