@@ -11,9 +11,9 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn config(database_url: String) -> Config {
+fn config(database_path: String) -> Config {
     Config {
-        database_path: database_url,
+        database_path,
         migration_on_startup: true,
         dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
@@ -66,10 +66,10 @@ async fn send(
 
 #[tokio::test]
 async fn one_account_can_keep_lifetrace_and_beecount_sessions_active_together() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
+    let Ok(database_path) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
-    let state = AppState::new(config(database_url));
+    let state = AppState::new(config(database_path));
     state.initialize().await.unwrap();
 
     let email = format!("shared-account-{}@example.test", Uuid::new_v4());
@@ -149,7 +149,7 @@ async fn one_account_can_keep_lifetrace_and_beecount_sessions_active_together() 
     assert_eq!(bee_profile["user_id"], canonical_user_id);
 
     let user_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM cloud_users WHERE id=$1::uuid")
+        sqlx::query_scalar("SELECT COUNT(*) FROM cloud_users WHERE id=$1")
             .bind(&canonical_user_id)
             .fetch_one(&state.pool)
             .await
@@ -158,7 +158,7 @@ async fn one_account_can_keep_lifetrace_and_beecount_sessions_active_together() 
 
     let sessions: Vec<(String, String)> = sqlx::query_as(
         "SELECT app_id,status FROM auth_sessions \
-         WHERE user_id=$1::uuid AND status='active' ORDER BY app_id",
+         WHERE user_id=$1 AND status='active' ORDER BY app_id",
     )
     .bind(&canonical_user_id)
     .fetch_all(&state.pool)
