@@ -83,6 +83,32 @@ pub struct MailAccount {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct MailIdentity {
+    pub id: Uuid,
+    pub account_id: Uuid,
+    pub email_address: String,
+    pub display_name: Option<String>,
+    pub reply_to: Option<String>,
+    pub signature_html: Option<String>,
+    pub is_default: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MailIdentityInput {
+    pub account_id: Uuid,
+    pub email_address: String,
+    pub display_name: Option<String>,
+    pub reply_to: Option<String>,
+    pub signature_html: Option<String>,
+    #[serde(default)]
+    pub is_default: bool,
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MailAccountSecret {
     pub id: Uuid,
@@ -195,9 +221,46 @@ pub struct MailListQuery {
     pub offset: Option<i64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct MailDraft {
+    pub id: Uuid,
+    pub account_id: Uuid,
+    pub identity_id: Option<Uuid>,
+    pub thread_id: Option<Uuid>,
+    pub in_reply_to_message_id: Option<Uuid>,
+    pub to_json: Value,
+    pub cc_json: Value,
+    pub bcc_json: Value,
+    pub subject: String,
+    pub body_text: String,
+    pub state: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MailDraftInput {
+    pub account_id: Uuid,
+    pub identity_id: Option<Uuid>,
+    pub in_reply_to_message_id: Option<Uuid>,
+    #[serde(default)]
+    pub to: Vec<String>,
+    #[serde(default)]
+    pub cc: Vec<String>,
+    #[serde(default)]
+    pub bcc: Vec<String>,
+    #[serde(default)]
+    pub subject: String,
+    #[serde(default)]
+    pub body_text: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendMailInput {
+    pub identity_id: Option<Uuid>,
     pub to: Vec<String>,
     #[serde(default)]
     pub cc: Vec<String>,
