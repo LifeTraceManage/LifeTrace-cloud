@@ -95,10 +95,6 @@
     "name": {
       "type": "string"
     },
-    "sortOrder": {
-      "format": "int64",
-      "type": "integer"
-    },
     "parentFolderId": {
       "anyOf": [
         {
@@ -109,6 +105,10 @@
         }
       ],
       "description": "Optional parent folder for hierarchical Notes organization."
+    },
+    "sortOrder": {
+      "format": "int64",
+      "type": "integer"
     }
   },
   "required": [
