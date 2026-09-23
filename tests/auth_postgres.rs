@@ -1,4 +1,4 @@
-//! PostgreSQL-backed EPIC-04 authentication acceptance tests.
+//! SQLite-backed EPIC-04 authentication acceptance tests.
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Method, Request, StatusCode};
@@ -20,7 +20,7 @@ fn database_url() -> Option<String> {
 
 fn config(url: String) -> Config {
     Config {
-        database_url: Some(url),
+        database_path: url,
         migration_on_startup: true,
         dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
