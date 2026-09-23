@@ -71,7 +71,6 @@ async fn ledgers(
 ) -> Result<Json<Value>, ApiError> {
     let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     principal.require_scope("finance:read")?;
-    require_database(&state)?;
     let rows = BeeCountSyncService::new(state.pool.clone())
         .read_ledgers(&principal.user_id)
         .await?;
@@ -93,7 +92,6 @@ async fn snapshot(
 ) -> Result<Json<Value>, ApiError> {
     let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     principal.require_scope("finance:read")?;
-    require_database(&state)?;
     if ledger_id.is_empty() || ledger_id.len() > 256 || query.limit == 0 || query.limit > 500 {
         return Err(ApiError::new(
             ErrorCode::InvalidRequest,
@@ -268,9 +266,6 @@ fn filter_user_global(
         .collect()
 }
 
-fn require_database(_state: &AppState) -> Result<(), ApiError> {
-    Ok(())
-}
 
 fn normalize_ledger(row: &BeeCountReadLedgerOut) -> Value {
     json!({
