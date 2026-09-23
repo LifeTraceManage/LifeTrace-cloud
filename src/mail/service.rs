@@ -1377,11 +1377,11 @@ impl MailService {
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            let body = input.body_text.trim_end();
+            let body = input.body_text.trim_end().to_owned();
             input.body_text = if body.is_empty() {
                 signature.to_owned()
             } else if body.ends_with(signature) {
-                input.body_text
+                body
             } else {
                 format!("{body}\n\n{signature}")
             };
