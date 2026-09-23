@@ -175,7 +175,7 @@ impl SqliteRepository {
         tx.commit().await.map_err(Self::db_error)?;
         Ok(PushResponseV1 {
             request_id: request.request_id.clone(),
-            server_time: Self::CURRENT_TIMESTAMP,
+            server_time: Self::now(),
             results,
             latest_cursor: self.cursor_codec.encode(user_id, &empty_scope(), latest),
         })
