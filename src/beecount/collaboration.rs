@@ -2,8 +2,8 @@
 
 use axum::http::StatusCode;
 use lifetrace_contracts::ErrorCode;
-use sqlx::{PgPool, Postgres, Row, Transaction};
-use uuid::Uuid;
+use sqlx::{SqlitePool, Sqlite, Row, Transaction};
+use uuid;
 
 use crate::beecount::compat::lifetrace_entity_id;
 use crate::error::ApiError;
@@ -19,7 +19,7 @@ pub struct LedgerAccess {
 }
 
 pub async fn resolve_ledger_access(
-    pool: &PgPool,
+    pool: &SqlitePool,
     actor_user_id: Uuid,
     ledger_id: &str,
     write: bool,
@@ -31,7 +31,7 @@ pub async fn resolve_ledger_access(
 }
 
 pub async fn resolve_ledger_access_tx(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Sqlite>,
     actor_user_id: Uuid,
     ledger_id: &str,
     write: bool,
@@ -75,7 +75,7 @@ pub async fn resolve_ledger_access_tx(
 }
 
 pub async fn ensure_owner_registry(
-    pool: &PgPool,
+    pool: &SqlitePool,
     owner_user_id: Uuid,
     ledger_id: &str,
 ) -> Result<(), ApiError> {
@@ -88,7 +88,7 @@ pub async fn ensure_owner_registry(
 }
 
 pub async fn ensure_owner_registry_tx(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Sqlite>,
     owner_user_id: Uuid,
     ledger_id: &str,
 ) -> Result<(), ApiError> {
@@ -123,7 +123,7 @@ pub async fn ensure_owner_registry_tx(
     Ok(())
 }
 
-pub async fn member_user_ids(pool: &PgPool, ledger_id: &str) -> Result<Vec<Uuid>, ApiError> {
+pub async fn member_user_ids(pool: &SqlitePool, ledger_id: &str) -> Result<Vec<Uuid>, ApiError> {
     let rows = sqlx::query_scalar(
         "SELECT user_id FROM beecount_ledger_members WHERE ledger_id=$1 ORDER BY joined_at",
     )
@@ -135,7 +135,7 @@ pub async fn member_user_ids(pool: &PgPool, ledger_id: &str) -> Result<Vec<Uuid>
 }
 
 pub async fn editor_members_for_owner(
-    pool: &PgPool,
+    pool: &SqlitePool,
     owner_user_id: Uuid,
 ) -> Result<Vec<(String, Uuid)>, ApiError> {
     let rows = sqlx::query(
@@ -159,9 +159,9 @@ pub async fn editor_members_for_owner(
         .collect()
 }
 
-pub async fn beecount_user_id(pool: &PgPool, user_id: Uuid) -> Result<String, ApiError> {
+pub async fn beecount_user_id(pool: &SqlitePool, user_id: Uuid) -> Result<String, ApiError> {
     sqlx::query_scalar(
-        "SELECT COALESCE((SELECT beecount_user_id FROM beecount_identity_links WHERE user_id=$1),$1::text)",
+        "SELECT COALESCE((SELECT beecount_user_id FROM beecount_identity_links WHERE user_id=$1),$1)",
     )
     .bind(user_id)
     .fetch_one(pool)
@@ -169,7 +169,7 @@ pub async fn beecount_user_id(pool: &PgPool, user_id: Uuid) -> Result<String, Ap
     .map_err(db_error)
 }
 
-pub async fn internal_user_id(pool: &PgPool, wire_user_id: &str) -> Result<Uuid, ApiError> {
+pub async fn internal_user_id(pool: &SqlitePool, wire_user_id: &str) -> Result<Uuid, ApiError> {
     let parsed = Uuid::parse_str(wire_user_id).ok();
     sqlx::query_scalar(
         "SELECT user_id FROM beecount_identity_links WHERE beecount_user_id=$1 \
@@ -199,7 +199,7 @@ pub fn validate_ledger_id(ledger_id: &str) -> Result<(), ApiError> {
 }
 
 async fn ledger_exists_tx(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Sqlite>,
     owner_user_id: Uuid,
     ledger_id: &str,
 ) -> Result<bool, ApiError> {

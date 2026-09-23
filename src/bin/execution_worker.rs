@@ -4,8 +4,8 @@ use chrono::{Datelike, Duration, NaiveDate, SecondsFormat, Utc, Weekday};
 use lifetrace_cloud::{AppState, Config};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx::{Postgres, Row, Transaction};
-use uuid::Uuid;
+use sqlx::{Sqlite, Row, Transaction};
+use uuid;
 
 const LEASE_NAME: &str = "execution-maintenance-v1";
 const LEASE_SECONDS: i64 = 45;
@@ -47,17 +47,17 @@ async fn acquire_lease(state: &AppState, owner: Uuid) -> Result<bool, sqlx::Erro
     let acquired = sqlx::query_scalar::<_, bool>(
         r#"
         INSERT INTO execution_worker_leases(lease_name, owner_id, lease_until, heartbeat_at)
-        VALUES($1, $2, now() + make_interval(secs => $3), now())
+        VALUES($1, $2, CURRENT_TIMESTAMP + make_interval(secs => $3), CURRENT_TIMESTAMP)
         ON CONFLICT(lease_name) DO UPDATE SET
           owner_id = EXCLUDED.owner_id,
           lease_until = EXCLUDED.lease_until,
-          heartbeat_at = now(),
+          heartbeat_at = CURRENT_TIMESTAMP,
           acquired_at = CASE
             WHEN execution_worker_leases.owner_id = EXCLUDED.owner_id
               THEN execution_worker_leases.acquired_at
-            ELSE now()
+            ELSE CURRENT_TIMESTAMP
           END
-        WHERE execution_worker_leases.lease_until <= now()
+        WHERE execution_worker_leases.lease_until <= CURRENT_TIMESTAMP
            OR execution_worker_leases.owner_id = EXCLUDED.owner_id
         RETURNING TRUE
         "#,
@@ -79,7 +79,7 @@ async fn fire_due_reminders(state: &AppState) -> Result<usize, sqlx::Error> {
           AND is_deleted=FALSE
           AND payload->>'status'='scheduled'
           AND COALESCE(NULLIF(payload->>'snoozedUntil',''), payload->>'triggerAt') IS NOT NULL
-          AND COALESCE(NULLIF(payload->>'snoozedUntil',''), payload->>'triggerAt')::timestamptz <= now()
+          AND COALESCE(NULLIF(payload->>'snoozedUntil',''), payload->>'triggerAt')::timestamptz <= CURRENT_TIMESTAMP
         ORDER BY COALESCE(NULLIF(payload->>'snoozedUntil',''), payload->>'triggerAt')::timestamptz
         LIMIT $1
         "#,
@@ -94,7 +94,7 @@ async fn fire_due_reminders(state: &AppState) -> Result<usize, sqlx::Error> {
         let entity_id: String = row.get("entity_id");
         let version: i64 = row.get("server_version");
         let mut payload: Value = row.get("payload");
-        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        let now = Utc::CURRENT_TIMESTAMP.to_rfc3339_opts(SecondsFormat::Millis, true);
         payload["status"] = json!("fired");
         payload["lastFiredAt"] = json!(now);
         payload["snoozedUntil"] = Value::Null;
@@ -262,7 +262,7 @@ async fn materialize_calendar_occurrences(state: &AppState) -> Result<usize, sql
 }
 
 fn occurrence_dates(anchor: NaiveDate, rule: &Value, horizon_days: i64) -> Vec<NaiveDate> {
-    let today = Utc::now().date_naive();
+    let today = Utc::CURRENT_TIMESTAMP.date_naive();
     let until = json_date(rule.get("untilAt"));
     let interval = rule
         .get("intervalValue")
@@ -417,7 +417,7 @@ fn shifted_timestamp(value: Option<&Value>, days: i64) -> Option<String> {
 }
 
 fn server_meta(user_id: Uuid, entity_id: String) -> Value {
-    let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let now = Utc::CURRENT_TIMESTAMP.to_rfc3339_opts(SecondsFormat::Millis, true);
     json!({
         "id": entity_id,
         "userId": user_id.to_string(),
@@ -457,7 +457,7 @@ fn deterministic_id(user_id: Uuid, kind: &str, subject_id: &str, date: NaiveDate
 }
 
 async fn occurrence_exists(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::SqlitePool,
     user_id: Uuid,
     entity_type: &str,
     subject_field: &str,
@@ -477,7 +477,7 @@ async fn occurrence_exists(
 }
 
 async fn max_occurrences_reached(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::SqlitePool,
     user_id: Uuid,
     entity_type: &str,
     subject_field: &str,
@@ -500,7 +500,7 @@ async fn max_occurrences_reached(
 }
 
 async fn publish_new(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::SqlitePool,
     user_id: Uuid,
     entity_type: &str,
     entity_id: &str,
@@ -525,7 +525,7 @@ async fn publish_new(
 }
 
 async fn publish_existing(
-    pool: &sqlx::PgPool,
+    pool: &sqlx::SqlitePool,
     user_id: Uuid,
     entity_type: &str,
     entity_id: &str,
@@ -534,7 +534,7 @@ async fn publish_existing(
 ) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
     let locked = sqlx::query_scalar::<_, i64>(
-        "SELECT server_version FROM sync_entities WHERE user_id=$1 AND entity_type=$2 AND entity_id=$3 AND is_deleted=FALSE FOR UPDATE",
+        "SELECT server_version FROM sync_entities WHERE user_id=$1 AND entity_type=$2 AND entity_id=$3 AND is_deleted=FALSE",
     )
     .bind(user_id)
     .bind(entity_type)
@@ -560,7 +560,7 @@ async fn publish_existing(
 }
 
 async fn publish_entity(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Sqlite>,
     user_id: Uuid,
     entity_type: &str,
     entity_id: &str,
@@ -570,7 +570,7 @@ async fn publish_entity(
 ) -> Result<(), sqlx::Error> {
     let bytes = serde_json::to_vec(&payload).expect("JSON payload must serialize");
     let payload_hash = Sha256::digest(bytes).to_vec();
-    let now = Utc::now();
+    let now = Utc::CURRENT_TIMESTAMP;
     let cursor = sqlx::query_scalar::<_, i64>(
         "INSERT INTO sync_change_log(user_id,entity_type,entity_id,operation,entity_schema_version,server_version,payload,payload_hash,server_modified_at) VALUES($1,$2,$3,'upsert',1,$4,$5,$6,$7) RETURNING cursor",
     )

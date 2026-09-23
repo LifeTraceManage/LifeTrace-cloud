@@ -15,8 +15,8 @@ use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::{Postgres, Row, Transaction};
-use uuid::Uuid;
+use sqlx::{Sqlite, Row, Transaction};
+use uuid;
 
 use crate::auth::AuthenticatedPrincipal;
 use crate::beecount::collaboration::{
@@ -137,7 +137,7 @@ async fn patch_profile(
     let mut tx = state.pool.begin().await.map_err(db_error)?;
     let existing = sqlx::query(
         "SELECT income_is_red,theme_primary_color,appearance,ai_config,primary_currency \
-         FROM beecount_user_profiles WHERE user_id=$1 FOR UPDATE",
+         FROM beecount_user_profiles WHERE user_id=$1",
     )
     .bind(user_id)
     .fetch_optional(&mut *tx)
@@ -179,11 +179,11 @@ async fn patch_profile(
     sqlx::query(
         "INSERT INTO beecount_user_profiles \
          (user_id,income_is_red,theme_primary_color,appearance,ai_config,primary_currency,updated_at) \
-         VALUES ($1,$2,$3,$4,$5,$6,now()) \
+         VALUES ($1,$2,$3,$4,$5,$6,CURRENT_TIMESTAMP) \
          ON CONFLICT (user_id) DO UPDATE SET \
            income_is_red=EXCLUDED.income_is_red,theme_primary_color=EXCLUDED.theme_primary_color, \
            appearance=EXCLUDED.appearance,ai_config=EXCLUDED.ai_config, \
-           primary_currency=EXCLUDED.primary_currency,updated_at=now()",
+           primary_currency=EXCLUDED.primary_currency,updated_at=CURRENT_TIMESTAMP",
     )
     .bind(user_id)
     .bind(income_is_red)
@@ -195,7 +195,7 @@ async fn patch_profile(
     .await
     .map_err(db_error)?;
     if let Some(display_name) = request.display_name.as_deref() {
-        sqlx::query("UPDATE cloud_users SET display_name=$2,updated_at=now() WHERE id=$1")
+        sqlx::query("UPDATE cloud_users SET display_name=$2,updated_at=CURRENT_TIMESTAMP WHERE id=$1")
             .bind(user_id)
             .bind(display_name.trim())
             .execute(&mut *tx)
@@ -261,11 +261,11 @@ async fn upload_avatar(
     let version: i64 = sqlx::query_scalar(
         "INSERT INTO beecount_user_profiles \
          (user_id,avatar_version,avatar_mime_type,avatar_file_name,avatar_content,updated_at) \
-         VALUES ($1,1,$2,$3,$4,now()) \
+         VALUES ($1,1,$2,$3,$4,CURRENT_TIMESTAMP) \
          ON CONFLICT (user_id) DO UPDATE SET \
            avatar_version=beecount_user_profiles.avatar_version+1, \
            avatar_mime_type=EXCLUDED.avatar_mime_type,avatar_file_name=EXCLUDED.avatar_file_name, \
-           avatar_content=EXCLUDED.avatar_content,updated_at=now() \
+           avatar_content=EXCLUDED.avatar_content,updated_at=CURRENT_TIMESTAMP \
          RETURNING avatar_version",
     )
     .bind(user_id)
@@ -328,7 +328,7 @@ async fn download_avatar(
 
 async fn profile_out(state: &AppState, user_id: Uuid) -> Result<ProfileOut, ApiError> {
     let row = sqlx::query(
-        "SELECT u.email,u.display_name,COALESCE(l.beecount_user_id,u.id::text) AS wire_user_id, \
+        "SELECT u.email,u.display_name,COALESCE(l.beecount_user_id,u.id) AS wire_user_id, \
                 p.avatar_version,p.avatar_content IS NOT NULL AS has_avatar,p.income_is_red, \
                 p.theme_primary_color,p.appearance,p.ai_config,p.primary_currency \
          FROM cloud_users u LEFT JOIN beecount_identity_links l ON l.user_id=u.id \
@@ -461,7 +461,7 @@ async fn list_devices(
     }
     let user_id = parse_user_id(principal.user_id.as_str())?;
     let cutoff = (query.active_within_days > 0)
-        .then(|| Utc::now() - Duration::days(query.active_within_days));
+        .then(|| Utc::CURRENT_TIMESTAMP - Duration::days(query.active_within_days));
     let rows = sqlx::query(
         "SELECT external_device_id,device_name,platform,client_version,os_version,device_model, \
                 host(last_login_ip) AS last_ip,last_seen_at,first_seen_at \
@@ -507,7 +507,7 @@ async fn revoke_device(
     let user_id = parse_user_id(principal.user_id.as_str())?;
     let mut tx = state.pool.begin().await.map_err(db_error)?;
     let device_id: Uuid = sqlx::query_scalar(
-        "UPDATE cloud_devices SET status='revoked',revoked_at=COALESCE(revoked_at,now()), \
+        "UPDATE cloud_devices SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP), \
          revoked_reason='user_revoke' WHERE user_id=$1 AND app_id='beecount-mobile' \
          AND external_device_id=$2 RETURNING id",
     )
@@ -523,11 +523,11 @@ async fn revoke_device(
 }
 
 async fn revoke_device_tokens(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Sqlite>,
     device_id: Uuid,
 ) -> Result<(), ApiError> {
     sqlx::query(
-        "UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,now()), \
+        "UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP), \
          revoked_reason='device_revoke' WHERE device_id=$1",
     )
     .bind(device_id)
@@ -536,7 +536,7 @@ async fn revoke_device_tokens(
     .map_err(db_error)?;
     for table in ["auth_access_tokens", "auth_refresh_tokens"] {
         let query = format!(
-            "UPDATE {table} SET revoked_at=COALESCE(revoked_at,now()),revoked_reason='device_revoke' \
+            "UPDATE {table} SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='device_revoke' \
              WHERE session_id IN (SELECT id FROM auth_sessions WHERE device_id=$1)"
         );
         sqlx::query(&query)
@@ -546,7 +546,7 @@ async fn revoke_device_tokens(
             .map_err(db_error)?;
     }
     sqlx::query(
-        "UPDATE auth_web_sessions SET revoked_at=COALESCE(revoked_at,now()) \
+        "UPDATE auth_web_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) \
          WHERE session_id IN (SELECT id FROM auth_sessions WHERE device_id=$1)",
     )
     .bind(device_id)
@@ -670,14 +670,14 @@ async fn create_invite(
     }
     ensure_owner_registry(&state.pool, access.storage_user_id, &ledger_id).await?;
     let mut tx = state.pool.begin().await.map_err(db_error)?;
-    sqlx::query("SELECT ledger_id FROM beecount_shared_ledgers WHERE ledger_id=$1 FOR UPDATE")
+    sqlx::query("SELECT ledger_id FROM beecount_shared_ledgers WHERE ledger_id=$1")
         .bind(&ledger_id)
         .fetch_one(&mut *tx)
         .await
         .map_err(db_error)?;
     let active_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM beecount_ledger_invites \
-         WHERE ledger_id=$1 AND used_at IS NULL AND expires_at>now()",
+        "SELECT COUNT(*) FROM beecount_ledger_invites \
+         WHERE ledger_id=$1 AND used_at IS NULL AND expires_at>CURRENT_TIMESTAMP",
     )
     .bind(&ledger_id)
     .fetch_one(&mut *tx)
@@ -687,7 +687,7 @@ async fn create_invite(
         return Err(conflict("Too many active invites for this ledger"));
     }
     let code = allocate_invite_code(&mut tx).await?;
-    let created_at = Utc::now();
+    let created_at = Utc::CURRENT_TIMESTAMP;
     let expires_at = created_at + Duration::hours(request.expires_in_hours);
     sqlx::query(
         "INSERT INTO beecount_ledger_invites \
@@ -730,7 +730,7 @@ async fn list_invites(
     let rows = sqlx::query(
         "SELECT code,target_role,expires_at,created_at,invited_by \
          FROM beecount_ledger_invites WHERE ledger_id=$1 AND used_at IS NULL \
-           AND expires_at>now() ORDER BY created_at DESC",
+           AND expires_at>CURRENT_TIMESTAMP ORDER BY created_at DESC",
     )
     .bind(&ledger_id)
     .fetch_all(&state.pool)
@@ -766,7 +766,7 @@ async fn revoke_invite(
     }
     let code = normalize_code(&code);
     let row = sqlx::query(
-        "UPDATE beecount_ledger_invites SET expires_at=now() \
+        "UPDATE beecount_ledger_invites SET expires_at=CURRENT_TIMESTAMP \
          WHERE ledger_id=$1 AND code=$2 AND used_at IS NULL RETURNING code",
     )
     .bind(&ledger_id)
@@ -812,12 +812,12 @@ async fn accept_invite(
     authorize(&principal, "finance:write")?;
     let actor = parse_user_id(principal.user_id.as_str())?;
     let code = normalize_code(&code);
-    let now = Utc::now();
+    let now = Utc::CURRENT_TIMESTAMP;
     let mut tx = state.pool.begin().await.map_err(db_error)?;
     let invite = sqlx::query(
         "SELECT i.ledger_id,i.invited_by,i.target_role,s.storage_user_id \
          FROM beecount_ledger_invites i JOIN beecount_shared_ledgers s USING (ledger_id) \
-         WHERE i.code=$1 AND i.used_at IS NULL AND i.expires_at>$2 FOR UPDATE OF i",
+         WHERE i.code=$1 AND i.used_at IS NULL AND i.expires_at>$2 OF i",
     )
     .bind(&code)
     .bind(now)
@@ -828,7 +828,7 @@ async fn accept_invite(
     let ledger_id: String = invite.try_get("ledger_id").map_err(internal)?;
     let invited_by: Uuid = invite.try_get("invited_by").map_err(internal)?;
     let storage_user_id: Uuid = invite.try_get("storage_user_id").map_err(internal)?;
-    sqlx::query("SELECT ledger_id FROM beecount_shared_ledgers WHERE ledger_id=$1 FOR UPDATE")
+    sqlx::query("SELECT ledger_id FROM beecount_shared_ledgers WHERE ledger_id=$1")
         .bind(&ledger_id)
         .fetch_one(&mut *tx)
         .await
@@ -848,7 +848,7 @@ async fn accept_invite(
         return Err(conflict("Cannot accept your own invite"));
     }
     let member_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM beecount_ledger_members WHERE ledger_id=$1",
+        "SELECT COUNT(*) FROM beecount_ledger_members WHERE ledger_id=$1",
     )
     .bind(&ledger_id)
     .fetch_one(&mut *tx)
@@ -1015,7 +1015,7 @@ async fn transfer_ownership(
         return Err(conflict("Target is already the owner"));
     }
     let mut tx = state.pool.begin().await.map_err(db_error)?;
-    sqlx::query("SELECT ledger_id FROM beecount_shared_ledgers WHERE ledger_id=$1 FOR UPDATE")
+    sqlx::query("SELECT ledger_id FROM beecount_shared_ledgers WHERE ledger_id=$1")
         .bind(&ledger_id)
         .fetch_one(&mut *tx)
         .await
@@ -1154,7 +1154,7 @@ async fn shared_resources(
     }))
 }
 
-async fn allocate_invite_code(tx: &mut Transaction<'_, Postgres>) -> Result<String, ApiError> {
+async fn allocate_invite_code(tx: &mut Transaction<'_, Sqlite>) -> Result<String, ApiError> {
     for _ in 0..8 {
         let mut rng = OsRng;
         let code = (0..6)
@@ -1181,11 +1181,11 @@ async fn allocate_invite_code(tx: &mut Transaction<'_, Postgres>) -> Result<Stri
 async fn active_invite_row(
     state: &AppState,
     code: &str,
-) -> Result<sqlx::postgres::PgRow, ApiError> {
+) -> Result<sqlx::sqlite::SqliteRow, ApiError> {
     sqlx::query(
         "SELECT i.ledger_id,i.invited_by,i.target_role,i.expires_at,s.storage_user_id \
          FROM beecount_ledger_invites i JOIN beecount_shared_ledgers s USING (ledger_id) \
-         WHERE i.code=$1 AND i.used_at IS NULL AND i.expires_at>now()",
+         WHERE i.code=$1 AND i.used_at IS NULL AND i.expires_at>CURRENT_TIMESTAMP",
     )
     .bind(code)
     .fetch_optional(&state.pool)
@@ -1245,9 +1245,9 @@ async fn list_members_out(
 ) -> Result<Vec<MemberOut>, ApiError> {
     let rows = sqlx::query(
         "SELECT m.user_id,m.role,m.joined_at,m.invited_by,u.email,u.display_name, \
-                COALESCE(l.beecount_user_id,u.id::text) AS wire_user_id, \
+                COALESCE(l.beecount_user_id,u.id) AS wire_user_id, \
                 p.avatar_version,p.avatar_content IS NOT NULL AS has_avatar, \
-                COALESCE(il.beecount_user_id,m.invited_by::text) AS invited_by_wire \
+                COALESCE(il.beecount_user_id,m.invited_by) AS invited_by_wire \
          FROM beecount_ledger_members m JOIN cloud_users u ON u.id=m.user_id \
          LEFT JOIN beecount_identity_links l ON l.user_id=m.user_id \
          LEFT JOIN beecount_user_profiles p ON p.user_id=m.user_id \

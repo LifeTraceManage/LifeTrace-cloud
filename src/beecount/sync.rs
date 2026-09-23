@@ -6,8 +6,8 @@ use lifetrace_contracts::json_value::JsonValue;
 use lifetrace_contracts::{ErrorCode, UserId};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx::{PgPool, Postgres, Row, Transaction};
-use uuid::Uuid;
+use sqlx::{SqlitePool, Sqlite, Row, Transaction};
+use uuid;
 
 use crate::beecount::collaboration::{
     ensure_owner_registry_tx, resolve_ledger_access_tx, ROLE_OWNER,
@@ -26,11 +26,11 @@ const MAX_PULL_LIMIT: i64 = 5000;
 
 #[derive(Clone)]
 pub struct BeeCountSyncService {
-    pool: PgPool,
+    pool: SqlitePool,
 }
 
 impl BeeCountSyncService {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
 
@@ -51,7 +51,7 @@ impl BeeCountSyncService {
         let mut tx = self.pool.begin().await.map_err(db_error)?;
         verify_device(&mut tx, actor_uuid, device_uuid, &request.device_id).await?;
 
-        let server_now = Utc::now();
+        let server_now = Utc::CURRENT_TIMESTAMP;
         let mut accepted = 0usize;
         let mut rejected = 0usize;
         let mut conflict_count = 0usize;
@@ -112,7 +112,7 @@ impl BeeCountSyncService {
                 "SELECT server_version,payload,is_deleted,last_cursor,server_modified_at, \
                         origin_device_external_id,created_at \
                  FROM sync_entities \
-                 WHERE user_id=$1 AND entity_type=$2 AND entity_id=$3 FOR UPDATE",
+                 WHERE user_id=$1 AND entity_type=$2 AND entity_id=$3",
             )
             .bind(storage_uuid)
             .bind(entity_type)
@@ -123,7 +123,7 @@ impl BeeCountSyncService {
             let clock = sqlx::query(
                 "SELECT updated_at,updated_by_device_id,lifetrace_cursor,source_change_id \
                  FROM beecount_entity_clocks \
-                 WHERE user_id=$1 AND entity_type=$2 AND entity_sync_id=$3 FOR UPDATE",
+                 WHERE user_id=$1 AND entity_type=$2 AND entity_sync_id=$3",
             )
             .bind(storage_uuid)
             .bind(kind.as_beecount_type())
@@ -315,7 +315,7 @@ impl BeeCountSyncService {
         }
 
         sqlx::query(
-            "UPDATE cloud_devices SET last_seen_at=now(),last_sync_at=now() \
+            "UPDATE cloud_devices SET last_seen_at=CURRENT_TIMESTAMP,last_sync_at=CURRENT_TIMESTAMP \
              WHERE id=$1 AND user_id=$2",
         )
         .bind(device_uuid)
@@ -324,7 +324,7 @@ impl BeeCountSyncService {
         .await
         .map_err(db_error)?;
         let server_cursor: i64 =
-            sqlx::query_scalar("SELECT COALESCE(MAX(cursor),0)::BIGINT FROM sync_change_log")
+            sqlx::query_scalar("SELECT COALESCE(MAX(cursor),0) FROM sync_change_log")
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(db_error)?;
@@ -376,7 +376,7 @@ impl BeeCountSyncService {
                       AND c.scope='ledger' AND c.ledger_id=m.ledger_id)) \
                AND (l.entity_type = ANY($3) \
                     OR (l.entity_type='user.preference' AND l.entity_id LIKE 'beecount:%')) \
-               AND ($4::text IS NULL OR l.origin_device_external_id IS DISTINCT FROM $4) \
+               AND ($4 IS NULL OR l.origin_device_external_id IS DISTINCT FROM $4) \
              ORDER BY l.cursor ASC LIMIT $5",
         )
         .bind(user_uuid)
@@ -407,7 +407,7 @@ impl BeeCountSyncService {
         let rows = sqlx::query(
             "SELECT e.entity_id,e.payload,e.server_modified_at,e.last_cursor, \
                     COALESCE(m.role,'owner') AS role, \
-                    (SELECT COUNT(*)::BIGINT FROM sync_entities t \
+                    (SELECT COUNT(*) FROM sync_entities t \
                      WHERE t.user_id=e.user_id AND t.entity_type='finance.transaction' \
                        AND t.is_deleted=FALSE \
                        AND COALESCE(t.payload->>'beecountLedgerId','') = \
@@ -473,12 +473,12 @@ impl BeeCountSyncService {
             let stats = sqlx::query(
                 "SELECT \
                    COALESCE(SUM(CASE WHEN payload->>'transactionType' = 'income' \
-                                     THEN (payload->>'amountCents')::bigint ELSE 0 END), 0)::bigint \
+                                     THEN (payload->>'amountCents') ELSE 0 END), 0) \
                      AS income_cents, \
                    COALESCE(SUM(CASE WHEN payload->>'transactionType' = 'expense' \
-                                     THEN (payload->>'amountCents')::bigint ELSE 0 END), 0)::bigint \
+                                     THEN (payload->>'amountCents') ELSE 0 END), 0) \
                      AS expense_cents, \
-                   COUNT(*)::bigint AS tx_count \
+                   COUNT(*) AS tx_count \
                  FROM sync_entities \
                  WHERE entity_type='finance.transaction' AND is_deleted=FALSE \
                    AND payload->>'beecountLedgerId' = $1",
@@ -492,7 +492,7 @@ impl BeeCountSyncService {
             let transaction_count: i64 = stats.try_get("tx_count").unwrap_or(0).max(0);
 
             let member_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*)::BIGINT FROM beecount_ledger_members WHERE ledger_id=$1",
+                "SELECT COUNT(*) FROM beecount_ledger_members WHERE ledger_id=$1",
             )
             .bind(&ledger_id)
             .fetch_one(&self.pool)
@@ -555,7 +555,7 @@ impl BeeCountSyncService {
         .await
         .map_err(db_error)?;
         let latest_cursor: i64 =
-            sqlx::query_scalar("SELECT COALESCE(MAX(cursor),0)::BIGINT FROM sync_change_log")
+            sqlx::query_scalar("SELECT COALESCE(MAX(cursor),0) FROM sync_change_log")
                 .fetch_one(&self.pool)
                 .await
                 .map_err(db_error)?;
@@ -612,7 +612,7 @@ impl BeeCountSyncService {
         let mut snapshot_cursor = ledger.try_get::<i64, _>("last_cursor").unwrap_or(0);
         let mut snapshot_updated = ledger
             .try_get::<DateTime<Utc>, _>("server_modified_at")
-            .unwrap_or_else(|_| Utc::now());
+            .unwrap_or_else(|_| Utc::CURRENT_TIMESTAMP);
         for row in rows {
             let entity_type: String = row.try_get("entity_type").map_err(internal)?;
             let Some(kind) = BeeCountEntityKind::from_lifetrace(&entity_type) else {
@@ -644,7 +644,7 @@ impl BeeCountSyncService {
         }
         let content = json!({
             "version": 6,
-            "exportedAt": Utc::now(),
+            "exportedAt": Utc::CURRENT_TIMESTAMP,
             "ledgerSyncId": ledger_id,
             "ledgerName": ledger_raw.get("ledgerName").and_then(Value::as_str).unwrap_or(ledger_id),
             "currency": ledger_raw.get("currency").and_then(Value::as_str).unwrap_or("CNY"),
@@ -678,7 +678,7 @@ impl BeeCountSyncService {
 }
 
 async fn verify_device(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Sqlite>,
     user_id: Uuid,
     device_id: Uuid,
     external_device_id: &str,
@@ -702,7 +702,7 @@ async fn verify_device(
 
 #[allow(clippy::too_many_arguments)]
 async fn append_change(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Sqlite>,
     user_id: Uuid,
     device_id: Uuid,
     external_device_id: &str,
@@ -755,7 +755,7 @@ async fn append_change(
 
 #[allow(clippy::too_many_arguments)]
 async fn persist_entity(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Sqlite>,
     user_id: Uuid,
     device_id: Uuid,
     external_device_id: &str,
@@ -810,7 +810,7 @@ async fn persist_entity(
     Ok(())
 }
 
-fn row_to_change(row: sqlx::postgres::PgRow) -> Result<Option<BeeCountSyncChangeOut>, ApiError> {
+fn row_to_change(row: sqlx::sqlite::SqliteRow) -> Result<Option<BeeCountSyncChangeOut>, ApiError> {
     let entity_type: String = row.try_get("entity_type").map_err(internal)?;
     let kind = row
         .try_get::<Option<String>, _>("beecount_entity_type")
