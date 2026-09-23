@@ -75,6 +75,8 @@ fn map_error(error: MailServiceError) -> ApiError {
             (StatusCode::BAD_REQUEST, "invalid mail request")
         }
         MailServiceError::AccountNotFound => (StatusCode::NOT_FOUND, "mail account not found"),
+        MailServiceError::IdentityNotFound => (StatusCode::NOT_FOUND, "mail identity not found"),
+        MailServiceError::DraftNotFound => (StatusCode::NOT_FOUND, "mail draft not found"),
         MailServiceError::MessageNotFound => (StatusCode::NOT_FOUND, "mail message not found"),
         MailServiceError::ThreadNotFound => (StatusCode::NOT_FOUND, "mail thread not found"),
         MailServiceError::ArchiveUnavailable => {
