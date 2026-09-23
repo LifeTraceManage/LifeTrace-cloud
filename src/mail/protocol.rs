@@ -425,7 +425,7 @@ pub async fn send_mail(
     message_id: &str,
     in_reply_to: Option<&str>,
     attachments: &[MailDraftAttachment],
-) -> Result<(), MailProtocolError> {
+) -> Result<Vec<u8>, MailProtocolError> {
     let from = mailbox_with_name(from_name, from_address.unwrap_or(&account.email_address))?;
     let first_to = input.to.first().ok_or(MailProtocolError::InvalidAddress)?;
     let mut builder = Message::builder()
@@ -474,12 +474,51 @@ pub async fn send_mail(
             .map_err(|_| MailProtocolError::MessageBuild)?
     };
 
+    let raw = message.formatted();
     let transport = smtp_transport(account, secret)?;
     tokio::time::timeout(Duration::from_secs(35), transport.send(message))
         .await
         .map_err(|_| MailProtocolError::Send)?
         .map_err(|_| MailProtocolError::Send)?;
-    Ok(())
+    Ok(raw)
+}
+
+pub async fn ensure_sent_copy(
+    account: MailAccountSecret,
+    secret: String,
+    sent_folder: String,
+    message_id: String,
+    raw: Vec<u8>,
+) -> Result<(), MailProtocolError> {
+    tokio::task::spawn_blocking(move || {
+        let client = imap_client(&account)?;
+        let mut session = client
+            .login(&account.username, &secret)
+            .map_err(|_| MailProtocolError::Authentication)?;
+        identify_imap_session(&mut session, &account)?;
+        session
+            .select(&sent_folder)
+            .map_err(|_| MailProtocolError::Folder)?;
+
+        // Some providers automatically create a Sent copy after SMTP delivery.
+        // Search by our generated Message-ID first so APPEND never creates a
+        // second visible copy when the provider already persisted one.
+        let query = format!("HEADER Message-ID \"{message_id}\"");
+        let existing = session
+            .uid_search(query)
+            .map_err(|_| MailProtocolError::Fetch)?;
+        if existing.is_empty() {
+            session
+                .append(&sent_folder, &raw)
+                .flag(imap::types::Flag::Seen)
+                .finish()
+                .map_err(|_| MailProtocolError::State)?;
+        }
+        let _ = session.logout();
+        Ok(())
+    })
+    .await
+    .map_err(|_| MailProtocolError::Task)?
 }
 
 #[cfg(test)]
