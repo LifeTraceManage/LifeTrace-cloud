@@ -586,21 +586,12 @@ impl BeeCountSyncService {
             "SELECT entity_type,entity_id,payload,last_cursor,server_modified_at \
              FROM sync_entities \
              WHERE is_deleted=FALSE AND ( \
-               (user_id=$1 AND entity_type = ANY($2)) OR \
-               (user_id=$3 AND entity_type = ANY($4))) \
+               (user_id=$1 AND entity_type IN ('finance.transaction','finance.budget')) OR \
+               (user_id=$2 AND entity_type IN ('finance.account','finance.category','finance.tag'))) \
              ORDER BY entity_type,entity_id",
         )
         .bind(storage_uuid)
-        .bind(vec![
-            "finance.transaction".to_owned(),
-            "finance.budget".to_owned(),
-        ])
         .bind(resource_owner_uuid)
-        .bind(vec![
-            "finance.account".to_owned(),
-            "finance.category".to_owned(),
-            "finance.tag".to_owned(),
-        ])
         .fetch_all(&self.pool)
         .await
         .map_err(db_error)?;
