@@ -187,8 +187,10 @@ pub struct ConnectionTestResult {
 pub struct MailListQuery {
     pub account_id: Option<Uuid>,
     pub folder_id: Option<Uuid>,
+    pub role: Option<String>,
     pub q: Option<String>,
     pub unread_only: Option<bool>,
+    pub starred_only: Option<bool>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
