@@ -247,12 +247,13 @@ pub async fn fetch_raw_message(
     .map_err(|_| MailProtocolError::Task)?
 }
 
-pub async fn set_seen(
+pub async fn set_flag(
     account: MailAccountSecret,
     secret: String,
     folder: String,
     uid: u32,
-    seen: bool,
+    flag: &'static str,
+    enabled: bool,
 ) -> Result<(), MailProtocolError> {
     tokio::task::spawn_blocking(move || {
         let client = imap_client(&account)?;
@@ -263,10 +264,10 @@ pub async fn set_seen(
         session
             .select(&folder)
             .map_err(|_| MailProtocolError::Folder)?;
-        let operation = if seen {
-            "+FLAGS.SILENT (\\Seen)"
+        let operation = if enabled {
+            format!("+FLAGS.SILENT ({flag})")
         } else {
-            "-FLAGS.SILENT (\\Seen)"
+            format!("-FLAGS.SILENT ({flag})")
         };
         session
             .uid_store(uid.to_string(), operation)
@@ -278,12 +279,22 @@ pub async fn set_seen(
     .map_err(|_| MailProtocolError::Task)?
 }
 
-pub async fn archive_message(
+pub async fn set_seen(
     account: MailAccountSecret,
     secret: String,
     folder: String,
     uid: u32,
-    archive_folder: String,
+    seen: bool,
+) -> Result<(), MailProtocolError> {
+    set_flag(account, secret, folder, uid, "\\Seen", seen).await
+}
+
+pub async fn move_message(
+    account: MailAccountSecret,
+    secret: String,
+    folder: String,
+    uid: u32,
+    destination_folder: String,
 ) -> Result<(), MailProtocolError> {
     tokio::task::spawn_blocking(move || {
         let client = imap_client(&account)?;
@@ -299,11 +310,11 @@ pub async fn archive_message(
             .map_err(|_| MailProtocolError::Capability)?;
         if capabilities.has_str("MOVE") {
             session
-                .uid_mv(uid.to_string(), archive_folder)
+                .uid_mv(uid.to_string(), destination_folder)
                 .map_err(|_| MailProtocolError::State)?;
         } else {
             session
-                .uid_copy(uid.to_string(), &archive_folder)
+                .uid_copy(uid.to_string(), &destination_folder)
                 .map_err(|_| MailProtocolError::State)?;
             session
                 .uid_store(uid.to_string(), "+FLAGS.SILENT (\\Deleted)")
@@ -315,6 +326,16 @@ pub async fn archive_message(
     })
     .await
     .map_err(|_| MailProtocolError::Task)?
+}
+
+pub async fn archive_message(
+    account: MailAccountSecret,
+    secret: String,
+    folder: String,
+    uid: u32,
+    archive_folder: String,
+) -> Result<(), MailProtocolError> {
+    move_message(account, secret, folder, uid, archive_folder).await
 }
 
 pub async fn wait_for_inbox_change(
