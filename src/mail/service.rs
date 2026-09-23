@@ -1705,20 +1705,14 @@ async fn refresh_thread(
 ) -> Result<(), MailServiceError> {
     sqlx::query(
         r#"
-        UPDATE mail_threads t SET
-            latest_message_at=s.latest_message_at,
-            message_count=s.message_count,
-            unread_count=s.unread_count,
-            snippet=s.snippet,
-            participant_summary=s.participant_summary,
+        UPDATE mail_threads
+        SET latest_message_at=(SELECT max(received_at) FROM mail_messages WHERE thread_id=$1),
+            message_count=(SELECT count(*) FROM mail_messages WHERE thread_id=$1),
+            unread_count=(SELECT count(*) FROM mail_messages WHERE thread_id=$1 AND is_read=0),
+            snippet=(SELECT snippet FROM mail_messages WHERE thread_id=$1 ORDER BY received_at DESC LIMIT 1),
+            participant_summary=(SELECT from_json FROM mail_messages WHERE thread_id=$1 ORDER BY received_at DESC LIMIT 1),
             updated_at=CURRENT_TIMESTAMP
-        FROM (
-            SELECT thread_id,max(received_at) AS latest_message_at,count(*)::int AS message_count,
-                   count(*) FILTER (WHERE NOT is_read)::int AS unread_count,
-                   (array_agg(snippet ORDER BY received_at DESC))[1] AS snippet,
-                   (array_agg(from_json ORDER BY received_at DESC))[1] AS participant_summary
-            FROM mail_messages WHERE thread_id=$1 GROUP BY thread_id
-        ) s WHERE t.id=s.thread_id
+        WHERE id=$1
         "#,
     )
     .bind(thread_id)
@@ -1730,16 +1724,14 @@ async fn refresh_thread(
 async fn refresh_thread_pool(pool: &SqlitePool, thread_id: Uuid) -> Result<(), MailServiceError> {
     sqlx::query(
         r#"
-        UPDATE mail_threads t SET
-            latest_message_at=s.latest_message_at,message_count=s.message_count,unread_count=s.unread_count,
-            snippet=s.snippet,participant_summary=s.participant_summary,updated_at=CURRENT_TIMESTAMP
-        FROM (
-            SELECT thread_id,max(received_at) AS latest_message_at,count(*)::int AS message_count,
-                   count(*) FILTER (WHERE NOT is_read)::int AS unread_count,
-                   (array_agg(snippet ORDER BY received_at DESC))[1] AS snippet,
-                   (array_agg(from_json ORDER BY received_at DESC))[1] AS participant_summary
-            FROM mail_messages WHERE thread_id=$1 GROUP BY thread_id
-        ) s WHERE t.id=s.thread_id
+        UPDATE mail_threads
+        SET latest_message_at=(SELECT max(received_at) FROM mail_messages WHERE thread_id=$1),
+            message_count=(SELECT count(*) FROM mail_messages WHERE thread_id=$1),
+            unread_count=(SELECT count(*) FROM mail_messages WHERE thread_id=$1 AND is_read=0),
+            snippet=(SELECT snippet FROM mail_messages WHERE thread_id=$1 ORDER BY received_at DESC LIMIT 1),
+            participant_summary=(SELECT from_json FROM mail_messages WHERE thread_id=$1 ORDER BY received_at DESC LIMIT 1),
+            updated_at=CURRENT_TIMESTAMP
+        WHERE id=$1
         "#,
     )
     .bind(thread_id)
