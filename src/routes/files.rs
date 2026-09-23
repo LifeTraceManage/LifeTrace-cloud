@@ -139,7 +139,7 @@ async fn prepare(
             let key: String = row.try_get("storage_key").map_err(database_error)?;
             Some(signed_transfer(
                 storage
-                    .presign_put(&key, &file.sha256, Utc::CURRENT_TIMESTAMP)
+                    .presign_put(&key, &file.sha256, Utc::now())
                     .map_err(storage_error)?,
             ))
         };
@@ -180,7 +180,7 @@ async fn prepare(
     .map_err(database_error)?;
     let file = row_to_metadata(&row)?;
     let upload = storage
-        .presign_put(&storage_key, &file.sha256, Utc::CURRENT_TIMESTAMP)
+        .presign_put(&storage_key, &file.sha256, Utc::now())
         .map_err(storage_error)?;
     Ok((
         StatusCode::CREATED,
@@ -256,7 +256,7 @@ async fn refresh_upload_url(
         .await
         .map_err(database_error)?;
     let signed = storage_config(&state)?
-        .presign_put(&key, &sha256, Utc::CURRENT_TIMESTAMP)
+        .presign_put(&key, &sha256, Utc::now())
         .map_err(storage_error)?;
     Ok(Json(signed_transfer(signed)))
 }
@@ -327,7 +327,7 @@ async fn download_url(
     }
     let key: String = row.try_get("storage_key").map_err(database_error)?;
     let signed = storage_config(&state)?
-        .presign_get(&key, Utc::CURRENT_TIMESTAMP)
+        .presign_get(&key, Utc::now())
         .map_err(storage_error)?;
     Ok(Json(signed_transfer(signed)))
 }
