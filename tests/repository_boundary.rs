@@ -42,6 +42,8 @@ fn production_is_a_single_sqlite_container() {
     assert!(main.contains("workers::mail::run"));
     assert!(main.contains("workers::execution::run"));
     assert!(main.contains("rewrite_beecount_request"));
+    assert!(main.contains("bootstrap-user"));
+    assert!(main.contains("create-invite"));
 }
 
 #[test]
