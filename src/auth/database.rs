@@ -7,6 +7,7 @@ use lifetrace_contracts::auth::v1::{AppInstallationId, AuthSessionId};
 use lifetrace_contracts::sync::v1::AppId;
 use lifetrace_contracts::{ErrorCode, UserId};
 use sqlx::{Row, SqlitePool};
+use uuid::Uuid;
 
 use crate::auth::token::{TokenKind, TokenManager};
 use crate::auth::{AuthCredential, AuthMethod, AuthProvider, AuthenticatedPrincipal};
