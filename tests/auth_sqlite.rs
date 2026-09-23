@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn database_url() -> Option<String> {
+fn database_path() -> Option<String> {
     std::env::var("TEST_DATABASE_PATH").ok()
 }
 
@@ -35,19 +35,29 @@ fn config(url: String) -> Config {
 }
 
 async fn state() -> Option<AppState> {
-    let url = database_url()?;
+    let url = database_path()?;
     let state = AppState::new(config(url));
     state.initialize().await.unwrap();
-    sqlx::query(
-        "TRUNCATE TABLE auth_audit_log, auth_login_attempts, auth_registration_invites, \
-         auth_password_reset_tokens, auth_web_sessions, auth_refresh_tokens, auth_access_tokens, \
-         auth_sessions, auth_app_grants, sync_snapshot_items, sync_snapshots, \
-         sync_processed_changes, sync_change_log, sync_entities, cloud_devices, cloud_users \
-         RESTART IDENTITY CASCADE",
-    )
-    .execute(&state.pool)
-    .await
-    .unwrap();
+    {
+        for table in [
+            "auth_audit_log",
+            "auth_login_attempts",
+            "auth_registration_invites",
+            "auth_password_reset_tokens",
+            "auth_web_sessions",
+            "auth_refresh_tokens",
+            "auth_access_tokens",
+            "auth_sessions",
+            "auth_app_grants",
+            "cloud_devices",
+            "cloud_users",
+        ] {
+            sqlx::query(&format!("DELETE FROM {table}"))
+                .execute(&state.pool)
+                .await
+                .unwrap();
+        }
+    }
     Some(state)
 }
 
@@ -86,7 +96,7 @@ async fn native_login_refresh_rotation_and_reuse_revocation() {
         .unwrap();
     let refresh = initial.refresh_token.clone().unwrap();
     let device_id = sqlx::query_scalar::<_, String>(
-        "SELECT external_device_id FROM cloud_devices WHERE id=$1::uuid",
+        "SELECT external_device_id FROM cloud_devices WHERE id=$1",
     )
     .bind(initial.session.device_id.as_str())
     .fetch_one(&state.pool)
@@ -114,7 +124,7 @@ async fn native_login_refresh_rotation_and_reuse_revocation() {
                 refresh_token: refresh,
                 app_id: AppId::new(AppId::DESKTOP),
                 device_id: sqlx::query_scalar(
-                    "SELECT external_device_id FROM cloud_devices WHERE id=$1::uuid",
+                    "SELECT external_device_id FROM cloud_devices WHERE id=$1",
                 )
                 .bind(initial.session.device_id.as_str())
                 .fetch_one(&state.pool)
@@ -131,7 +141,7 @@ async fn native_login_refresh_rotation_and_reuse_revocation() {
     );
 
     let session_status: String =
-        sqlx::query_scalar("SELECT status FROM auth_sessions WHERE id=$1::uuid")
+        sqlx::query_scalar("SELECT status FROM auth_sessions WHERE id=$1")
             .bind(initial.session.id.as_str())
             .fetch_one(&state.pool)
             .await
@@ -190,7 +200,7 @@ async fn registered_device_can_sync_without_duplicate_key_error() {
     assert_eq!(response.results.len(), 1);
     // 同一设备只有一行。
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM cloud_devices WHERE user_id=$1::uuid AND app_id='lifetrace-desktop' AND external_device_id=$2",
+        "SELECT COUNT(*) FROM cloud_devices WHERE user_id=$1 AND app_id='lifetrace-desktop' AND external_device_id=$2",
     )
     .bind(tokens.user.id.as_str())
     .bind(&device_id)
@@ -443,7 +453,7 @@ async fn audit_log_contains_events_but_not_raw_secrets() {
         )
         .await
         .unwrap();
-    let audit: Vec<String> = sqlx::query_scalar("SELECT metadata::text FROM auth_audit_log")
+    let audit: Vec<String> = sqlx::query_scalar("SELECT metadata FROM auth_audit_log")
         .fetch_all(&state.pool)
         .await
         .unwrap();
