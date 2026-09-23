@@ -15,9 +15,7 @@ const DEV_TOKEN: &str = "epic17-dev-token";
 
 async fn memory_app() -> Router {
     let state = AppState::new(Config {
-        database_path: ":memory:".to_owned(),
-        migration_on_startup: true,
-        dev_auth_token: DEV_TOKEN.to_owned(),
+        database_path: ":memory:".to_owned(),        dev_auth_token: DEV_TOKEN.to_owned(),
         dev_auth_user_id: "epic17-user".to_owned(),
         dev_auth_device_id: "epic17-device".to_owned(),
         ..Config::default()
@@ -142,9 +140,7 @@ fn database_path() -> Option<String> {
 
 fn sqlite_config(url: String) -> Config {
     Config {
-        database_path: url,
-        migration_on_startup: true,
-        dev_auth_enabled: false,
+        database_path: url,        dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
         auth_password_pepper: Some("test-password-pepper-01234567890123456789".to_owned()),
         auth_token_hash_pepper: Some("test-token-pepper-0123456789012345678901".to_owned()),
