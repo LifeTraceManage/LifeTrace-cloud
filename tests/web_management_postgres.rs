@@ -1,4 +1,4 @@
-//! PostgreSQL-backed browser device/session management acceptance tests.
+//! SQLite-backed browser device/session management acceptance tests.
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Method, Request, StatusCode};
@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 fn config(url: String) -> Config {
     Config {
-        database_url: Some(url),
+        database_path: url,
         migration_on_startup: true,
         dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
