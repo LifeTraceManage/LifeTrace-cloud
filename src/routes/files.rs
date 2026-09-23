@@ -8,7 +8,7 @@ use chrono::Utc;
 use lifetrace_contracts::{ErrorCode, UserId};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use uuid;
+use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
 use crate::error::ApiError;
