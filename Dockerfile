@@ -1,12 +1,5 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-alpine AS web-builder
-WORKDIR /web
-COPY apps/web/package.json ./
-RUN npm install --no-audit --no-fund
-COPY apps/web/ ./
-RUN npm run build
-
 FROM rust:1.88-slim AS rust-builder
 WORKDIR /build
 ENV CARGO_NET_RETRY=3 \
@@ -40,9 +33,10 @@ RUN sed -i \
 
 WORKDIR /app
 COPY --from=rust-builder /build/target/release/lifetrace-cloud /app/lifetrace-cloud
-COPY --from=web-builder /web/dist /app/web
 COPY apps/photo-challenge-pwa/ /app/photo-challenge/
 
+# LifeTrace-web lives in its own private repository. Production Compose mounts
+# the independently built dist directory read-only at /app/web.
 ENV LIFETRACE_DATABASE_PATH=/data/lifetrace.db \
     LIFETRACE_WEB_ROOT=/app/web \
     LIFETRACE_PHOTO_WEB_ROOT=/app/photo-challenge \
