@@ -8,7 +8,7 @@ use chrono::Utc;
 use lifetrace_contracts::{ErrorCode, UserId};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use uuid::Uuid;
+use uuid;
 
 use crate::auth::AuthenticatedPrincipal;
 use crate::error::ApiError;
@@ -139,7 +139,7 @@ async fn prepare(
             let key: String = row.try_get("storage_key").map_err(database_error)?;
             Some(signed_transfer(
                 storage
-                    .presign_put(&key, &file.sha256, Utc::now())
+                    .presign_put(&key, &file.sha256, Utc::CURRENT_TIMESTAMP)
                     .map_err(storage_error)?,
             ))
         };
@@ -180,7 +180,7 @@ async fn prepare(
     .map_err(database_error)?;
     let file = row_to_metadata(&row)?;
     let upload = storage
-        .presign_put(&storage_key, &file.sha256, Utc::now())
+        .presign_put(&storage_key, &file.sha256, Utc::CURRENT_TIMESTAMP)
         .map_err(storage_error)?;
     Ok((
         StatusCode::CREATED,
@@ -209,9 +209,9 @@ async fn list(
     let limit = query.limit.unwrap_or(50).clamp(1, MAX_LIST_LIMIT);
     let rows = sqlx::query(
         "SELECT * FROM file_objects WHERE user_id=$1 AND deleted_at IS NULL \
-         AND ($2::text IS NULL OR domain=$2) \
-         AND ($3::text IS NULL OR entity_type=$3) \
-         AND ($4::text IS NULL OR entity_id=$4) \
+         AND ($2 IS NULL OR domain=$2) \
+         AND ($3 IS NULL OR entity_type=$3) \
+         AND ($4 IS NULL OR entity_id=$4) \
          ORDER BY created_at DESC LIMIT $5",
     )
     .bind(owner)
@@ -250,13 +250,13 @@ async fn refresh_upload_url(
     }
     let key: String = row.try_get("storage_key").map_err(database_error)?;
     let sha256: String = row.try_get("sha256").map_err(database_error)?;
-    sqlx::query("UPDATE file_objects SET upload_attempts=upload_attempts+1, status='pending', failure_reason=NULL, updated_at=now() WHERE id=$1")
+    sqlx::query("UPDATE file_objects SET upload_attempts=upload_attempts+1, status='pending', failure_reason=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=$1")
         .bind(id)
         .execute(&state.pool)
         .await
         .map_err(database_error)?;
     let signed = storage_config(&state)?
-        .presign_put(&key, &sha256, Utc::now())
+        .presign_put(&key, &sha256, Utc::CURRENT_TIMESTAMP)
         .map_err(storage_error)?;
     Ok(Json(signed_transfer(signed)))
 }
@@ -270,7 +270,7 @@ async fn mark_complete(
     let owner = user_uuid(&principal.user_id)?;
     ensure_database(&state)?;
     let row = sqlx::query(
-        "UPDATE file_objects SET status='available', available_at=COALESCE(available_at,now()), failure_reason=NULL, updated_at=now() \
+        "UPDATE file_objects SET status='available', available_at=COALESCE(available_at,CURRENT_TIMESTAMP), failure_reason=NULL, updated_at=CURRENT_TIMESTAMP \
          WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL RETURNING *",
     )
     .bind(id)
@@ -301,7 +301,7 @@ async fn mark_failed(
         .take(300)
         .collect();
     let row = sqlx::query(
-        "UPDATE file_objects SET status='failed', failure_reason=$3, updated_at=now() \
+        "UPDATE file_objects SET status='failed', failure_reason=$3, updated_at=CURRENT_TIMESTAMP \
          WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL RETURNING *",
     )
     .bind(id)
@@ -327,7 +327,7 @@ async fn download_url(
     }
     let key: String = row.try_get("storage_key").map_err(database_error)?;
     let signed = storage_config(&state)?
-        .presign_get(&key, Utc::now())
+        .presign_get(&key, Utc::CURRENT_TIMESTAMP)
         .map_err(storage_error)?;
     Ok(Json(signed_transfer(signed)))
 }
@@ -341,7 +341,7 @@ async fn delete_metadata(
     let owner = user_uuid(&principal.user_id)?;
     ensure_database(&state)?;
     let changed = sqlx::query(
-        "UPDATE file_objects SET deleted_at=now(), updated_at=now() WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL",
+        "UPDATE file_objects SET deleted_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL",
     )
     .bind(id)
     .bind(owner)
@@ -365,7 +365,7 @@ async fn orphans(
     let hours = query.older_than_hours.unwrap_or(24).clamp(1, 24 * 365);
     let rows = sqlx::query(
         "SELECT * FROM file_objects WHERE user_id=$1 AND deleted_at IS NULL AND entity_type IS NULL \
-         AND status IN ('pending','failed') AND created_at < now() - ($2::text || ' hours')::interval \
+         AND status IN ('pending','failed') AND created_at < CURRENT_TIMESTAMP - ($2 || ' hours')::interval \
          ORDER BY created_at ASC LIMIT 200",
     )
     .bind(owner)
@@ -382,7 +382,7 @@ async fn owned_row(
     state: &AppState,
     user_id: &UserId,
     id: Uuid,
-) -> Result<sqlx::postgres::PgRow, ApiError> {
+) -> Result<sqlx::sqlite::SqliteRow, ApiError> {
     ensure_database(state)?;
     let owner = user_uuid(user_id)?;
     sqlx::query("SELECT * FROM file_objects WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL")
@@ -478,7 +478,7 @@ fn signed_transfer(value: PresignedRequest) -> SignedTransfer {
     }
 }
 
-fn row_to_metadata(row: &sqlx::postgres::PgRow) -> Result<FileMetadata, ApiError> {
+fn row_to_metadata(row: &sqlx::sqlite::SqliteRow) -> Result<FileMetadata, ApiError> {
     Ok(FileMetadata {
         id: row
             .try_get::<Uuid, _>("id")
