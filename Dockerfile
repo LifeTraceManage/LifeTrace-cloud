@@ -1,16 +1,19 @@
 # syntax=docker/dockerfile:1
-# Multi-stage build. The runtime image contains no Rust toolchain and runs as
-# an unprivileged user.
-FROM rust:1.88-slim AS builder
+
+FROM node:22-alpine AS web-builder
+WORKDIR /web
+COPY apps/web/package.json ./
+RUN npm install --no-audit --no-fund
+COPY apps/web/ ./
+RUN npm run build
+
+FROM rust:1.88-slim AS rust-builder
 WORKDIR /build
 ENV CARGO_NET_RETRY=3 \
     CARGO_HTTP_TIMEOUT=60 \
     CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 COPY . .
 
-# Keep Cargo's registry/git cache across BuildKit invocations. Fetching is kept
-# separate from compilation so transient network failures do not discard crates
-# that were already downloaded; the actual release build then runs offline.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     sh -ec 'for attempt in 1 2 3 4 5; do \
@@ -21,13 +24,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    cargo build --offline --locked --release \
-    --manifest-path Cargo.toml \
-    --bin lifetrace-cloud \
-    --bin mail_worker \
-    --bin execution_worker \
-    --bin lifetrace-migrate \
-    --bin lifetrace-admin
+    cargo build --offline --locked --release --bin lifetrace-cloud
 
 FROM debian:bookworm-slim
 RUN sed -i \
@@ -35,19 +32,27 @@ RUN sed -i \
         -e 's|deb.debian.org/debian|mirrors.aliyun.com/debian|g' \
         /etc/apt/sources.list.d/debian.sources \
     && apt-get -o Acquire::Retries=3 update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 lifetrace \
-    && mkdir -p /data/photo-staging \
-    && chown -R lifetrace:lifetrace /data
+    && mkdir -p /data/photo-staging /app/web /app/photo-challenge \
+    && chown -R lifetrace:lifetrace /data /app
+
 WORKDIR /app
-COPY --from=builder /build/target/release/lifetrace-cloud /app/lifetrace-cloud
-COPY --from=builder /build/target/release/mail_worker /app/mail_worker
-COPY --from=builder /build/target/release/execution_worker /app/execution_worker
-COPY --from=builder /build/target/release/lifetrace-migrate /app/lifetrace-migrate
-COPY --from=builder /build/target/release/lifetrace-admin /app/lifetrace-admin
+COPY --from=rust-builder /build/target/release/lifetrace-cloud /app/lifetrace-cloud
+COPY --from=web-builder /web/dist /app/web
+COPY apps/photo-challenge-pwa/ /app/photo-challenge/
+
+ENV LIFETRACE_DATABASE_PATH=/data/lifetrace.db \
+    LIFETRACE_WEB_ROOT=/app/web \
+    LIFETRACE_PHOTO_WEB_ROOT=/app/photo-challenge \
+    PHOTO_STAGING_DIR=/data/photo-staging
+
 USER lifetrace
-EXPOSE 8787
+EXPOSE 8787 8869
+VOLUME ["/data"]
+
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl --fail --silent http://127.0.0.1:8787/health/ready || exit 1
+
 ENTRYPOINT ["/app/lifetrace-cloud"]

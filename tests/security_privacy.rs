@@ -13,13 +13,15 @@ use uuid::Uuid;
 
 const DEV_TOKEN: &str = "epic17-dev-token";
 
-fn memory_app() -> Router {
-    app(AppState::new(Config {
-        dev_auth_token: DEV_TOKEN.to_owned(),
+async fn memory_app() -> Router {
+    let state = AppState::new(Config {
+        database_path: ":memory:".to_owned(),        dev_auth_token: DEV_TOKEN.to_owned(),
         dev_auth_user_id: "epic17-user".to_owned(),
         dev_auth_device_id: "epic17-device".to_owned(),
         ..Config::default()
-    }))
+    });
+    state.initialize().await.unwrap();
+    app(state)
 }
 
 async fn request(
@@ -46,7 +48,7 @@ async fn json_body(response: axum::response::Response) -> Value {
 
 #[tokio::test]
 async fn all_api_responses_receive_security_headers() {
-    let response = request(memory_app(), Method::GET, "/health/live", None).await;
+    let response = request(memory_app().await, Method::GET, "/health/live", None).await;
     assert_eq!(response.status(), StatusCode::OK);
     let headers = response.headers();
     assert_eq!(headers["x-content-type-options"], "nosniff");
@@ -78,14 +80,14 @@ async fn production_responses_include_hsts() {
 
 #[tokio::test]
 async fn privacy_endpoints_reject_anonymous_access() {
-    let response = request(memory_app(), Method::GET, "/api/v1/privacy/export", None).await;
+    let response = request(memory_app().await, Method::GET, "/api/v1/privacy/export", None).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
 async fn account_export_is_readable_and_contains_no_authentication_secret() {
     let response = request(
-        memory_app(),
+        memory_app().await,
         Method::GET,
         "/api/v1/privacy/export/account",
         Some(DEV_TOKEN),
@@ -106,7 +108,7 @@ async fn account_export_is_readable_and_contains_no_authentication_secret() {
 #[tokio::test]
 async fn unknown_export_module_fails_closed() {
     let response = request(
-        memory_app(),
+        memory_app().await,
         Method::GET,
         "/api/v1/privacy/export/future-secret",
         Some(DEV_TOKEN),
@@ -118,7 +120,7 @@ async fn unknown_export_module_fails_closed() {
 #[tokio::test]
 async fn policy_is_authenticated_and_documents_object_cleanup_boundary() {
     let response = request(
-        memory_app(),
+        memory_app().await,
         Method::GET,
         "/api/v1/privacy/policy",
         Some(DEV_TOKEN),
@@ -132,15 +134,13 @@ async fn policy_is_authenticated_and_documents_object_cleanup_boundary() {
         .contains("blocks account deletion"));
 }
 
-fn database_url() -> Option<String> {
-    std::env::var("TEST_DATABASE_URL").ok()
+fn database_path() -> Option<String> {
+    std::env::var("TEST_DATABASE_PATH").ok()
 }
 
-fn postgres_config(url: String) -> Config {
+fn sqlite_config(url: String) -> Config {
     Config {
-        database_url: Some(url),
-        migration_on_startup: true,
-        dev_auth_enabled: false,
+        database_path: url,        dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
         auth_password_pepper: Some("test-password-pepper-01234567890123456789".to_owned()),
         auth_token_hash_pepper: Some("test-token-pepper-0123456789012345678901".to_owned()),
@@ -152,20 +152,30 @@ fn postgres_config(url: String) -> Config {
     }
 }
 
-async fn postgres_state() -> Option<AppState> {
-    let url = database_url()?;
-    let state = AppState::new(postgres_config(url));
+async fn sqlite_state() -> Option<AppState> {
+    let url = database_path()?;
+    let state = AppState::new(sqlite_config(url));
     state.initialize().await.unwrap();
-    sqlx::query(
-        "TRUNCATE TABLE auth_audit_log, auth_login_attempts, auth_registration_invites, \
-         auth_password_reset_tokens, auth_web_sessions, auth_refresh_tokens, auth_access_tokens, \
-         auth_sessions, auth_app_grants, sync_snapshot_items, sync_snapshots, \
-         sync_processed_changes, sync_change_log, sync_entities, cloud_devices, cloud_users \
-         RESTART IDENTITY CASCADE",
-    )
-    .execute(&state.pool)
-    .await
-    .unwrap();
+    {
+        for table in [
+            "auth_audit_log",
+            "auth_login_attempts",
+            "auth_registration_invites",
+            "auth_password_reset_tokens",
+            "auth_web_sessions",
+            "auth_refresh_tokens",
+            "auth_access_tokens",
+            "auth_sessions",
+            "auth_app_grants",
+            "cloud_devices",
+            "cloud_users",
+        ] {
+            sqlx::query(&format!("DELETE FROM {table}"))
+                .execute(&state.pool)
+                .await
+                .unwrap();
+        }
+    }
     Some(state)
 }
 
@@ -193,8 +203,8 @@ fn registration() -> RegisterRequestV1 {
 }
 
 #[tokio::test]
-async fn postgres_account_deletion_removes_user_sessions_and_tokens() {
-    let Some(state) = postgres_state().await else {
+async fn sqlite_account_deletion_removes_user_sessions_and_tokens() {
+    let Some(state) = sqlite_state().await else {
         return;
     };
     let issued = state
@@ -236,8 +246,8 @@ async fn postgres_account_deletion_removes_user_sessions_and_tokens() {
 }
 
 #[tokio::test]
-async fn postgres_full_export_excludes_password_and_token_hashes() {
-    let Some(state) = postgres_state().await else {
+async fn sqlite_full_export_excludes_password_and_token_hashes() {
+    let Some(state) = sqlite_state().await else {
         return;
     };
     let issued = state

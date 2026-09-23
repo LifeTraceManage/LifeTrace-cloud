@@ -1,29 +1,22 @@
-//! LifeTrace EPIC-03 sync server.
+//! LifeTrace cloud backend.
 //!
-//! The production path is backed by PostgreSQL through SQLx. The protocol
-//! surface remains the v1 contract defined in `lifetrace-contracts`.
+//! SQLite is the single embedded persistence path. Sync wire compatibility is
+//! defined by `lifetrace-contracts`; domain-specific HTTP adapters are grouped
+//! behind explicit modules.
 
-pub mod api_rate_limit;
 pub mod auth;
-pub mod beecount_adapter;
-pub mod beecount_attachments;
-pub mod beecount_collaboration;
-#[allow(clippy::too_many_arguments)]
-pub mod beecount_compat;
-pub mod beecount_realtime;
-#[allow(clippy::unnecessary_map_or)]
-pub mod beecount_sync;
+pub mod beecount;
+
 pub mod config;
 pub mod error;
+pub mod http;
 pub mod mail;
 pub mod object_storage;
-pub mod postgres_repository;
 pub mod repository;
 pub mod routes;
-pub mod security;
 pub mod state;
-pub mod store;
 pub mod sync;
+pub mod workers;
 
 pub use config::Config;
 pub use error::ApiError;
@@ -36,6 +29,7 @@ use axum::http::{
 use axum::{middleware, Router};
 use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
+use tower_http::services::{ServeDir, ServeFile};
 
 const TAURI_DESKTOP_ORIGINS: &[&str] = &["http://tauri.localhost", "https://tauri.localhost"];
 
@@ -81,22 +75,42 @@ pub fn app(state: AppState) -> Router {
     };
 
     let production = state.config.is_production();
-    let rate_limiter = api_rate_limit::ApiRateLimiter::from_config(&state.config);
+    let rate_limiter = http::rate_limit::ApiRateLimiter::from_config(&state.config);
     let mut router = routes::router(state.clone())
         .layer(middleware::from_fn_with_state(
             rate_limiter,
-            api_rate_limit::middleware,
+            http::rate_limit::middleware,
         ))
         .with_state(state)
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(cors);
 
-    for layer in security::response_security_layers() {
+    for layer in http::security::response_security_layers() {
         router = router.layer(layer);
     }
     if production {
-        router = router.layer(security::hsts_layer());
+        router = router.layer(http::security::hsts_layer());
     }
+
+    let web_root = std::env::var("LIFETRACE_WEB_ROOT").unwrap_or_else(|_| "/app/web".to_owned());
+    let photo_root = std::env::var("LIFETRACE_PHOTO_WEB_ROOT")
+        .unwrap_or_else(|_| "/app/photo-challenge".to_owned());
+
+    if std::path::Path::new(&photo_root).exists() {
+        let index = format!("{photo_root}/index.html");
+        router = router.nest_service(
+            "/photo-challenge-upload",
+            ServeDir::new(photo_root).not_found_service(ServeFile::new(index)),
+        );
+    }
+
+    if std::path::Path::new(&web_root).exists() {
+        let index = format!("{web_root}/index.html");
+        router = router.fallback_service(
+            ServeDir::new(web_root).not_found_service(ServeFile::new(index)),
+        );
+    }
+
     router
 }

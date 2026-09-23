@@ -1,196 +1,202 @@
 # LifeTrace Cloud
 
-LifeTrace 独立云端后端服务（Rust + Axum + PostgreSQL）。它与桌面应用位于同一个 Monorepo，但可以独立构建、测试和部署。
+LifeTrace 的轻量自托管云端服务。当前运行时只使用 Rust、Axum、SQLx 与 SQLite；Web 静态资源、BeeCount 兼容入口、邮件后台同步和 Execution 后台任务都由同一个 Cloud 进程提供。
+
+目标不是做通用云平台，而是让个人服务器上的 LifeTrace 具备可靠同步、认证和少量云端能力，同时尽可能降低部署和维护成本。
+
+## 当前架构
+
+```text
+Browser / Mobile / Desktop / BeeCount
+               │
+        ┌──────┴──────┐
+        │ LifeTrace   │
+        │ Cloud       │
+        │             │
+        │ Axum API    │ :8787
+        │ BeeCount    │ :8869
+        │ Web static  │
+        │ Mail jobs   │
+        │ Exec jobs   │
+        │ SQLite      │
+        └──────┬──────┘
+               │
+         /data/lifetrace.db
+```
+
+自托管环境只有一个常驻应用进程和一个持久化数据目录。没有 PostgreSQL、Caddy、migration container、mail worker container 或 execution worker container。
+
+SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行。
 
 ## 目录
 
-- 云端源码：`services/cloud/src/`
-- 数据库迁移：`services/cloud/migrations/`
-- 云端测试：`services/cloud/tests/`
-- 部署文件：`deploy/cloud/`
-- 共享协议：`crates/lifetrace-contracts/`、`contracts/`
+- `src/routes/`：HTTP API
+- `src/auth/`：认证、Session、Token 与密码逻辑
+- `src/beecount/`：BeeCount 兼容和财务同步
+- `src/mail/`：邮件协议、解析和邮件服务
+- `src/workers/`：随 Cloud 进程启动的后台任务
+- `src/repository/sqlite/`：Sync v1 SQLite 持久化
+- `src/sync/`：游标、分页令牌和 payload hash
+- `migrations/0001_sqlite.sql`：SQLite 基线 schema
+- `migrations/0002_mail_workspace.sql`：Mail Workspace 增量 schema（Identity / Draft attachment）
+- `apps/web/`：随 Cloud 镜像构建的 Web 前端
+- `apps/photo-challenge-pwa/`：摄影挑战静态页面
+- `deploy/cloud/`：唯一生产 Compose 与环境变量模板
+- `crates/lifetrace-contracts/`：共享协议和领域契约
+- `crates/lifetrace-sync-client/`：Rust Sync v1 客户端
+- `contracts/`：生成的跨语言契约
 
-## 端点
+## HTTP 入口
 
-| 方法 | 路径 | 认证 | 说明 |
-| --- | --- | --- | --- |
-| GET | `/health/live` | 否 | 存活 |
-| GET | `/health/ready` | 否 | 就绪 |
-| GET | `/api/v1/meta/version` | 否 | 版本 |
-| GET | `/api/v1/sync/capabilities` | 否 | 能力协商 |
-| POST | `/api/v1/sync/push` | Bearer / Web Session | 批量提交 |
-| POST | `/api/v1/sync/pull` | Bearer / Web Session | 拉取变更 |
-| POST | `/api/v1/sync/snapshot` | Bearer / Web Session | 全量快照 |
-| GET | `/api/v1/files` | Bearer / Web Session + `files:read` | 查询当前用户文件元数据 |
-| POST | `/api/v1/files` | Bearer / Web Session + `files:write` | 创建/去重元数据并获取短时上传 URL |
-| GET | `/api/v1/files/{id}` | Bearer / Web Session + `files:read` | 查看单个文件元数据 |
-| DELETE | `/api/v1/files/{id}` | Bearer / Web Session + `files:write` | 软删除当前用户文件元数据 |
-| POST | `/api/v1/files/{id}/upload-url` | Bearer / Web Session + `files:write` | 上传失败后重签 PUT URL |
-| POST | `/api/v1/files/{id}/complete` | Bearer / Web Session + `files:write` | 标记上传完成 |
-| POST | `/api/v1/files/{id}/fail` | Bearer / Web Session + `files:write` | 记录上传失败 |
-| POST | `/api/v1/files/{id}/download-url` | Bearer / Web Session + `files:read` | 按需获取短时 GET URL |
-| GET | `/api/v1/files/orphans` | Bearer / Web Session + `files:read` | 查询未关联且长期 pending/failed 的孤立候选 |
-| GET | `/api/v1/privacy/export` | Bearer / Web Session | 导出当前授权范围内的全部用户数据 |
-| GET | `/api/v1/privacy/export/{module}` | Bearer / Web Session | 分模块导出 |
-| GET | `/api/v1/privacy/policy` | Bearer / Web Session | 查看数据保留策略 |
-| DELETE | `/api/v1/privacy/account` | Bearer / Web Session + CSRF | 注销账号并清理云端数据 |
-| GET | `/api/v1/integrations/beecount/status` | Bearer / Web Session + `finance:read` | BeeCount 只读适配器状态 |
-| GET | `/api/v1/integrations/beecount/ledgers` | Bearer / Web Session + `finance:read` | BeeCount 账本列表 |
-| GET | `/api/v1/integrations/beecount/ledgers/{ledger_id}/snapshot` | Bearer / Web Session + `finance:read` | 规范化交易、账户、分类、标签与预算快照 |
+主服务监听 `8787`，生产 Compose 映射为宿主机 `80`。
 
+| 路径 | 能力 |
+| --- | --- |
+| `/health/*` | 健康检查 |
+| `/api/v1/auth/*` | 登录、Session、Token |
+| `/api/v1/sync/*` | Push / Pull / Snapshot |
+| `/api/v1/files/*` | 文件元数据和对象存储签名 |
+| `/api/v1/privacy/*` | 数据导出和账号删除 |
+| `/api/v1/integrations/beecount/*` | LifeTrace Web 财务接口 |
+| `/api/v1/mail/*` | 邮件 |
+| `/api/v1/photo-*/*` | 照片相关能力 |
+| 其他路径 | Web SPA 静态资源 |
 
-## LifeTrace Mail Runtime
+BeeCount 兼容监听 `8869`。该监听器只负责把 BeeCount 原始 `/api/v1/*` 和 `/ws` 请求重写到内部兼容路由，不需要 Caddy。
 
-Mail 已直接集成在 LifeTrace Cloud 中，不要求额外部署第二套 Mail API。Web 使用当前 LifeTrace Session 调用 `/api/v1/mail/*`，邮箱授权码/应用密码只保存在 Cloud 侧并由 `MAIL_CREDENTIAL_KEY` 加密。
+## 本地运行
 
-主要能力：
-
-- 多 Mail Account：QQ、163、126、Yeah，以及显式填写 IMAP/SMTP 的 Generic Provider；
-- `mail_worker`：IMAP IDLE + 定时轮询，首次同步回填最近 30 天；
-- Inbox / Sent / Drafts / Archive / Trash / Starred；
-- Subject / Sender / Recipient / Body 搜索；
-- Read / Star / MOVE 同步；
-- MIME 解析、服务端 HTML 清洗（移除远程图片，避免打开邮件触发 tracking pixel）；
-- Identity：From、Display Name、Reply-To、默认身份、纯文本签名；
-- 服务端 Draft 与幂等发送；
-- 出站附件：绑定 Draft，单封邮件附件总大小上限 18 MiB，发送成功后清理临时字节；
-- 入站附件按需从原邮箱取回。
-
-生产环境至少需要：
+默认数据库文件：
 
 ```text
-DATABASE_URL=postgres://...
-MAIL_CREDENTIAL_KEY=<32-byte envelope key configured by deployment>
-MIGRATION_ON_STARTUP=false
+./data/lifetrace.db
 ```
 
-API 进程和 `mail_worker` 必须使用同一个 `DATABASE_URL` 与 `MAIL_CREDENTIAL_KEY`。生产 Compose 已包含 `lifetrace-mail-worker`；数据库迁移由独立 `lifetrace-migrate` 执行。
+直接运行：
 
-Mail Workspace 相关端点包括：
-
-```text
-/api/v1/mail/accounts
-/api/v1/mail/accounts/{id}/test
-/api/v1/mail/accounts/{id}/sync
-/api/v1/mail/messages
-/api/v1/mail/messages/{id}
-/api/v1/mail/messages/{id}/read
-/api/v1/mail/messages/{id}/star
-/api/v1/mail/messages/{id}/move
-/api/v1/mail/identities
-/api/v1/mail/drafts
-/api/v1/mail/drafts/{id}/attachments
+```bash
+cargo run --bin lifetrace-cloud
 ```
 
-## EPIC-12 对象存储
+管理命令也使用同一个二进制：
 
-长期普通文件使用 `file_objects` 元数据 + S3 兼容对象存储。Cloud 只签发短时 URL，不代理大文件字节；`file.metadata` 继续通过既有 Sync 协议跨端同步，因此 Push/Pull/Snapshot 中不会携带原文件。
-
-生产需要配置：
-
-```text
-FILE_OBJECT_STORAGE_ENDPOINT=https://s3.example.com
-FILE_OBJECT_STORAGE_BUCKET=lifetrace-files
-FILE_OBJECT_STORAGE_REGION=us-east-1
-FILE_OBJECT_STORAGE_ACCESS_KEY_ID=...
-FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY=...
-FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS=900
-FILE_MAX_UPLOAD_BYTES=268435456
+```bash
+cargo run --bin lifetrace-cloud -- bootstrap-user --email you@example.com
+cargo run --bin lifetrace-cloud -- create-invite --email someone@example.com
 ```
 
-- endpoint 必须是无额外 path/query/fragment 的 HTTP(S) origin；生产应使用 HTTPS；
-- PUT 签名绑定 `x-amz-checksum-sha256`；客户端必须按返回的 `requiredHeaders` 上传；
-- 允许的领域固定为 `finance_imports`、`notes_attachments`、`english_audio`、`photos`、`workout_imports`、`backups`；
-- MIME 白名单按领域校验；默认单文件上限为 256 MiB，可用 `FILE_MAX_UPLOAD_BYTES` 调整；
-- `photo_staging` 是临时照片中转，不替代长期对象存储；
-- BeeCount compatibility attachment 继续保持原协议边界；
-- 本地加密私密相册严格禁止进入本文件服务。
+自定义数据库位置：
 
-完整执行与架构说明见：
-
-- `docs/epic-12/execution-plan.md`
-- `docs/epic-12/architecture.md`
-
-## 运行
-
-从仓库根目录：
-
-```powershell
-npm run dev:cloud
+```bash
+export LIFETRACE_DATABASE_PATH=/tmp/lifetrace.db
+cargo run --bin lifetrace-cloud
 ```
 
-或直接：
-
-```powershell
-cargo run --manifest-path services/cloud/Cargo.toml
-```
-
-本地 PostgreSQL / Docker 环境见 `deploy/cloud/` 和 `scripts/cloud/`。
+首次启动会创建 SQLite 文件并执行全部尚未应用的版本化 migration；已执行的 migration 不会被重写。
 
 ## 测试
 
-```powershell
-npm run test:cloud
+测试不需要 PostgreSQL 或其他外部数据库服务：
+
+```bash
+export TEST_DATABASE_PATH=/tmp/lifetrace-test.db
+cargo fmt --check
+cargo test --locked -- --test-threads=1
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --manifest-path crates/lifetrace-contracts/Cargo.toml
+cargo test --manifest-path crates/lifetrace-sync-client/Cargo.toml
+cargo run --manifest-path tools/contract-exporter/Cargo.toml
 ```
 
-或：
+## 单容器部署
 
-```powershell
-cargo test --manifest-path services/cloud/Cargo.toml
+生产部署只有一个 service：
+
+```text
+lifetrace container
+├── lifetrace-cloud
+├── built Web assets
+└── /data
+    ├── lifetrace.db
+    └── photo-staging/
 ```
 
-## 生产安全配置
+首次部署：
 
-EPIC-17 在现有 EPIC-04 认证基础上增加统一 CSP、安全响应头、HSTS、隐私导出/删除与更严格的生产配置检查。
+```bash
+cp deploy/cloud/.env.production.example deploy/cloud/.env.production
+# 编辑密钥
 
-生产部署要求：
+bash deploy/cloud/deploy-production.sh
+bash deploy/cloud/verify-production.sh
+```
 
-- TLS 在可信反向代理、Ingress 或负载均衡器终止，外部访问只使用 HTTPS；
-- `PUBLIC_WEB_BASE_URL` 必须是 HTTPS；
-- Session Cookie 必须开启 Secure；
-- `CORS_ALLOWED_ORIGINS` 只填写显式 HTTPS Origin，禁止 `*`、`null` 和 HTTP Origin；
-- `MIGRATION_ON_STARTUP=false`；
-- migration 使用独立高权限数据库身份，运行时数据库身份只授予所需 DML 权限；
-- Secret 通过部署系统注入，不提交到仓库，不输出到日志；
-- 数据库端口不暴露公网。
+等价的核心命令只有：
 
-服务端统一返回 `nosniff`、`no-referrer`、`DENY` frame policy、严格 CSP、`no-store` 等响应头；production 额外返回 HSTS。
+```bash
+cd deploy/cloud
+docker compose --env-file .env.production -f docker-compose.production.yml pull
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans --wait
+```
 
-## 数据删除说明
+服务端口：
 
-`DELETE /api/v1/privacy/account` 会验证认证/Scope，Web Session 调用还会执行 CSRF 校验。当前 PostgreSQL schema 以 `cloud_users` 为用户所有权根，账号删除前先撤销活动 Session，再在事务中删除用户根，由外键级联清理设备、同步数据、Session/Token 和邮件数据。
+```text
+80   -> container:8787   LifeTrace Web + API
+8869 -> container:8869   BeeCount compatibility
+```
 
-BeeCount 兼容附件保存在 PostgreSQL `cloud_file_blobs`，随 `cloud_users` 外键级联删除；邮件附件
-的外部 `storage_ref` 仍没有通用对象存储清理 Provider。如果邮件附件存在非空
-`storage_ref`，接口会返回错误而不是虚报账号及外部文件已经删除。EPIC-12 已建立 S3 兼容
-签名传输和 `file_objects` 元数据，但账号注销/GC 的幂等对象物理删除 Provider 仍需在放开
-该门禁前补齐。
+持久化只需要备份 Docker volume 中的 `/data`。数据库主体是 `lifetrace.db`；使用 WAL 时，在线备份应通过 SQLite backup/checkpoint 语义完成，而不是在高写入期间只复制主数据库文件。
 
-完整设计见：
+## 对象存储
 
-- `docs/epic-17/security-architecture.md`
-- `docs/epic-17/data-lifecycle.md`
+较大的长期文件仍可使用 S3 兼容对象存储。SQLite 保存 `file_objects` 元数据，Cloud 签发短期上传/下载 URL，不代理长期对象字节。
 
-## 部署
+相关可选配置：
 
-生产镜像使用 `services/cloud/Dockerfile`。云端服务不依赖 `apps/desktop`，部署时只需要云端源码、共享 Rust crates 与部署配置。
+```text
+FILE_OBJECT_STORAGE_ENDPOINT
+FILE_OBJECT_STORAGE_BUCKET
+FILE_OBJECT_STORAGE_REGION
+FILE_OBJECT_STORAGE_ACCESS_KEY_ID
+FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY
+FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS
+FILE_MAX_UPLOAD_BYTES
+```
 
-生产 Compose 还可以在同一台服务器上启动 BeeCount Cloud 兼容服务，使无需
-重新构建的 BeeCount iOS 客户端通过独立 HTTPS 域名连接。该服务与 LifeTrace
-PostgreSQL 数据隔离，部署、验证和备份说明见
-`docs/beecount-cloud-integration/deployment.md`。
+没有配置对象存储时，不影响核心同步、认证、Web、邮件和 BeeCount 功能。
 
-启用 `BEECOUNT_ADAPTER_ENABLED=true` 后，适配器只允许
-`BEECOUNT_ADAPTER_LIFETRACE_USER_ID` 指定的 LifeTrace 用户读取数据，并只
-连接同一 Compose 网络中的 `http://beecount-cloud:8080/`（测试也可使用本机
-回环地址）。服务账号密码只从部署环境读取；浏览器通过 LifeTrace Session
-访问 `/finance/beecount`，不会接触 BeeCount 凭据。
+## Notes / Mail 兼容性
 
-兼容层附件上传上限由 `BEECOUNT_ATTACHMENT_MAX_UPLOAD_BYTES` 控制，默认 64 MiB。第四阶段的
-附件与 WebSocket 内部接口、存储边界和切流门禁见
-`docs/beecount-cloud-integration/phase-4-execution-report.md`。
+SQLite 单容器重构保持 Web 已上线的 Notes / Mail 契约，不以“简化部署”为理由删减产品能力。
 
-第五阶段继续复用 `cloud_users`、`cloud_devices` 和 PostgreSQL 实体日志，补齐 Profile/头像、
-设备撤销及共享账本 Owner/Editor、邀请、转让和共享资源快照。共享关系只保存权限元数据，
-Editor 写入不会生成第二份财务实体。接口和剩余生产门禁见
-`docs/beecount-cloud-integration/phase-5-execution-report.md`。
+Notes 保留：
+
+- `note.folder.parentFolderId` 层级目录契约；
+- Note / Tag / Relation / Revision 等 Sync v1 entity；
+- Web 的 Wiki Link、Backlinks、Properties、Revision History 与 Calendar/Mail 联动无需后端分叉。
+
+Mail 保留：
+
+- Account / Identity / Draft；
+- Unified Inbox、Mailbox Role、Starred 与正文/发件人/收件人搜索；
+- Read / Star / MOVE；
+- Identity Display Name / Reply-To / Signature；
+- Draft attachment（SQLite BLOB，单封总量 18 MiB 上限）；
+- SMTP multipart send；
+- SMTP 成功后按 Message-ID 检查 Sent，Provider 未自动保存时才通过 IMAP APPEND 补副本，避免重复；
+- Mail privacy export 中的 Identity / Draft metadata。
+
+`MAIL_CREDENTIAL_KEY` 未配置时只关闭邮件聚合后台任务，不影响 Cloud 的其他功能。
+
+## 设计原则
+
+当前 Cloud 明确按单实例个人服务器优化：
+
+1. SQLite 是唯一数据库后端，不维护 PostgreSQL / SQLite 双栈。
+2. 测试同样使用 SQLite，不维护第二套内存数据库实现。
+3. 后台任务运行在 Cloud Tokio runtime 内，不拆独立 worker 服务。
+4. 管理命令与服务端共用 `lifetrace-cloud` 一个二进制，不维护独立 admin/migration/worker 入口。
+5. Web 静态资源由 Axum 提供，不增加 Caddy/Nginx 依赖.
+6. 数据库 schema 使用精简的 SQLite migration 链：一个当前基线 + 必要的向前兼容增量；不保留 PostgreSQL 历史 migration 链。
+7. Sync v1 wire contract 保持兼容，数据库实现细节不暴露给客户端。

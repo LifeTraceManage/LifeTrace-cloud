@@ -1,38 +1,93 @@
-use lifetrace_cloud::{app, security, Config};
+use std::io::{self, Write};
+
+use axum::{extract::Request, middleware, response::Response};
+use lifetrace_cloud::{app, Config};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = Config::from_env();
     config.validate().map_err(|message| {
         eprintln!("[lifetrace-cloud] invalid configuration: {message}");
         message
     })?;
-    security::validate_config(&config).map_err(|message| {
-        eprintln!("[lifetrace-cloud] insecure production configuration: {message}");
-        message
-    })?;
     let state = lifetrace_cloud::AppState::new(config.clone());
     state.initialize().await?;
 
-    let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
-    let address = listener.local_addr().unwrap_or(config.bind_addr);
-    let storage = if state.database_enabled {
-        "postgresql"
-    } else {
-        "memory-test-adapter"
-    };
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.is_empty() {
+        return run_admin(&state, &args).await;
+    }
+
+    let primary_listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
+    let primary_address = primary_listener.local_addr().unwrap_or(config.bind_addr);
+
+    let beecount_addr = std::env::var("BEECOUNT_BIND_ADDRESS")
+        .unwrap_or_else(|_| "0.0.0.0:8869".to_owned())
+        .parse::<std::net::SocketAddr>()?;
+    let beecount_listener = tokio::net::TcpListener::bind(beecount_addr).await?;
+    let beecount_address = beecount_listener.local_addr().unwrap_or(beecount_addr);
+
     println!(
-        "[lifetrace-cloud] env={} storage={storage} listening on http://{address}",
-        config.environment
+        "[lifetrace-cloud] env={} storage=sqlite http=http://{} beecount=http://{}",
+        config.environment, primary_address, beecount_address
     );
 
-    axum::serve(
-        listener,
-        app(state).into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .await?;
+    let primary = axum::serve(
+        primary_listener,
+        app(state.clone()).into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    );
+    let beecount = axum::serve(
+        beecount_listener,
+        app(state.clone())
+            .layer(middleware::from_fn(rewrite_beecount_request))
+            .into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    );
+    if state.config.mail_credential_key.is_some() {
+        let mail_state = state.clone();
+        tokio::spawn(async move {
+            if let Err(error) = lifetrace_cloud::workers::mail::run(mail_state).await {
+                eprintln!("[lifetrace-cloud] mail worker stopped: {error}");
+            }
+        });
+    }
+
+    tokio::spawn(async move {
+        if let Err(error) = lifetrace_cloud::workers::execution::run(state).await {
+            eprintln!("[lifetrace-cloud] execution worker stopped: {error}");
+        }
+    });
+
+    tokio::select! {
+        result = primary => result?,
+        result = beecount => result?,
+        _ = shutdown_signal() => {},
+    }
+
     Ok(())
+}
+
+async fn rewrite_beecount_request(mut request: Request, next: middleware::Next) -> Response {
+    let path = request.uri().path();
+    let rewritten = if path == "/ready" {
+        Some("/health/ready".to_owned())
+    } else if path == "/ws" {
+        Some("/api/v1/integrations/beecount/compat/ws".to_owned())
+    } else {
+        path.strip_prefix("/api/v1")
+            .map(|suffix| format!("/api/v1/integrations/beecount/compat{suffix}"))
+    };
+
+    if let Some(mut target) = rewritten {
+        if let Some(query) = request.uri().query() {
+            target.push('?');
+            target.push_str(query);
+        }
+        if let Ok(uri) = target.parse() {
+            *request.uri_mut() = uri;
+        }
+    }
+
+    next.run(request).await
 }
 
 async fn shutdown_signal() {
@@ -58,4 +113,68 @@ async fn shutdown_signal() {
         _ = terminate => {},
     }
     println!("[lifetrace-cloud] shutting down");
+}
+
+
+fn arg_value(args: &[String], name: &str) -> Option<String> {
+    args.windows(2)
+        .find(|window| window[0] == name)
+        .map(|window| window[1].clone())
+}
+
+async fn run_admin(
+    state: &lifetrace_cloud::AppState,
+    args: &[String],
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match args.first().map(String::as_str) {
+        Some("bootstrap-user") => {
+            let email = arg_value(args, "--email").ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "--email is required")
+            })?;
+            let display_name = arg_value(args, "--display-name");
+            print!("Password: ");
+            io::stdout().flush()?;
+            let password = rpassword::read_password()?;
+            print!("Confirm password: ");
+            io::stdout().flush()?;
+            let confirmation = rpassword::read_password()?;
+            if password != confirmation {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "password confirmation does not match",
+                )
+                .into());
+            }
+            let user_id = state
+                .auth_service
+                .bootstrap_user(
+                    &email,
+                    display_name.as_deref(),
+                    &password,
+                    args.iter().any(|arg| arg == "--allow-additional"),
+                )
+                .await?;
+            println!("Created LifeTrace account {user_id}");
+        }
+        Some("create-invite") => {
+            let expires = arg_value(args, "--expires-seconds")
+                .map(|value| value.parse::<u64>())
+                .transpose()?
+                .unwrap_or(86_400);
+            let token = state
+                .auth_service
+                .create_invite(arg_value(args, "--email").as_deref(), expires, None)
+                .await?;
+            println!("{token}");
+        }
+        Some(command) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("unknown command: {command}"),
+            )
+            .into());
+        }
+        None => {}
+    }
+    Ok(())
 }

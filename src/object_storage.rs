@@ -1,4 +1,4 @@
-//! Minimal S3-compatible SigV4 presigning used by EPIC-12.
+//! Minimal S3-compatible SigV4 presigning for LifeTrace file objects.
 //!
 //! The cloud service owns metadata and authorization. Object bytes travel
 //! directly between trusted clients and S3-compatible storage through short-
@@ -12,6 +12,8 @@ use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 use url::Url;
+
+use crate::Config;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -33,20 +35,26 @@ pub struct PresignedRequest {
 }
 
 impl ObjectStorageConfig {
-    pub fn from_env() -> Result<Self, String> {
-        let endpoint = required_env("FILE_OBJECT_STORAGE_ENDPOINT")?;
-        let bucket = required_env("FILE_OBJECT_STORAGE_BUCKET")?;
-        let access_key_id = required_env("FILE_OBJECT_STORAGE_ACCESS_KEY_ID")?;
-        let secret_access_key = required_env("FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY")?;
-        let region = std::env::var("FILE_OBJECT_STORAGE_REGION")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| "us-east-1".to_owned());
-        let expires_seconds = std::env::var("FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS")
-            .ok()
-            .and_then(|value| value.parse::<u32>().ok())
-            .unwrap_or(900)
-            .clamp(60, 3600);
+    pub fn from_config(config: &Config) -> Result<Self, String> {
+        let endpoint = required_config(
+            config.file_object_storage_endpoint.as_deref(),
+            "FILE_OBJECT_STORAGE_ENDPOINT",
+        )?;
+        let bucket = required_config(
+            config.file_object_storage_bucket.as_deref(),
+            "FILE_OBJECT_STORAGE_BUCKET",
+        )?;
+        let access_key_id = required_config(
+            config.file_object_storage_access_key_id.as_deref(),
+            "FILE_OBJECT_STORAGE_ACCESS_KEY_ID",
+        )?;
+        let secret_access_key = required_config(
+            config.file_object_storage_secret_access_key.as_deref(),
+            "FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY",
+        )?;
+        let region = config.file_object_storage_region.trim().to_owned();
+        let expires_seconds = config.file_object_storage_presign_ttl_seconds;
+
         let parsed = Url::parse(endpoint.trim_end_matches('/'))
             .map_err(|error| format!("FILE_OBJECT_STORAGE_ENDPOINT 无效: {error}"))?;
         if !matches!(parsed.scheme(), "http" | "https")
@@ -173,11 +181,11 @@ impl ObjectStorageConfig {
     }
 }
 
-fn required_env(name: &str) -> Result<String, String> {
-    std::env::var(name)
-        .ok()
-        .map(|value| value.trim().to_owned())
+fn required_config(value: Option<&str>, name: &str) -> Result<String, String> {
+    value
+        .map(str::trim)
         .filter(|value| !value.is_empty())
+        .map(str::to_owned)
         .ok_or_else(|| format!("缺少 {name}"))
 }
 

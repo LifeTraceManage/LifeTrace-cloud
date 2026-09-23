@@ -1,4 +1,4 @@
-//! EPIC-12 unified file metadata and signed object-storage transfer API.
+//! Unified file metadata and signed object-storage transfer API.
 
 use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::StatusCode;
@@ -15,7 +15,6 @@ use crate::error::ApiError;
 use crate::object_storage::{ObjectStorageConfig, PresignedRequest};
 use crate::state::AppState;
 
-const DEFAULT_MAX_FILE_BYTES: i64 = 256 * 1024 * 1024;
 const MAX_LIST_LIMIT: i64 = 200;
 const DOMAINS: &[&str] = &[
     "finance_imports",
@@ -117,9 +116,8 @@ async fn prepare(
     Json(mut input): Json<PrepareRequest>,
 ) -> Result<(StatusCode, Json<PrepareResponse>), ApiError> {
     principal.require_scope("files:write")?;
-    ensure_database(&state)?;
-    validate_prepare(&mut input)?;
-    let storage = storage_config()?;
+    validate_prepare(&mut input, state.config.file_max_upload_bytes)?;
+    let storage = storage_config(&state)?;
     let user_id = user_uuid(&principal.user_id)?;
 
     if let Some(row) = sqlx::query(
@@ -199,7 +197,6 @@ async fn list(
     Query(query): Query<ListQuery>,
 ) -> Result<Json<FileList>, ApiError> {
     principal.require_scope("files:read")?;
-    ensure_database(&state)?;
     if let Some(domain) = query.domain.as_deref() {
         validate_domain(domain)?;
     }
@@ -210,9 +207,9 @@ async fn list(
     let limit = query.limit.unwrap_or(50).clamp(1, MAX_LIST_LIMIT);
     let rows = sqlx::query(
         "SELECT * FROM file_objects WHERE user_id=$1 AND deleted_at IS NULL \
-         AND ($2::text IS NULL OR domain=$2) \
-         AND ($3::text IS NULL OR entity_type=$3) \
-         AND ($4::text IS NULL OR entity_id=$4) \
+         AND ($2 IS NULL OR domain=$2) \
+         AND ($3 IS NULL OR entity_type=$3) \
+         AND ($4 IS NULL OR entity_id=$4) \
          ORDER BY created_at DESC LIMIT $5",
     )
     .bind(owner)
@@ -251,12 +248,12 @@ async fn refresh_upload_url(
     }
     let key: String = row.try_get("storage_key").map_err(database_error)?;
     let sha256: String = row.try_get("sha256").map_err(database_error)?;
-    sqlx::query("UPDATE file_objects SET upload_attempts=upload_attempts+1, status='pending', failure_reason=NULL, updated_at=now() WHERE id=$1")
+    sqlx::query("UPDATE file_objects SET upload_attempts=upload_attempts+1, status='pending', failure_reason=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=$1")
         .bind(id)
         .execute(&state.pool)
         .await
         .map_err(database_error)?;
-    let signed = storage_config()?
+    let signed = storage_config(&state)?
         .presign_put(&key, &sha256, Utc::now())
         .map_err(storage_error)?;
     Ok(Json(signed_transfer(signed)))
@@ -269,9 +266,8 @@ async fn mark_complete(
 ) -> Result<Json<FileMetadata>, ApiError> {
     principal.require_scope("files:write")?;
     let owner = user_uuid(&principal.user_id)?;
-    ensure_database(&state)?;
     let row = sqlx::query(
-        "UPDATE file_objects SET status='available', available_at=COALESCE(available_at,now()), failure_reason=NULL, updated_at=now() \
+        "UPDATE file_objects SET status='available', available_at=COALESCE(available_at,CURRENT_TIMESTAMP), failure_reason=NULL, updated_at=CURRENT_TIMESTAMP \
          WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL RETURNING *",
     )
     .bind(id)
@@ -291,7 +287,6 @@ async fn mark_failed(
 ) -> Result<Json<FileMetadata>, ApiError> {
     principal.require_scope("files:write")?;
     let owner = user_uuid(&principal.user_id)?;
-    ensure_database(&state)?;
     let reason = input
         .reason
         .unwrap_or_else(|| "client upload failed".to_owned());
@@ -302,7 +297,7 @@ async fn mark_failed(
         .take(300)
         .collect();
     let row = sqlx::query(
-        "UPDATE file_objects SET status='failed', failure_reason=$3, updated_at=now() \
+        "UPDATE file_objects SET status='failed', failure_reason=$3, updated_at=CURRENT_TIMESTAMP \
          WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL RETURNING *",
     )
     .bind(id)
@@ -327,7 +322,7 @@ async fn download_url(
         return Err(bad_request("文件尚未完成上传"));
     }
     let key: String = row.try_get("storage_key").map_err(database_error)?;
-    let signed = storage_config()?
+    let signed = storage_config(&state)?
         .presign_get(&key, Utc::now())
         .map_err(storage_error)?;
     Ok(Json(signed_transfer(signed)))
@@ -340,9 +335,8 @@ async fn delete_metadata(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     principal.require_scope("files:write")?;
     let owner = user_uuid(&principal.user_id)?;
-    ensure_database(&state)?;
     let changed = sqlx::query(
-        "UPDATE file_objects SET deleted_at=now(), updated_at=now() WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL",
+        "UPDATE file_objects SET deleted_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL",
     )
     .bind(id)
     .bind(owner)
@@ -361,12 +355,11 @@ async fn orphans(
     Query(query): Query<OrphanQuery>,
 ) -> Result<Json<FileList>, ApiError> {
     principal.require_scope("files:read")?;
-    ensure_database(&state)?;
     let owner = user_uuid(&principal.user_id)?;
     let hours = query.older_than_hours.unwrap_or(24).clamp(1, 24 * 365);
     let rows = sqlx::query(
         "SELECT * FROM file_objects WHERE user_id=$1 AND deleted_at IS NULL AND entity_type IS NULL \
-         AND status IN ('pending','failed') AND created_at < now() - ($2::text || ' hours')::interval \
+         AND status IN ('pending','failed') AND created_at < datetime('now', '-' || $2 || ' hours') \
          ORDER BY created_at ASC LIMIT 200",
     )
     .bind(owner)
@@ -383,8 +376,7 @@ async fn owned_row(
     state: &AppState,
     user_id: &UserId,
     id: Uuid,
-) -> Result<sqlx::postgres::PgRow, ApiError> {
-    ensure_database(state)?;
+) -> Result<sqlx::sqlite::SqliteRow, ApiError> {
     let owner = user_uuid(user_id)?;
     sqlx::query("SELECT * FROM file_objects WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL")
         .bind(id)
@@ -395,15 +387,15 @@ async fn owned_row(
         .ok_or_else(not_found)
 }
 
-fn validate_prepare(input: &mut PrepareRequest) -> Result<(), ApiError> {
+fn validate_prepare(input: &mut PrepareRequest, max_file_bytes: i64) -> Result<(), ApiError> {
     validate_domain(&input.domain)?;
     input.original_name = clean_text(&input.original_name, 180, "file");
     input.mime_type =
         clean_text(&input.mime_type, 120, "application/octet-stream").to_ascii_lowercase();
-    if input.size_bytes <= 0 || input.size_bytes > max_file_bytes() {
+    if input.size_bytes <= 0 || input.size_bytes > max_file_bytes {
         return Err(bad_request(format!(
             "文件大小必须在 1..={} bytes",
-            max_file_bytes()
+            max_file_bytes
         )));
     }
     input.sha256 = input.sha256.trim().to_ascii_lowercase();
@@ -467,16 +459,8 @@ fn mime_allowed(domain: &str, mime: &str) -> bool {
     }
 }
 
-fn max_file_bytes() -> i64 {
-    std::env::var("FILE_MAX_UPLOAD_BYTES")
-        .ok()
-        .and_then(|value| value.parse::<i64>().ok())
-        .filter(|value| *value > 0)
-        .unwrap_or(DEFAULT_MAX_FILE_BYTES)
-}
-
-fn storage_config() -> Result<ObjectStorageConfig, ApiError> {
-    ObjectStorageConfig::from_env().map_err(storage_error)
+fn storage_config(state: &AppState) -> Result<ObjectStorageConfig, ApiError> {
+    ObjectStorageConfig::from_config(&state.config).map_err(storage_error)
 }
 
 fn signed_transfer(value: PresignedRequest) -> SignedTransfer {
@@ -487,7 +471,7 @@ fn signed_transfer(value: PresignedRequest) -> SignedTransfer {
     }
 }
 
-fn row_to_metadata(row: &sqlx::postgres::PgRow) -> Result<FileMetadata, ApiError> {
+fn row_to_metadata(row: &sqlx::sqlite::SqliteRow) -> Result<FileMetadata, ApiError> {
     Ok(FileMetadata {
         id: row
             .try_get::<Uuid, _>("id")
@@ -509,17 +493,6 @@ fn row_to_metadata(row: &sqlx::postgres::PgRow) -> Result<FileMetadata, ApiError
     })
 }
 
-fn ensure_database(state: &AppState) -> Result<(), ApiError> {
-    if state.database_enabled {
-        Ok(())
-    } else {
-        Err(ApiError::new(
-            ErrorCode::TemporarilyUnavailable,
-            "文件服务需要 PostgreSQL",
-            StatusCode::SERVICE_UNAVAILABLE,
-        ))
-    }
-}
 
 fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
     Uuid::parse_str(user_id.as_str()).map_err(|_| bad_request("当前账号不能使用文件服务"))
@@ -590,7 +563,7 @@ mod tests {
             entity_type: None,
             entity_id: None,
         };
-        assert!(validate_prepare(&mut input).is_err());
+        assert!(validate_prepare(&mut input, 256 * 1024 * 1024).is_err());
     }
 
     #[test]

@@ -76,17 +76,21 @@ async fn web_assistant(
         .auth_service
         .verify_web_csrf(&raw_session, csrf, origin)
         .await?;
-    run_assistant(request).await
+    run_assistant(&state, request).await
 }
 
 async fn native_assistant(
+    State(state): State<AppState>,
     _principal: AuthenticatedPrincipal,
     Json(request): Json<AssistantRequest>,
 ) -> Result<Json<AssistantResponse>, ApiError> {
-    run_assistant(request).await
+    run_assistant(&state, request).await
 }
 
-async fn run_assistant(request: AssistantRequest) -> Result<Json<AssistantResponse>, ApiError> {
+async fn run_assistant(
+    state: &AppState,
+    request: AssistantRequest,
+) -> Result<Json<AssistantResponse>, ApiError> {
     let prompt = request.prompt.trim();
     if prompt.is_empty() {
         return Ok(Json(AssistantResponse {
@@ -98,7 +102,7 @@ async fn run_assistant(request: AssistantRequest) -> Result<Json<AssistantRespon
     let context = compact_context(request.context);
     let fallback = local_reply(&prompt, &context);
 
-    let Some(api_key) = env_non_empty("DEEPSEEK_API_KEY") else {
+    let Some(api_key) = state.config.deepseek_api_key.as_deref() else {
         return Ok(Json(AssistantResponse {
             reply: fallback,
             provider: "local",
@@ -111,9 +115,8 @@ async fn run_assistant(request: AssistantRequest) -> Result<Json<AssistantRespon
         }));
     }
 
-    let base_url =
-        env_non_empty("DEEPSEEK_BASE_URL").unwrap_or_else(|| "https://api.deepseek.com".to_owned());
-    let model = env_non_empty("DEEPSEEK_MODEL").unwrap_or_else(|| "deepseek-chat".to_owned());
+    let base_url = &state.config.deepseek_base_url;
+    let model = &state.config.deepseek_model;
     let endpoint = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let context_text = serde_json::to_string(&context).unwrap_or_else(|_| "{}".to_owned());
     let provider_request = json!({
@@ -267,13 +270,6 @@ fn local_reply(prompt: &str, context: &Value) -> String {
         format!("当前上下文包含：{activities} 个坚持项目、{habits} 条坚持记录、{workouts} 次训练、{transactions} 笔账单、{notes} 篇笔记、{readings} 条英语记录和 {reviews} 条复盘。")
     };
     format!("{focus}\n\n1. 先处理今天最重要且可在 20 分钟内开始的一项。\n2. 用每日复盘记录精力和阻碍，避免只看完成数量。\n3. 连续观察一周后再调整目标，不根据单日波动下结论。")
-}
-
-fn env_non_empty(name: &str) -> Option<String> {
-    std::env::var(name)
-        .ok()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
 }
 
 fn contains_newline(value: &str) -> bool {

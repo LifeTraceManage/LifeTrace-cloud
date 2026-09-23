@@ -8,7 +8,7 @@ use lifetrace_contracts::sync::v1::AppId;
 use lifetrace_contracts::{ErrorCode, UserId};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx::{PgPool, Postgres, Row, Transaction};
+use sqlx::{SqlitePool, Sqlite, Row, Transaction};
 use uuid::Uuid;
 
 use crate::auth::password::PasswordManager;
@@ -21,7 +21,7 @@ use crate::error::ApiError;
 
 #[derive(Clone)]
 pub struct AuthService {
-    pool: PgPool,
+    pool: SqlitePool,
     config: Arc<Config>,
     passwords: PasswordManager,
     tokens: TokenManager,
@@ -52,7 +52,7 @@ struct VerifiedLogin {
 }
 
 impl AuthService {
-    pub fn new(pool: PgPool, config: Config) -> Self {
+    pub fn new(pool: SqlitePool, config: Config) -> Self {
         let passwords = PasswordManager::new(&config);
         let dummy_hash = passwords
             .hash("LifeTrace dummy password phrase 2026")
@@ -134,6 +134,17 @@ impl AuthService {
         context.ip.map(|value| value.to_string())
     }
 
+    fn encode_scopes(scopes: &[String]) -> String {
+        serde_json::to_string(scopes).unwrap_or_else(|_| "[]".to_owned())
+    }
+
+    fn decode_scopes(row: &sqlx::sqlite::SqliteRow, column: &str) -> Vec<String> {
+        row.try_get::<String, _>(column)
+            .ok()
+            .and_then(|value| serde_json::from_str(&value).ok())
+            .unwrap_or_default()
+    }
+
     // Each argument maps one-to-one to a security-audit column. Keeping the
     // fields explicit makes omissions visible at every call site and avoids
     // accepting partially populated, loosely typed metadata structures.
@@ -151,11 +162,11 @@ impl AuthService {
         metadata: Value,
     ) -> Result<(), ApiError>
     where
-        E: sqlx::Executor<'e, Database = Postgres>,
+        E: sqlx::Executor<'e, Database = Sqlite>,
     {
         sqlx::query(
             "INSERT INTO auth_audit_log (user_id, session_id, device_id, app_id, event_type, outcome, ip_address, user_agent, metadata) \
-             VALUES ($1,$2,$3,$4,$5,$6,CAST($7 AS inet),$8,$9)"
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)"
         )
         .bind(user_id).bind(session_id).bind(device_id).bind(app_id).bind(event_type).bind(outcome)
         .bind(Self::ip(context)).bind(&context.user_agent).bind(metadata)
@@ -171,7 +182,7 @@ impl AuthService {
         reason: Option<&str>,
     ) -> Result<(), ApiError> {
         sqlx::query(
-            "INSERT INTO auth_login_attempts (email_hash, ip_address, succeeded, failure_reason) VALUES ($1,CAST($2 AS inet),$3,$4)"
+            "INSERT INTO auth_login_attempts (email_hash, ip_address, succeeded, failure_reason) VALUES ($1,$2,$3,$4)"
         ).bind(self.hash_email(normalized)).bind(Self::ip(context)).bind(succeeded).bind(reason)
             .execute(&self.pool).await.map_err(Self::db)?;
         Ok(())
@@ -184,11 +195,11 @@ impl AuthService {
     ) -> Result<(), ApiError> {
         let since = Utc::now() - Duration::seconds(self.config.auth_login_window_seconds as i64);
         let account_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*)::BIGINT FROM auth_login_attempts WHERE email_hash=$1 AND succeeded=FALSE AND attempted_at >= $2"
+            "SELECT COUNT(*) FROM auth_login_attempts WHERE email_hash=$1 AND succeeded=FALSE AND attempted_at >= $2"
         ).bind(self.hash_email(normalized)).bind(since).fetch_one(&self.pool).await.map_err(Self::db)?;
         let ip_count: i64 = if let Some(ip) = Self::ip(context) {
             sqlx::query_scalar(
-                "SELECT COUNT(*)::BIGINT FROM auth_login_attempts WHERE ip_address=CAST($1 AS inet) AND succeeded=FALSE AND attempted_at >= $2"
+                "SELECT COUNT(*) FROM auth_login_attempts WHERE ip_address=$1 AND succeeded=FALSE AND attempted_at >= $2"
             ).bind(ip).bind(since).fetch_one(&self.pool).await.map_err(Self::db)?
         } else {
             0
@@ -207,7 +218,7 @@ impl AuthService {
 
     async fn consume_invite(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut Transaction<'_, Sqlite>,
         raw: Option<&str>,
         normalized: &str,
     ) -> Result<(), ApiError> {
@@ -229,7 +240,7 @@ impl AuthService {
             )
         })?;
         let row = sqlx::query(
-            "SELECT token_hash, email_normalized, expires_at, used_at, revoked_at FROM auth_registration_invites WHERE id=$1 FOR UPDATE"
+            "SELECT token_hash, email_normalized, expires_at, used_at, revoked_at FROM auth_registration_invites WHERE id=$1"
         ).bind(parsed.id).fetch_optional(&mut **tx).await.map_err(Self::db)?
             .ok_or_else(|| Self::error(ErrorCode::AuthInviteInvalid, "invalid registration invite", StatusCode::FORBIDDEN))?;
         let hash: Vec<u8> = row.try_get("token_hash").map_err(|_| {
@@ -263,7 +274,7 @@ impl AuthService {
                 StatusCode::FORBIDDEN,
             ));
         }
-        sqlx::query("UPDATE auth_registration_invites SET used_at=now() WHERE id=$1")
+        sqlx::query("UPDATE auth_registration_invites SET used_at=CURRENT_TIMESTAMP WHERE id=$1")
             .bind(parsed.id)
             .execute(&mut **tx)
             .await
@@ -271,11 +282,15 @@ impl AuthService {
         Ok(())
     }
 
-    pub async fn register(
+    pub(crate) async fn create_account(
         &self,
-        request: RegisterRequestV1,
+        email: &str,
+        password: &str,
+        display_name: Option<&str>,
+        invite_token: Option<&str>,
+        app_id: &str,
         context: &RequestContext,
-    ) -> Result<TokenResponseV1, ApiError> {
+    ) -> Result<(), ApiError> {
         if self.config.auth_registration_mode == "disabled" {
             return Err(Self::error(
                 ErrorCode::AuthRegistrationDisabled,
@@ -283,14 +298,7 @@ impl AuthService {
                 StatusCode::FORBIDDEN,
             ));
         }
-        if !scope::supported_app(request.app_id.as_str()) || request.app_id.as_str() == AppId::WEB {
-            return Err(Self::error(
-                ErrorCode::AppIdUnsupported,
-                "unsupported registration application",
-                StatusCode::BAD_REQUEST,
-            ));
-        }
-        let normalized = Self::normalize_email(&request.email);
+        let normalized = Self::normalize_email(email);
         if normalized.is_empty() || !normalized.contains('@') {
             return Err(Self::error(
                 ErrorCode::InvalidRequest,
@@ -298,17 +306,23 @@ impl AuthService {
                 StatusCode::BAD_REQUEST,
             ));
         }
-        let password_hash = self.passwords.hash(&request.password)?;
+        let password_hash = self.passwords.hash(password)?;
         let user_id = Uuid::new_v4();
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        self.consume_invite(&mut tx, request.invite_token.as_deref(), &normalized)
-            .await?;
+        self.consume_invite(&mut tx, invite_token, &normalized).await?;
         let inserted = sqlx::query(
             "INSERT INTO cloud_users (id,status,email,email_normalized,display_name,password_hash,password_version,password_changed_at,registration_source,auth_state) \
-             VALUES ($1,'active',$2,$3,$4,$5,1,now(),$6,'active') ON CONFLICT (email_normalized) DO NOTHING"
-        ).bind(user_id).bind(request.email.trim()).bind(&normalized).bind(&request.display_name).bind(password_hash)
-            .bind(if self.config.auth_registration_mode == "invite" { "invite" } else { "open" })
-            .execute(&mut *tx).await.map_err(Self::db)?;
+             VALUES ($1,'active',$2,$3,$4,$5,1,CURRENT_TIMESTAMP,$6,'active') ON CONFLICT (email_normalized) DO NOTHING"
+        )
+        .bind(user_id)
+        .bind(email.trim())
+        .bind(&normalized)
+        .bind(display_name)
+        .bind(password_hash)
+        .bind(if self.config.auth_registration_mode == "invite" { "invite" } else { "open" })
+        .execute(&mut *tx)
+        .await
+        .map_err(Self::db)?;
         if inserted.rows_affected() != 1 {
             return Err(Self::error(
                 ErrorCode::InvalidRequest,
@@ -321,7 +335,7 @@ impl AuthService {
             Some(user_id),
             None,
             None,
-            Some(request.app_id.as_str()),
+            Some(app_id),
             "account.register",
             "success",
             context,
@@ -329,6 +343,30 @@ impl AuthService {
         )
         .await?;
         tx.commit().await.map_err(Self::db)?;
+        Ok(())
+    }
+
+    pub async fn register(
+        &self,
+        request: RegisterRequestV1,
+        context: &RequestContext,
+    ) -> Result<TokenResponseV1, ApiError> {
+        if !scope::supported_app(request.app_id.as_str()) || request.app_id.as_str() == AppId::WEB {
+            return Err(Self::error(
+                ErrorCode::AppIdUnsupported,
+                "unsupported registration application",
+                StatusCode::BAD_REQUEST,
+            ));
+        }
+        self.create_account(
+            &request.email,
+            &request.password,
+            request.display_name.as_deref(),
+            request.invite_token.as_deref(),
+            request.app_id.as_str(),
+            context,
+        )
+        .await?;
         self.login(
             LoginRequestV1 {
                 email: request.email,
@@ -415,7 +453,7 @@ impl AuthService {
             self.record_login_attempt(&normalized, context, false, Some("password_invalid"))
                 .await?;
             sqlx::query(
-                "UPDATE cloud_users SET failed_login_count=failed_login_count+1, locked_until=CASE WHEN failed_login_count+1 >= $2 THEN now()+make_interval(secs => $3) ELSE locked_until END WHERE id=$1"
+                "UPDATE cloud_users SET failed_login_count=failed_login_count+1, locked_until=CASE WHEN failed_login_count+1 >= $2 THEN datetime('now', '+' || $3 || ' seconds') ELSE locked_until END WHERE id=$1"
             ).bind(user_id).bind(self.config.auth_login_account_limit as i32).bind(self.config.auth_lockout_seconds as f64)
                 .execute(&self.pool).await.map_err(Self::db)?;
             return Err(Self::error(
@@ -447,7 +485,7 @@ impl AuthService {
         }
         self.record_login_attempt(&normalized, context, true, None)
             .await?;
-        sqlx::query("UPDATE cloud_users SET failed_login_count=0,locked_until=NULL,updated_at=now() WHERE id=$1").bind(user_id).execute(&self.pool).await.map_err(Self::db)?;
+        sqlx::query("UPDATE cloud_users SET failed_login_count=0,locked_until=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=$1").bind(user_id).execute(&self.pool).await.map_err(Self::db)?;
         if self.passwords.needs_rehash(&encoded) {
             if let Ok(new_hash) = self.passwords.hash(&input.password) {
                 let _ = sqlx::query("UPDATE cloud_users SET password_hash=$2,password_version=password_version+1 WHERE id=$1").bind(user_id).bind(new_hash).execute(&self.pool).await;
@@ -458,8 +496,8 @@ impl AuthService {
         let allowed = scope::default_scopes(&input.app_id);
         let grant_row = sqlx::query(
             "INSERT INTO auth_app_grants (id,user_id,app_id,scopes,status) VALUES ($1,$2,$3,$4,'active') \
-             ON CONFLICT (user_id,app_id) DO UPDATE SET updated_at=now() RETURNING id,scopes,status"
-        ).bind(Uuid::new_v4()).bind(user_id).bind(&input.app_id).bind(&allowed)
+             ON CONFLICT (user_id,app_id) DO UPDATE SET updated_at=CURRENT_TIMESTAMP RETURNING id,scopes,status"
+        ).bind(Uuid::new_v4()).bind(user_id).bind(&input.app_id).bind(Self::encode_scopes(&allowed))
             .fetch_one(&mut *tx).await.map_err(Self::db)?;
         if grant_row.try_get::<String, _>("status").unwrap_or_default() != "active" {
             return Err(Self::error(
@@ -468,7 +506,7 @@ impl AuthService {
                 StatusCode::FORBIDDEN,
             ));
         }
-        let granted: Vec<String> = grant_row.try_get("scopes").unwrap_or_default();
+        let granted = Self::decode_scopes(&grant_row, "scopes");
         let scopes = scope::issue_scopes(&input.app_id, &input.requested_scopes, &granted);
         if scopes.is_empty() {
             return Err(Self::error(
@@ -480,8 +518,8 @@ impl AuthService {
         let device_id = Uuid::new_v4();
         let device = sqlx::query(
             "INSERT INTO cloud_devices (id,user_id,app_id,platform,client_version,status,external_device_id,device_group_id,device_name,first_seen_at,last_seen_at,last_login_at,last_login_ip,last_user_agent) \
-             VALUES ($1,$2,$3,$4,$5,'active',$6,$6,$7,now(),now(),now(),CAST($8 AS inet),$9) \
-             ON CONFLICT (user_id,app_id,external_device_id) DO UPDATE SET platform=EXCLUDED.platform,client_version=EXCLUDED.client_version,device_name=EXCLUDED.device_name,last_seen_at=now(),last_login_at=now(),last_login_ip=EXCLUDED.last_login_ip,last_user_agent=EXCLUDED.last_user_agent \
+             VALUES ($1,$2,$3,$4,$5,'active',$6,$6,$7,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,$8,$9) \
+             ON CONFLICT (user_id,app_id,external_device_id) DO UPDATE SET platform=EXCLUDED.platform,client_version=EXCLUDED.client_version,device_name=EXCLUDED.device_name,last_seen_at=CURRENT_TIMESTAMP,last_login_at=CURRENT_TIMESTAMP,last_login_ip=EXCLUDED.last_login_ip,last_user_agent=EXCLUDED.last_user_agent \
              RETURNING id,status,revoked_at"
         ).bind(device_id).bind(user_id).bind(&input.app_id).bind(&input.platform).bind(&input.client_version)
             .bind(&input.external_device_id).bind(&input.device_name).bind(Self::ip(context)).bind(&context.user_agent)
@@ -540,8 +578,8 @@ impl AuthService {
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
         sqlx::query(
             "INSERT INTO auth_sessions (id,user_id,device_id,app_id,scopes,session_type,status,idle_expires_at,absolute_expires_at,login_ip,last_ip,user_agent,public_device) \
-             VALUES ($1,$2,$3,$4,$5,'native','active',$6,$7,CAST($8 AS inet),CAST($8 AS inet),$9,$10)"
-        ).bind(session_id).bind(verified.user_id).bind(verified.device_id).bind(&verified.app_id).bind(&verified.scopes)
+             VALUES ($1,$2,$3,$4,$5,'native','active',$6,$7,$8,$8,$9,$10)"
+        ).bind(session_id).bind(verified.user_id).bind(verified.device_id).bind(&verified.app_id).bind(Self::encode_scopes(&verified.scopes))
             .bind(now + Duration::seconds(idle_seconds as i64)).bind(now + Duration::seconds(absolute_seconds as i64))
             .bind(Self::ip(context)).bind(&context.user_agent).bind(public_device)
             .execute(&mut *tx).await.map_err(Self::db)?;
@@ -590,14 +628,14 @@ impl AuthService {
 
     async fn insert_access(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut Transaction<'_, Sqlite>,
         session_id: Uuid,
         token: &GeneratedToken,
         scopes: &[String],
         now: DateTime<Utc>,
     ) -> Result<(), ApiError> {
         sqlx::query("INSERT INTO auth_access_tokens (id,session_id,token_hash,scopes,expires_at) VALUES ($1,$2,$3,$4,$5)")
-            .bind(token.id).bind(session_id).bind(&token.hash).bind(scopes)
+            .bind(token.id).bind(session_id).bind(&token.hash).bind(Self::encode_scopes(scopes))
             .bind(now + Duration::seconds(self.config.auth_access_token_ttl_seconds as i64))
             .execute(&mut **tx).await.map_err(Self::db)?;
         Ok(())
@@ -609,7 +647,7 @@ impl AuthService {
     #[allow(clippy::too_many_arguments)]
     async fn insert_refresh(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut Transaction<'_, Sqlite>,
         session_id: Uuid,
         family_id: Uuid,
         parent: Option<Uuid>,
@@ -648,7 +686,7 @@ impl AuthService {
                     u.status AS user_status,u.auth_state,d.status AS device_status,d.external_device_id,g.status AS grant_status,g.scopes AS grant_scopes \
              FROM auth_refresh_tokens rt JOIN auth_sessions s ON s.id=rt.session_id JOIN cloud_users u ON u.id=s.user_id \
              JOIN cloud_devices d ON d.id=s.device_id JOIN auth_app_grants g ON g.user_id=s.user_id AND g.app_id=s.app_id \
-             WHERE rt.id=$1 FOR UPDATE OF rt,s"
+             WHERE rt.id=$1"
         ).bind(parsed.id).fetch_optional(&mut *tx).await.map_err(Self::db)?
             .ok_or_else(|| Self::error(ErrorCode::AuthInvalid, "invalid refresh token", StatusCode::UNAUTHORIZED))?;
         let expected: Vec<u8> = row.try_get("token_hash").map_err(|_| {
@@ -678,10 +716,10 @@ impl AuthService {
                 .flatten()
                 .is_some();
         if reused {
-            sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,now()),reuse_detected_at=CASE WHEN id=$2 THEN now() ELSE reuse_detected_at END,revoked_reason='refresh_reuse' WHERE family_id=$1")
+            sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),reuse_detected_at=CASE WHEN id=$2 THEN CURRENT_TIMESTAMP ELSE reuse_detected_at END,revoked_reason='refresh_reuse' WHERE family_id=$1")
                 .bind(family_id).bind(parsed.id).execute(&mut *tx).await.map_err(Self::db)?;
-            sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason='refresh_reuse' WHERE session_id=$1").bind(session_id).execute(&mut *tx).await.map_err(Self::db)?;
-            sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,now()),revoked_reason='refresh_reuse' WHERE id=$1").bind(session_id).execute(&mut *tx).await.map_err(Self::db)?;
+            sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='refresh_reuse' WHERE session_id=$1").bind(session_id).execute(&mut *tx).await.map_err(Self::db)?;
+            sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='refresh_reuse' WHERE id=$1").bind(session_id).execute(&mut *tx).await.map_err(Self::db)?;
             self.audit(
                 &mut *tx,
                 row.try_get("user_id").ok(),
@@ -766,14 +804,9 @@ impl AuthService {
                 StatusCode::UNAUTHORIZED,
             ));
         }
-        let grant_scopes: BTreeSet<String> = row
-            .try_get::<Vec<String>, _>("grant_scopes")
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
-        let scopes: Vec<String> = row
-            .try_get::<Vec<String>, _>("scopes")
-            .unwrap_or_default()
+        let grant_scopes: BTreeSet<String> =
+            Self::decode_scopes(&row, "grant_scopes").into_iter().collect();
+        let scopes: Vec<String> = Self::decode_scopes(&row, "scopes")
             .into_iter()
             .filter(|value| grant_scopes.contains(value))
             .collect();
@@ -795,14 +828,14 @@ impl AuthService {
         self.insert_access(&mut tx, session_id, &access, &scopes, now)
             .await?;
         sqlx::query(
-            "UPDATE auth_refresh_tokens SET used_at=now(),replaced_by_token_id=$2 WHERE id=$1",
+            "UPDATE auth_refresh_tokens SET used_at=CURRENT_TIMESTAMP,replaced_by_token_id=$2 WHERE id=$1",
         )
         .bind(parsed.id)
         .bind(next_refresh.id)
         .execute(&mut *tx)
         .await
         .map_err(Self::db)?;
-        sqlx::query("UPDATE auth_sessions SET last_seen_at=now(),idle_expires_at=LEAST($2,absolute_expires_at),last_ip=CAST($3 AS inet) WHERE id=$1")
+        sqlx::query("UPDATE auth_sessions SET last_seen_at=CURRENT_TIMESTAMP,idle_expires_at=MIN($2,absolute_expires_at),last_ip=$3 WHERE id=$1")
             .bind(session_id).bind(effective_idle).bind(Self::ip(context)).execute(&mut *tx).await.map_err(Self::db)?;
         let user_id: Uuid = row.try_get("user_id").unwrap();
         let device_id: Uuid = row.try_get("device_id").unwrap();
@@ -853,7 +886,7 @@ impl AuthService {
             })?;
         let row = sqlx::query(
             "SELECT rt.token_hash,s.app_id,d.external_device_id, \
-                    COALESCE(bil.beecount_user_id,s.user_id::text) AS beecount_user_id \
+                    COALESCE(bil.beecount_user_id,s.user_id) AS beecount_user_id \
              FROM auth_refresh_tokens rt \
              JOIN auth_sessions s ON s.id=rt.session_id \
              JOIN cloud_devices d ON d.id=s.device_id \
@@ -906,7 +939,7 @@ impl AuthService {
     }
 
     pub async fn me(&self, principal: &AuthenticatedPrincipal) -> Result<AuthUserV1, ApiError> {
-        self.user_by_id(Self::uuid(
+        self.user_by_id(Self(
             principal.user_id.as_str(),
             ErrorCode::AuthInvalid,
         )?)
@@ -918,7 +951,7 @@ impl AuthService {
         principal: &AuthenticatedPrincipal,
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
-        let session_id = Self::uuid(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
+        let session_id = Self(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
         self.revoke_session_internal(session_id, "logout", context)
             .await?;
         Ok(AcceptedResponseV1 { accepted: true })
@@ -929,12 +962,12 @@ impl AuthService {
         principal: &AuthenticatedPrincipal,
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,now()),revoked_reason='logout_all' WHERE user_id=$1 AND status='active'").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason='logout_all' WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason='logout_all' WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_web_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='logout_all' WHERE user_id=$1 AND status='active'").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='logout_all' WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='logout_all' WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_web_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
         self.audit(
             &mut *tx,
             Some(user_id),
@@ -963,10 +996,10 @@ impl AuthService {
             .fetch_optional(&mut *tx)
             .await
             .map_err(Self::db)?;
-        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,now()),revoked_reason=$2 WHERE id=$1").bind(session_id).bind(reason).execute(&mut *tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason=$2 WHERE session_id=$1").bind(session_id).bind(reason).execute(&mut *tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason=$2 WHERE session_id=$1").bind(session_id).bind(reason).execute(&mut *tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_web_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE session_id=$1").bind(session_id).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason=$2 WHERE id=$1").bind(session_id).bind(reason).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason=$2 WHERE session_id=$1").bind(session_id).bind(reason).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason=$2 WHERE session_id=$1").bind(session_id).bind(reason).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_web_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE session_id=$1").bind(session_id).execute(&mut *tx).await.map_err(Self::db)?;
         if let Some(row) = row {
             self.audit(
                 &mut *tx,
@@ -990,8 +1023,8 @@ impl AuthService {
         principal: &AuthenticatedPrincipal,
     ) -> Result<SessionListV1, ApiError> {
         principal.require_scope("sessions:read")?;
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
-        let current = Self::uuid(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let current = Self(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
         let rows =
             sqlx::query("SELECT id FROM auth_sessions WHERE user_id=$1 ORDER BY created_at DESC")
                 .bind(user_id)
@@ -1015,8 +1048,8 @@ impl AuthService {
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
         principal.require_scope("sessions:write")?;
-        let session_id = Self::uuid(session, ErrorCode::InvalidRequest)?;
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let session_id = Self(session, ErrorCode::InvalidRequest)?;
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let owner: Option<Uuid> =
             sqlx::query_scalar("SELECT user_id FROM auth_sessions WHERE id=$1")
                 .bind(session_id)
@@ -1040,8 +1073,8 @@ impl AuthService {
         principal: &AuthenticatedPrincipal,
     ) -> Result<DeviceListV1, ApiError> {
         principal.require_scope("devices:read")?;
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
-        let current = Self::uuid(principal.device_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let current = Self(principal.device_id.as_str(), ErrorCode::AuthInvalid)?;
         let rows = sqlx::query(
             "SELECT id,external_device_id,device_group_id,device_name,app_id,platform,status,client_version,first_seen_at,last_seen_at,last_login_at,last_sync_at,revoked_at FROM cloud_devices WHERE user_id=$1 ORDER BY last_seen_at DESC"
         ).bind(user_id).fetch_all(&self.pool).await.map_err(Self::db)?;
@@ -1085,8 +1118,8 @@ impl AuthService {
                 StatusCode::BAD_REQUEST,
             ));
         }
-        let device_id = Self::uuid(device, ErrorCode::InvalidRequest)?;
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let device_id = Self(device, ErrorCode::InvalidRequest)?;
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let updated = sqlx::query(
             "UPDATE cloud_devices SET device_name=$3 WHERE id=$1 AND user_id=$2 RETURNING id",
         )
@@ -1123,10 +1156,10 @@ impl AuthService {
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
         principal.require_scope("devices:write")?;
-        let device_id = Self::uuid(device, ErrorCode::InvalidRequest)?;
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let device_id = Self(device, ErrorCode::InvalidRequest)?;
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        let changed = sqlx::query("UPDATE cloud_devices SET status='revoked',revoked_at=COALESCE(revoked_at,now()),revoked_reason='user_revoke' WHERE id=$1 AND user_id=$2").bind(device_id).bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
+        let changed = sqlx::query("UPDATE cloud_devices SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='user_revoke' WHERE id=$1 AND user_id=$2").bind(device_id).bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
         if changed.rows_affected() == 0 {
             return Err(Self::error(
                 ErrorCode::InvalidRequest,
@@ -1154,14 +1187,14 @@ impl AuthService {
 
     async fn revoke_device_tokens(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut Transaction<'_, Sqlite>,
         device_id: Uuid,
         reason: &str,
     ) -> Result<(), ApiError> {
-        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,now()),revoked_reason=$2 WHERE device_id=$1").bind(device_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason=$2 WHERE session_id IN (SELECT id FROM auth_sessions WHERE device_id=$1)").bind(device_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason=$2 WHERE session_id IN (SELECT id FROM auth_sessions WHERE device_id=$1)").bind(device_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_web_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE session_id IN (SELECT id FROM auth_sessions WHERE device_id=$1)").bind(device_id).execute(&mut **tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason=$2 WHERE device_id=$1").bind(device_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason=$2 WHERE session_id IN (SELECT id FROM auth_sessions WHERE device_id=$1)").bind(device_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason=$2 WHERE session_id IN (SELECT id FROM auth_sessions WHERE device_id=$1)").bind(device_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_web_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE session_id IN (SELECT id FROM auth_sessions WHERE device_id=$1)").bind(device_id).execute(&mut **tx).await.map_err(Self::db)?;
         Ok(())
     }
 
@@ -1172,9 +1205,9 @@ impl AuthService {
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
         principal.require_scope("devices:write")?;
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        let rows = sqlx::query("UPDATE cloud_devices SET status='revoked',revoked_at=COALESCE(revoked_at,now()),revoked_reason='group_revoke' WHERE user_id=$1 AND device_group_id=$2 RETURNING id").bind(user_id).bind(group).fetch_all(&mut *tx).await.map_err(Self::db)?;
+        let rows = sqlx::query("UPDATE cloud_devices SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='group_revoke' WHERE user_id=$1 AND device_group_id=$2 RETURNING id").bind(user_id).bind(group).fetch_all(&mut *tx).await.map_err(Self::db)?;
         for row in rows {
             self.revoke_device_tokens(&mut tx, row.try_get("id").unwrap(), "group_revoke")
                 .await?;
@@ -1200,7 +1233,7 @@ impl AuthService {
         principal: &AuthenticatedPrincipal,
     ) -> Result<AppGrantListV1, ApiError> {
         principal.require_scope("account:read")?;
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let rows = sqlx::query("SELECT id,app_id,scopes,status,granted_at,updated_at,revoked_at FROM auth_app_grants WHERE user_id=$1 ORDER BY app_id").bind(user_id).fetch_all(&self.pool).await.map_err(Self::db)?;
         Ok(AppGrantListV1 {
             grants: rows
@@ -1232,11 +1265,11 @@ impl AuthService {
             .map(|value| value.0)
             .filter(|value| allowed.contains(value))
             .collect();
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
-        let row = sqlx::query("UPDATE auth_app_grants SET scopes=$3,status='active',revoked_at=NULL,updated_at=now() WHERE user_id=$1 AND app_id=$2 RETURNING id,app_id,scopes,status,granted_at,updated_at,revoked_at")
-            .bind(user_id).bind(app_id).bind(&values).fetch_optional(&self.pool).await.map_err(Self::db)?
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let row = sqlx::query("UPDATE auth_app_grants SET scopes=$3,status='active',revoked_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND app_id=$2 RETURNING id,app_id,scopes,status,granted_at,updated_at,revoked_at")
+            .bind(user_id).bind(app_id).bind(Self::encode_scopes(&values)).fetch_optional(&self.pool).await.map_err(Self::db)?
             .ok_or_else(|| Self::error(ErrorCode::InvalidRequest, "application grant not found", StatusCode::NOT_FOUND))?;
-        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,now()),revoked_reason='scope_change' WHERE user_id=$1 AND app_id=$2 AND status='active'").bind(user_id).bind(app_id).execute(&self.pool).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='scope_change' WHERE user_id=$1 AND app_id=$2 AND status='active'").bind(user_id).bind(app_id).execute(&self.pool).await.map_err(Self::db)?;
         let _ = self
             .audit(
                 &self.pool,
@@ -1260,12 +1293,12 @@ impl AuthService {
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
         principal.require_scope("account:write")?;
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_app_grants SET status='revoked',revoked_at=COALESCE(revoked_at,now()),updated_at=now() WHERE user_id=$1 AND app_id=$2").bind(user_id).bind(app_id).execute(&mut *tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,now()),revoked_reason='app_grant_revoke' WHERE user_id=$1 AND app_id=$2").bind(user_id).bind(app_id).execute(&mut *tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason='app_grant_revoke' WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1 AND app_id=$2)").bind(user_id).bind(app_id).execute(&mut *tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason='app_grant_revoke' WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1 AND app_id=$2)").bind(user_id).bind(app_id).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_app_grants SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND app_id=$2").bind(user_id).bind(app_id).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='app_grant_revoke' WHERE user_id=$1 AND app_id=$2").bind(user_id).bind(app_id).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='app_grant_revoke' WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1 AND app_id=$2)").bind(user_id).bind(app_id).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='app_grant_revoke' WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1 AND app_id=$2)").bind(user_id).bind(app_id).execute(&mut *tx).await.map_err(Self::db)?;
         self.audit(
             &mut *tx,
             Some(user_id),
@@ -1289,7 +1322,7 @@ impl AuthService {
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
         principal.require_scope("account:write")?;
-        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let encoded: String =
             sqlx::query_scalar("SELECT password_hash FROM cloud_users WHERE id=$1")
                 .bind(user_id)
@@ -1305,7 +1338,7 @@ impl AuthService {
         }
         let hash = self.passwords.hash(&request.new_password)?;
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        sqlx::query("UPDATE cloud_users SET password_hash=$2,password_version=password_version+1,password_changed_at=now(),updated_at=now() WHERE id=$1").bind(user_id).bind(hash).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE cloud_users SET password_hash=$2,password_version=password_version+1,password_changed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=$1").bind(user_id).bind(hash).execute(&mut *tx).await.map_err(Self::db)?;
         self.revoke_all_user_sessions(&mut tx, user_id, "password_change")
             .await?;
         self.audit(
@@ -1341,8 +1374,8 @@ impl AuthService {
         {
             let token = self.tokens.generate(TokenKind::PasswordReset);
             let mut tx = self.pool.begin().await.map_err(Self::db)?;
-            sqlx::query("UPDATE auth_password_reset_tokens SET revoked_at=COALESCE(revoked_at,now()) WHERE user_id=$1 AND used_at IS NULL AND revoked_at IS NULL").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
-            sqlx::query("INSERT INTO auth_password_reset_tokens (id,user_id,token_hash,expires_at,requested_ip) VALUES ($1,$2,$3,$4,CAST($5 AS inet))")
+            sqlx::query("UPDATE auth_password_reset_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE user_id=$1 AND used_at IS NULL AND revoked_at IS NULL").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
+            sqlx::query("INSERT INTO auth_password_reset_tokens (id,user_id,token_hash,expires_at,requested_ip) VALUES ($1,$2,$3,$4,$5)")
                 .bind(token.id).bind(user_id).bind(&token.hash).bind(Utc::now()+Duration::seconds(self.config.auth_reset_token_ttl_seconds as i64)).bind(Self::ip(context))
                 .execute(&mut *tx).await.map_err(Self::db)?;
             self.audit(
@@ -1395,7 +1428,7 @@ impl AuthService {
             })?;
         let hash = self.passwords.hash(&request.new_password)?;
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        let row = sqlx::query("SELECT user_id,token_hash,expires_at,used_at,revoked_at FROM auth_password_reset_tokens WHERE id=$1 FOR UPDATE")
+        let row = sqlx::query("SELECT user_id,token_hash,expires_at,used_at,revoked_at FROM auth_password_reset_tokens WHERE id=$1")
             .bind(parsed.id).fetch_optional(&mut *tx).await.map_err(Self::db)?
             .ok_or_else(|| Self::error(ErrorCode::AuthPasswordResetInvalid, "invalid password reset token", StatusCode::BAD_REQUEST))?;
         let expected: Vec<u8> = row.try_get("token_hash").unwrap_or_default();
@@ -1431,12 +1464,12 @@ impl AuthService {
             ));
         }
         let user_id: Uuid = row.try_get("user_id").unwrap();
-        sqlx::query("UPDATE auth_password_reset_tokens SET used_at=now() WHERE id=$1")
+        sqlx::query("UPDATE auth_password_reset_tokens SET used_at=CURRENT_TIMESTAMP WHERE id=$1")
             .bind(parsed.id)
             .execute(&mut *tx)
             .await
             .map_err(Self::db)?;
-        sqlx::query("UPDATE cloud_users SET password_hash=$2,password_version=password_version+1,password_changed_at=now(),auth_state='active',updated_at=now() WHERE id=$1").bind(user_id).bind(hash).execute(&mut *tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE cloud_users SET password_hash=$2,password_version=password_version+1,password_changed_at=CURRENT_TIMESTAMP,auth_state='active',updated_at=CURRENT_TIMESTAMP WHERE id=$1").bind(user_id).bind(hash).execute(&mut *tx).await.map_err(Self::db)?;
         self.revoke_all_user_sessions(&mut tx, user_id, "password_reset")
             .await?;
         self.audit(
@@ -1457,14 +1490,14 @@ impl AuthService {
 
     async fn revoke_all_user_sessions(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut Transaction<'_, Sqlite>,
         user_id: Uuid,
         reason: &str,
     ) -> Result<(), ApiError> {
-        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,now()),revoked_reason=$2 WHERE user_id=$1").bind(user_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason=$2 WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,now()),revoked_reason=$2 WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
-        sqlx::query("UPDATE auth_web_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).execute(&mut **tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason=$2 WHERE user_id=$1").bind(user_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason=$2 WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_refresh_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason=$2 WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).bind(reason).execute(&mut **tx).await.map_err(Self::db)?;
+        sqlx::query("UPDATE auth_web_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).execute(&mut **tx).await.map_err(Self::db)?;
         Ok(())
     }
 
@@ -1505,8 +1538,8 @@ impl AuthService {
         let web = self.tokens.generate(TokenKind::WebSession);
         let csrf = self.tokens.generate(TokenKind::Csrf);
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        sqlx::query("INSERT INTO auth_sessions (id,user_id,device_id,app_id,scopes,session_type,status,idle_expires_at,absolute_expires_at,login_ip,last_ip,user_agent,public_device) VALUES ($1,$2,$3,$4,$5,'web','active',$6,$7,CAST($8 AS inet),CAST($8 AS inet),$9,$10)")
-            .bind(session_id).bind(verified.user_id).bind(verified.device_id).bind(&verified.app_id).bind(&verified.scopes)
+        sqlx::query("INSERT INTO auth_sessions (id,user_id,device_id,app_id,scopes,session_type,status,idle_expires_at,absolute_expires_at,login_ip,last_ip,user_agent,public_device) VALUES ($1,$2,$3,$4,$5,'web','active',$6,$7,$8,$8,$9,$10)")
+            .bind(session_id).bind(verified.user_id).bind(verified.device_id).bind(&verified.app_id).bind(Self::encode_scopes(&verified.scopes))
             .bind(now+Duration::seconds(idle_seconds as i64)).bind(now+Duration::seconds(absolute_seconds as i64)).bind(Self::ip(context)).bind(&context.user_agent).bind(input.public_device)
             .execute(&mut *tx).await.map_err(Self::db)?;
         sqlx::query("INSERT INTO auth_web_sessions (id,session_id,token_hash,csrf_hash,expires_at) VALUES ($1,$2,$3,$4,$5)")
@@ -1539,7 +1572,7 @@ impl AuthService {
         &self,
         principal: &AuthenticatedPrincipal,
     ) -> Result<WebSessionResponseV1, ApiError> {
-        let session_id = Self::uuid(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
+        let session_id = Self(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
         let csrf = self.tokens.generate(TokenKind::Csrf);
         sqlx::query(
             "UPDATE auth_web_sessions SET csrf_hash=$2 WHERE session_id=$1 AND revoked_at IS NULL",
@@ -1643,7 +1676,7 @@ impl AuthService {
                     StatusCode::UNAUTHORIZED,
                 )
             })?;
-        let session_id = Self::uuid(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
+        let session_id = Self(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
         let web = self.tokens.generate(TokenKind::WebSession);
         let csrf = self.tokens.generate(TokenKind::Csrf);
         let expires: DateTime<Utc> =
@@ -1652,14 +1685,14 @@ impl AuthService {
                 .fetch_one(&self.pool)
                 .await
                 .map_err(Self::db)?;
-        sqlx::query("UPDATE auth_web_sessions SET id=$2,token_hash=$3,csrf_hash=$4,rotated_at=now(),expires_at=$5 WHERE id=$1 AND session_id=$6")
+        sqlx::query("UPDATE auth_web_sessions SET id=$2,token_hash=$3,csrf_hash=$4,rotated_at=CURRENT_TIMESTAMP,expires_at=$5 WHERE id=$1 AND session_id=$6")
             .bind(old.id).bind(web.id).bind(&web.hash).bind(&csrf.hash).bind(expires).bind(session_id).execute(&self.pool).await.map_err(Self::db)?;
         let _ = self
             .audit(
                 &self.pool,
-                Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid).ok(),
+                Self(principal.user_id.as_str(), ErrorCode::AuthInvalid).ok(),
                 Some(session_id),
-                Self::uuid(principal.device_id.as_str(), ErrorCode::AuthInvalid).ok(),
+                Self(principal.device_id.as_str(), ErrorCode::AuthInvalid).ok(),
                 Some(principal.app_id.as_str()),
                 "auth.web_rotate",
                 "success",
@@ -1692,7 +1725,7 @@ impl AuthService {
         password: &str,
         allow_additional: bool,
     ) -> Result<UserId, ApiError> {
-        let active: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM cloud_users WHERE email_normalized IS NOT NULL AND status='active'").fetch_one(&self.pool).await.map_err(Self::db)?;
+        let active: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cloud_users WHERE email_normalized IS NOT NULL AND status='active'").fetch_one(&self.pool).await.map_err(Self::db)?;
         if active > 0 && !allow_additional {
             return Err(Self::error(
                 ErrorCode::InvalidRequest,
@@ -1703,7 +1736,7 @@ impl AuthService {
         let normalized = Self::normalize_email(email);
         let hash = self.passwords.hash(password)?;
         let id = Uuid::new_v4();
-        sqlx::query("INSERT INTO cloud_users (id,status,email,email_normalized,display_name,password_hash,password_version,password_changed_at,registration_source,auth_state,email_verified_at) VALUES ($1,'active',$2,$3,$4,$5,1,now(),'bootstrap','active',now())")
+        sqlx::query("INSERT INTO cloud_users (id,status,email,email_normalized,display_name,password_hash,password_version,password_changed_at,registration_source,auth_state,email_verified_at) VALUES ($1,'active',$2,$3,$4,$5,1,CURRENT_TIMESTAMP,'bootstrap','active',CURRENT_TIMESTAMP)")
             .bind(id).bind(email.trim()).bind(normalized).bind(display_name).bind(hash).execute(&self.pool).await.map_err(Self::db)?;
         Ok(UserId::new(id.to_string()))
     }
@@ -1729,7 +1762,7 @@ impl AuthService {
         Self::user_from_row(&row)
     }
 
-    fn user_from_row(row: &sqlx::postgres::PgRow) -> Result<AuthUserV1, ApiError> {
+    fn user_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<AuthUserV1, ApiError> {
         let id: Uuid = row.try_get("id").map_err(|_| {
             Self::error(
                 ErrorCode::InternalError,
@@ -1770,9 +1803,7 @@ impl AuthService {
             ),
             session_type: row.try_get("session_type").unwrap_or_default(),
             status: row.try_get("status").unwrap_or_default(),
-            scopes: row
-                .try_get::<Vec<String>, _>("scopes")
-                .unwrap_or_default()
+            scopes: Self::decode_scopes(&row, "scopes")
                 .into_iter()
                 .map(Scope::new)
                 .collect(),
@@ -1786,7 +1817,7 @@ impl AuthService {
         })
     }
 
-    fn grant_from_row(row: sqlx::postgres::PgRow) -> Result<AppGrantV1, ApiError> {
+    fn grant_from_row(row: sqlx::sqlite::SqliteRow) -> Result<AppGrantV1, ApiError> {
         Ok(AppGrantV1 {
             id: AppGrantId::new(
                 row.try_get::<Uuid, _>("id")
@@ -1800,9 +1831,7 @@ impl AuthService {
                     .to_string(),
             ),
             app_id: AppId::new(row.try_get::<String, _>("app_id").unwrap_or_default()),
-            scopes: row
-                .try_get::<Vec<String>, _>("scopes")
-                .unwrap_or_default()
+            scopes: Self::decode_scopes(&row, "scopes")
                 .into_iter()
                 .map(Scope::new)
                 .collect(),

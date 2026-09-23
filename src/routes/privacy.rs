@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::auth::extract::authenticate_bearer_or_web_session;
 use crate::auth::scope;
 use crate::auth::security::{clear_session_cookie, cookie_value};
 use crate::auth::{AuthCredential, AuthenticatedPrincipal};
@@ -52,26 +53,6 @@ fn db_error(error: sqlx::Error) -> ApiError {
         format!("privacy database operation failed: {error}"),
         StatusCode::SERVICE_UNAVAILABLE,
     )
-}
-
-async fn read_principal(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<AuthenticatedPrincipal, ApiError> {
-    let authorization = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok());
-    if authorization.is_some() {
-        return state
-            .auth
-            .authenticate(AuthCredential::Bearer(authorization))
-            .await;
-    }
-    let raw = cookie_value(headers, &state.config.auth_cookie_name);
-    state
-        .auth
-        .authenticate(AuthCredential::WebSession(raw.as_deref()))
-        .await
 }
 
 async fn write_principal(
@@ -143,9 +124,6 @@ async fn safe_account_profile(
     state: &AppState,
     principal: &AuthenticatedPrincipal,
 ) -> Result<Value, ApiError> {
-    if !state.database_enabled {
-        return Ok(json!({"userId": principal.user_id.as_str()}));
-    }
     let Some(user_id) = database_user_id(principal) else {
         return Ok(json!({"userId": principal.user_id.as_str()}));
     };
@@ -173,12 +151,19 @@ async fn safe_account_profile(
     }))
 }
 
-async fn jsonb_array(state: &AppState, sql: &str, user_id: Uuid) -> Result<Value, ApiError> {
-    sqlx::query_scalar::<_, Value>(sql)
+async fn json_array(state: &AppState, sql: &str, user_id: Uuid) -> Result<Value, ApiError> {
+    let raw = sqlx::query_scalar::<_, String>(sql)
         .bind(user_id)
         .fetch_one(&state.pool)
         .await
-        .map_err(db_error)
+        .map_err(db_error)?;
+    serde_json::from_str(&raw).map_err(|error| {
+        api_error(
+            ErrorCode::InternalError,
+            format!("failed to decode privacy export JSON: {error}"),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )
+    })
 }
 
 async fn database_section(
@@ -186,63 +171,91 @@ async fn database_section(
     principal: &AuthenticatedPrincipal,
     module: &str,
 ) -> Result<Option<Value>, ApiError> {
-    if !state.database_enabled {
-        return Ok(None);
-    }
     let Some(user_id) = database_user_id(principal) else {
         return Ok(None);
     };
     match module {
         "devices" => Ok(Some(
-            jsonb_array(
+            json_array(
                 state,
-                "SELECT COALESCE(jsonb_agg(to_jsonb(d) ORDER BY d.first_seen_at), '[]'::jsonb) FROM cloud_devices d WHERE user_id=$1",
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'appId',app_id,'platform',platform,'clientVersion',client_version,
+                    'status',status,'deviceName',device_name,'firstSeenAt',first_seen_at,
+                    'lastSeenAt',last_seen_at,'lastSyncAt',last_sync_at,'revokedAt',revoked_at
+                )), '[]') FROM cloud_devices WHERE user_id=$1 ORDER BY first_seen_at",
                 user_id,
             )
             .await?,
         )),
         "sessions" => Ok(Some(
-            jsonb_array(
+            json_array(
                 state,
-                "SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY s.created_at), '[]'::jsonb) FROM auth_sessions s WHERE user_id=$1",
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'deviceId',device_id,'appId',app_id,'scopes',json(scopes),
+                    'sessionType',session_type,'status',status,'createdAt',created_at,
+                    'lastSeenAt',last_seen_at,'idleExpiresAt',idle_expires_at,
+                    'absoluteExpiresAt',absolute_expires_at,'revokedAt',revoked_at
+                )), '[]') FROM auth_sessions WHERE user_id=$1 ORDER BY created_at",
                 user_id,
             )
             .await?,
         )),
         "mail" => {
-            let accounts = jsonb_array(
+            let accounts = json_array(
                 state,
-                "SELECT COALESCE(jsonb_agg((to_jsonb(a) - ARRAY['credential_ciphertext','credential_nonce']) ORDER BY a.created_at), '[]'::jsonb) FROM mail_accounts a WHERE user_id=$1",
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'provider',provider,'emailAddress',email_address,'displayName',display_name,
+                    'imapHost',imap_host,'imapPort',imap_port,'smtpHost',smtp_host,'smtpPort',smtp_port,
+                    'status',status,'lastSyncAt',last_sync_at,'createdAt',created_at
+                )), '[]') FROM mail_accounts WHERE user_id=$1",
                 user_id,
             )
             .await?;
-            let messages = jsonb_array(
+            let identities = json_array(
                 state,
-                "SELECT COALESCE(jsonb_agg(to_jsonb(m) ORDER BY m.received_at), '[]'::jsonb) FROM mail_messages m WHERE user_id=$1",
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'accountId',account_id,'emailAddress',email_address,
+                    'displayName',display_name,'replyTo',reply_to,'signature',signature_html,
+                    'isDefault',is_default,'createdAt',created_at,'updatedAt',updated_at,
+                    'deletedAt',deleted_at
+                )), '[]') FROM mail_identities WHERE user_id=$1 ORDER BY created_at",
                 user_id,
             )
             .await?;
-            let attachments = jsonb_array(
+            let messages = json_array(
                 state,
-                "SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY a.created_at), '[]'::jsonb) FROM mail_attachments a WHERE user_id=$1",
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'accountId',account_id,'threadId',thread_id,'subject',subject,
+                    'from',json(from_json),'to',json(to_json),'receivedAt',received_at,
+                    'isRead',is_read,'snippet',snippet,'hasAttachments',has_attachments
+                )), '[]') FROM mail_messages WHERE user_id=$1 ORDER BY received_at",
                 user_id,
             )
             .await?;
-            let identities = jsonb_array(
+            let attachments = json_array(
                 state,
-                "SELECT COALESCE(jsonb_agg(to_jsonb(i) ORDER BY i.created_at), '[]'::jsonb) FROM mail_identities i WHERE user_id=$1",
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'messageId',message_id,'filename',filename,'mimeType',mime_type,
+                    'sizeBytes',size_bytes,'downloadState',download_state,'createdAt',created_at
+                )), '[]') FROM mail_attachments WHERE user_id=$1 ORDER BY created_at",
                 user_id,
             )
             .await?;
-            let drafts = jsonb_array(
+            let drafts = json_array(
                 state,
-                "SELECT COALESCE(jsonb_agg(to_jsonb(d) ORDER BY d.created_at), '[]'::jsonb) FROM mail_drafts d WHERE user_id=$1",
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'accountId',account_id,'identityId',identity_id,'subject',subject,
+                    'bodyText',body_text,'state',state,'createdAt',created_at,'updatedAt',updated_at
+                )), '[]') FROM mail_drafts WHERE user_id=$1 ORDER BY created_at",
                 user_id,
             )
             .await?;
-            let draft_attachments = jsonb_array(
+            let draft_attachments = json_array(
                 state,
-                "SELECT COALESCE(jsonb_agg((to_jsonb(a) - 'content') ORDER BY a.created_at), '[]'::jsonb) FROM mail_draft_attachments a WHERE user_id=$1",
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'draftId',draft_id,'filename',filename,'mimeType',mime_type,
+                    'sizeBytes',size_bytes,'createdAt',created_at
+                )), '[]') FROM mail_draft_attachments WHERE user_id=$1 ORDER BY created_at",
                 user_id,
             )
             .await?;
@@ -348,7 +361,7 @@ async fn export_all(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    let principal = read_principal(&state, &headers).await?;
+    let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     principal.require_scope("account:read")?;
     build_export(&state, &principal, None).await.map(Json)
 }
@@ -358,7 +371,7 @@ async fn export_module(
     headers: HeaderMap,
     Path(module): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let principal = read_principal(&state, &headers).await?;
+    let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     build_export(&state, &principal, Some(module.as_str()))
         .await
         .map(Json)
@@ -368,7 +381,7 @@ async fn policy(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    let principal = read_principal(&state, &headers).await?;
+    let principal = authenticate_bearer_or_web_session(&state, &headers).await?;
     principal.require_scope("account:read")?;
     Ok(Json(json!({
         "policyVersion": 1,
@@ -390,13 +403,6 @@ async fn delete_account(
     let principal = write_principal(&state, &headers).await?;
     principal.require_scope("account:write")?;
 
-    if !state.database_enabled {
-        return Err(api_error(
-            ErrorCode::TemporarilyUnavailable,
-            "account deletion requires the persistent PostgreSQL cloud runtime",
-            StatusCode::SERVICE_UNAVAILABLE,
-        ));
-    }
     let user_id = database_user_id(&principal).ok_or_else(|| {
         api_error(
             ErrorCode::InvalidRequest,
@@ -425,7 +431,7 @@ async fn delete_account(
 
     let mut tx = state.pool.begin().await.map_err(db_error)?;
     sqlx::query(
-        "UPDATE auth_sessions SET status='revoked',revoked_at=now(),revoked_reason='account_deleted' \
+        "UPDATE auth_sessions SET status='revoked',revoked_at=CURRENT_TIMESTAMP,revoked_reason='account_deleted' \
          WHERE user_id=$1 AND status='active'",
     )
     .bind(user_id)

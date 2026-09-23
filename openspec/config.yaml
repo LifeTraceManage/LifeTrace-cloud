@@ -1,7 +1,9 @@
 schema: spec-driven
 context: |
-  LifeTrace Cloud provides generic authenticated Sync v1 storage for LifeTrace clients.
-  Asset sync is an additive domain extension used by LifeTraceManage/LifeTrace-assets.
+  LifeTrace Cloud is the independent Rust/Axum/PostgreSQL backend for the LifeTrace product family.
+  It owns authenticated Sync v1 persistence plus shared cloud capabilities such as files, privacy,
+  BeeCount compatibility, mail and supporting workers. PostgreSQL is the production persistence
+  path; the in-memory sync repository is test/protocol-harness infrastructure only.
 rules:
   specs:
     - Use MUST/SHALL requirements with Given/When/Then scenarios.

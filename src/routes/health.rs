@@ -26,22 +26,7 @@ async fn ready(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     let mut checks = serde_json::Map::new();
     checks.insert("configValid".to_owned(), json!(config_valid));
 
-    if !state.database_enabled {
-        checks.insert("storage".to_owned(), json!("memory"));
-        return if config_valid {
-            (
-                StatusCode::OK,
-                Json(json!({ "status": "ready", "checks": checks })),
-            )
-        } else {
-            (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "status": "not_ready", "checks": checks })),
-            )
-        };
-    }
-
-    checks.insert("storage".to_owned(), json!("postgresql"));
+    checks.insert("storage".to_owned(), json!("sqlite"));
     let database_ready = matches!(
         timeout(
             Duration::from_secs(2),
@@ -50,7 +35,7 @@ async fn ready(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
         .await,
         Ok(Ok(1))
     );
-    checks.insert("postgresql".to_owned(), json!(database_ready));
+    checks.insert("sqlite".to_owned(), json!(database_ready));
 
     if config_valid && database_ready {
         (

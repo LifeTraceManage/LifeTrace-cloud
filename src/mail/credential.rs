@@ -6,6 +6,8 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use rand::{rngs::OsRng, RngCore};
 use thiserror::Error;
 
+use crate::Config;
+
 #[derive(Debug, Error)]
 pub enum CredentialError {
     #[error("mail credential key is not configured")]
@@ -24,10 +26,14 @@ pub struct CredentialCipher {
 }
 
 impl CredentialCipher {
-    pub fn from_env() -> Result<Self, CredentialError> {
-        let encoded =
-            std::env::var("MAIL_CREDENTIAL_KEY").map_err(|_| CredentialError::MissingKey)?;
-        Self::from_base64(&encoded)
+    pub fn from_config(config: &Config) -> Result<Self, CredentialError> {
+        let encoded = config
+            .mail_credential_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or(CredentialError::MissingKey)?;
+        Self::from_base64(encoded)
     }
 
     pub fn from_base64(encoded: &str) -> Result<Self, CredentialError> {
