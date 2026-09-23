@@ -16,7 +16,7 @@ use axum::http::StatusCode;
 use chrono::Utc;
 use lifetrace_contracts::sync::v1::*;
 use lifetrace_contracts::{ChangeId, DeviceId, ErrorCode, SnapshotId, UserId};
-use sqlx::{SqlitePool, Sqlite, Transaction};
+use sqlx::{Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -196,13 +196,12 @@ impl SqliteRepository {
     where
         E: sqlx::Executor<'e, Database = Sqlite>,
     {
-        let value: Option<i64> = sqlx::query_scalar(
-            "SELECT MIN(cursor) FROM sync_change_log WHERE user_id = $1",
-        )
-        .bind(user_uuid)
-        .fetch_one(executor)
-        .await
-        .map_err(Self::db_error)?;
+        let value: Option<i64> =
+            sqlx::query_scalar("SELECT MIN(cursor) FROM sync_change_log WHERE user_id = $1")
+                .bind(user_uuid)
+                .fetch_one(executor)
+                .await
+                .map_err(Self::db_error)?;
         Ok(value
             .map(|cursor| cursor.saturating_sub(1).max(0) as u64)
             .unwrap_or(0))

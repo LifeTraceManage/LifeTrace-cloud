@@ -7,8 +7,8 @@ pub mod stats;
 pub mod web;
 pub mod ws;
 
-use axum::Router;
 use crate::state::AppState;
+use axum::Router;
 
 pub fn router(attachment_max_upload_bytes: usize) -> Router<AppState> {
     Router::<AppState>::new()

@@ -134,7 +134,8 @@ async fn test_app() -> Router {
 
 async fn test_app_for(token: &str, user: &str, device: &str) -> Router {
     let config = Config {
-        database_path: ":memory:".to_owned(),        dev_auth_token: token.to_owned(),
+        database_path: ":memory:".to_owned(),
+        dev_auth_token: token.to_owned(),
         dev_auth_user_id: user.to_owned(),
         dev_auth_device_id: device.to_owned(),
         ..Config::default()

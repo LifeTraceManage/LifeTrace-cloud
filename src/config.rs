@@ -256,8 +256,7 @@ impl Config {
         c.file_object_storage_region =
             env_string("FILE_OBJECT_STORAGE_REGION", &c.file_object_storage_region);
         c.file_object_storage_access_key_id = env_var("FILE_OBJECT_STORAGE_ACCESS_KEY_ID");
-        c.file_object_storage_secret_access_key =
-            env_var("FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY");
+        c.file_object_storage_secret_access_key = env_var("FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY");
         c.file_object_storage_presign_ttl_seconds = env_usize(
             "FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS",
             c.file_object_storage_presign_ttl_seconds as usize,
@@ -276,8 +275,7 @@ impl Config {
 
         c.zhipu_api_key = env_var("ZHIPU_API_KEY");
         c.zhipu_base_url = env_string("ZHIPU_BASE_URL", &c.zhipu_base_url);
-        c.photo_challenge_model =
-            env_string("PHOTO_CHALLENGE_MODEL", &c.photo_challenge_model);
+        c.photo_challenge_model = env_string("PHOTO_CHALLENGE_MODEL", &c.photo_challenge_model);
         c.photo_challenge_access_key = env_var("PHOTO_CHALLENGE_ACCESS_KEY");
         c.photo_challenge_owner_email = env_var("PHOTO_CHALLENGE_OWNER_EMAIL");
         c.photo_staging_ttl_hours = env_var("PHOTO_STAGING_TTL_HOURS")
@@ -354,7 +352,8 @@ impl Config {
             }
             for origin in &self.cors_allowed_origins {
                 let normalized = origin.trim().to_ascii_lowercase();
-                if normalized == "*" || normalized == "null" || !normalized.starts_with("https://") {
+                if normalized == "*" || normalized == "null" || !normalized.starts_with("https://")
+                {
                     return Err(format!(
                         "production CORS origin must be an explicit HTTPS origin: {origin}"
                     ));

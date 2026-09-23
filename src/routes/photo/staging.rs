@@ -477,7 +477,6 @@ fn resolve_storage_path(state: &AppState, storage_name: &str) -> Result<PathBuf,
     Ok(staging_root(state).join(relative))
 }
 
-
 fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
     Uuid::parse_str(user_id.as_str()).map_err(|_| {
         ApiError::new(

@@ -4,7 +4,7 @@ use lifetrace_contracts::json_value::JsonValue;
 use lifetrace_contracts::sync::v1::*;
 use lifetrace_contracts::{ConflictId, ErrorCode, ServerVersion, UserId};
 use serde_json::Value;
-use sqlx::{Sqlite, Row, Transaction};
+use sqlx::{Row, Sqlite, Transaction};
 
 use super::super::SqliteRepository;
 use crate::error::ApiError;

@@ -8,7 +8,7 @@ use lifetrace_contracts::sync::v1::AppId;
 use lifetrace_contracts::{ErrorCode, UserId};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx::{SqlitePool, Sqlite, Row, Transaction};
+use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
 use crate::auth::password::PasswordManager;
@@ -309,7 +309,8 @@ impl AuthService {
         let password_hash = self.passwords.hash(password)?;
         let user_id = Uuid::new_v4();
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        self.consume_invite(&mut tx, invite_token, &normalized).await?;
+        self.consume_invite(&mut tx, invite_token, &normalized)
+            .await?;
         let inserted = sqlx::query(
             "INSERT INTO cloud_users (id,status,email,email_normalized,display_name,password_hash,password_version,password_changed_at,registration_source,auth_state) \
              VALUES ($1,'active',$2,$3,$4,$5,1,CURRENT_TIMESTAMP,$6,'active') ON CONFLICT (email_normalized) DO NOTHING"
@@ -804,8 +805,9 @@ impl AuthService {
                 StatusCode::UNAUTHORIZED,
             ));
         }
-        let grant_scopes: BTreeSet<String> =
-            Self::decode_scopes(&row, "grant_scopes").into_iter().collect();
+        let grant_scopes: BTreeSet<String> = Self::decode_scopes(&row, "grant_scopes")
+            .into_iter()
+            .collect();
         let scopes: Vec<String> = Self::decode_scopes(&row, "scopes")
             .into_iter()
             .filter(|value| grant_scopes.contains(value))
@@ -939,11 +941,8 @@ impl AuthService {
     }
 
     pub async fn me(&self, principal: &AuthenticatedPrincipal) -> Result<AuthUserV1, ApiError> {
-        self.user_by_id(Self(
-            principal.user_id.as_str(),
-            ErrorCode::AuthInvalid,
-        )?)
-        .await
+        self.user_by_id(Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?)
+            .await
     }
 
     pub async fn logout(

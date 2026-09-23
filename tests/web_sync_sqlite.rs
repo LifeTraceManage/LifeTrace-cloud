@@ -16,7 +16,8 @@ fn database_path() -> Option<String> {
 
 fn config(url: String) -> Config {
     Config {
-        database_path: url,        dev_auth_enabled: false,
+        database_path: url,
+        dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
         auth_password_pepper: Some("test-password-pepper-01234567890123456789".to_owned()),
         auth_token_hash_pepper: Some("test-token-pepper-0123456789012345678901".to_owned()),
@@ -33,11 +34,22 @@ async fn state() -> Option<AppState> {
     let state = AppState::new(config(url));
     state.initialize().await.unwrap();
     for table in [
-        "auth_audit_log", "auth_login_attempts", "auth_registration_invites",
-        "auth_password_reset_tokens", "auth_web_sessions", "auth_refresh_tokens",
-        "auth_access_tokens", "auth_sessions", "auth_app_grants",
-        "sync_snapshot_items", "sync_snapshots", "sync_processed_changes",
-        "sync_change_log", "sync_entities", "cloud_devices", "cloud_users",
+        "auth_audit_log",
+        "auth_login_attempts",
+        "auth_registration_invites",
+        "auth_password_reset_tokens",
+        "auth_web_sessions",
+        "auth_refresh_tokens",
+        "auth_access_tokens",
+        "auth_sessions",
+        "auth_app_grants",
+        "sync_snapshot_items",
+        "sync_snapshots",
+        "sync_processed_changes",
+        "sync_change_log",
+        "sync_entities",
+        "cloud_devices",
+        "cloud_users",
     ] {
         sqlx::query(&format!("DELETE FROM {table}"))
             .execute(&state.pool)

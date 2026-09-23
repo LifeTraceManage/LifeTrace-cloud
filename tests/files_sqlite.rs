@@ -16,7 +16,8 @@ fn database_path() -> Option<String> {
 
 fn config(url: String) -> Config {
     Config {
-        database_path: url,        dev_auth_enabled: false,
+        database_path: url,
+        dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
         auth_password_pepper: Some("file-test-password-pepper-012345678901234".to_owned()),
         auth_token_hash_pepper: Some("file-test-token-pepper-012345678901234567".to_owned()),

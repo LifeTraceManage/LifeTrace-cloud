@@ -408,9 +408,13 @@ fn mailbox(value: &str) -> Result<Mailbox, MailProtocolError> {
 }
 
 fn mailbox_with_name(name: Option<&str>, address: &str) -> Result<Mailbox, MailProtocolError> {
-    let email = address.parse().map_err(|_| MailProtocolError::InvalidAddress)?;
+    let email = address
+        .parse()
+        .map_err(|_| MailProtocolError::InvalidAddress)?;
     Ok(Mailbox::new(
-        name.map(str::trim).filter(|value| !value.is_empty()).map(str::to_owned),
+        name.map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned),
         email,
     ))
 }

@@ -493,7 +493,6 @@ fn row_to_metadata(row: &sqlx::sqlite::SqliteRow) -> Result<FileMetadata, ApiErr
     })
 }
 
-
 fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
     Uuid::parse_str(user_id.as_str()).map_err(|_| bad_request("当前账号不能使用文件服务"))
 }

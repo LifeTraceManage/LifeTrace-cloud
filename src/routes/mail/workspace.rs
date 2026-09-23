@@ -56,9 +56,10 @@ fn map_error(error: MailServiceError) -> ApiError {
         MailServiceError::ArchiveUnavailable => {
             (StatusCode::CONFLICT, "archive folder is unavailable")
         }
-        MailServiceError::DestinationUnavailable => {
-            (StatusCode::CONFLICT, "destination mail folder is unavailable")
-        }
+        MailServiceError::DestinationUnavailable => (
+            StatusCode::CONFLICT,
+            "destination mail folder is unavailable",
+        ),
         MailServiceError::Credential => (
             StatusCode::SERVICE_UNAVAILABLE,
             "mail credential store is unavailable",
@@ -200,7 +201,6 @@ async fn send_draft(
         .map_err(map_error)?;
     Ok(Json(json!({ "ok": true, "messageId": message_id })))
 }
-
 
 async fn list_draft_attachments(
     State(state): State<AppState>,

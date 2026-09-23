@@ -13,7 +13,8 @@ use uuid::Uuid;
 
 fn config(database_path: String) -> Config {
     Config {
-        database_path,        dev_auth_enabled: false,
+        database_path,
+        dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
         auth_password_pepper: Some("shared-account-password-pepper-0123456789".to_owned()),
         auth_token_hash_pepper: Some("shared-account-token-pepper-012345678901".to_owned()),
@@ -146,12 +147,11 @@ async fn one_account_can_keep_lifetrace_and_beecount_sessions_active_together() 
     assert_eq!(status, StatusCode::OK, "{bee_profile}");
     assert_eq!(bee_profile["user_id"], canonical_user_id);
 
-    let user_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM cloud_users WHERE id=$1")
-            .bind(&canonical_user_id)
-            .fetch_one(&state.pool)
-            .await
-            .unwrap();
+    let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cloud_users WHERE id=$1")
+        .bind(&canonical_user_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
     assert_eq!(user_count, 1);
 
     let sessions: Vec<(String, String)> = sqlx::query_as(

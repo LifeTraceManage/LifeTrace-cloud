@@ -6,7 +6,7 @@ use lifetrace_contracts::json_value::JsonValue;
 use lifetrace_contracts::{ErrorCode, UserId};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx::{SqlitePool, Sqlite, Row, Transaction};
+use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
 use crate::beecount::collaboration::{

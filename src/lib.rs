@@ -107,9 +107,8 @@ pub fn app(state: AppState) -> Router {
 
     if std::path::Path::new(&web_root).exists() {
         let index = format!("{web_root}/index.html");
-        router = router.fallback_service(
-            ServeDir::new(web_root).not_found_service(ServeFile::new(index)),
-        );
+        router = router
+            .fallback_service(ServeDir::new(web_root).not_found_service(ServeFile::new(index)));
     }
 
     router

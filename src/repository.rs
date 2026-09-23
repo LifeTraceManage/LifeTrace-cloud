@@ -66,4 +66,3 @@ pub trait SyncRepository: Send + Sync {
 
     async fn change_count(&self, user_id: &UserId) -> Result<usize, ApiError>;
 }
-

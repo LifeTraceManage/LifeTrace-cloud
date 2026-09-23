@@ -115,7 +115,6 @@ async fn shutdown_signal() {
     println!("[lifetrace-cloud] shutting down");
 }
 
-
 fn arg_value(args: &[String], name: &str) -> Option<String> {
     args.windows(2)
         .find(|window| window[0] == name)

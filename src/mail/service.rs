@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::{Duration, Utc};
-use sqlx::{SqlitePool, Sqlite, Transaction};
+use sqlx::{Sqlite, SqlitePool, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -714,13 +714,12 @@ impl MailService {
         )
         .await?;
 
-        let current: serde_json::Value = sqlx::query_scalar(
-            "SELECT flags_json FROM mail_messages WHERE user_id=$1 AND id=$2",
-        )
-        .bind(user_id)
-        .bind(message_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let current: serde_json::Value =
+            sqlx::query_scalar("SELECT flags_json FROM mail_messages WHERE user_id=$1 AND id=$2")
+                .bind(user_id)
+                .bind(message_id)
+                .fetch_one(&self.pool)
+                .await?;
         let mut flags = current.as_array().cloned().unwrap_or_default();
         flags.retain(|value| match value.as_str() {
             Some(flag) => {
@@ -913,9 +912,27 @@ impl MailService {
         .bind(user_id)
         .bind(input.account_id)
         .bind(input.email_address.trim().to_ascii_lowercase())
-        .bind(input.display_name.as_deref().map(str::trim).filter(|value| !value.is_empty()))
-        .bind(input.reply_to.as_deref().map(str::trim).filter(|value| !value.is_empty()))
-        .bind(input.signature_html.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(
+            input
+                .display_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
+        .bind(
+            input
+                .reply_to
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
+        .bind(
+            input
+                .signature_html
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
         .bind(make_default)
         .execute(&mut *transaction)
         .await?;
@@ -964,9 +981,27 @@ impl MailService {
         .bind(user_id)
         .bind(identity_id)
         .bind(input.email_address.trim().to_ascii_lowercase())
-        .bind(input.display_name.as_deref().map(str::trim).filter(|value| !value.is_empty()))
-        .bind(input.reply_to.as_deref().map(str::trim).filter(|value| !value.is_empty()))
-        .bind(input.signature_html.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(
+            input
+                .display_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
+        .bind(
+            input
+                .reply_to
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
+        .bind(
+            input
+                .signature_html
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
         .bind(make_default)
         .execute(&mut *transaction)
         .await?;
@@ -1024,10 +1059,7 @@ impl MailService {
         Ok(())
     }
 
-    pub async fn list_drafts(
-        &self,
-        user_id: &UserId,
-    ) -> Result<Vec<MailDraft>, MailServiceError> {
+    pub async fn list_drafts(&self, user_id: &UserId) -> Result<Vec<MailDraft>, MailServiceError> {
         sqlx::query_as::<_, MailDraft>(
             r#"
             SELECT id,account_id,identity_id,thread_id,in_reply_to_message_id,
@@ -1148,13 +1180,11 @@ impl MailService {
         user_id: &UserId,
         draft_id: Uuid,
     ) -> Result<(), MailServiceError> {
-        sqlx::query(
-            "DELETE FROM mail_draft_attachments WHERE user_id=$1 AND draft_id=$2",
-        )
-        .bind(Self::user_uuid(user_id)?)
-        .bind(draft_id)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("DELETE FROM mail_draft_attachments WHERE user_id=$1 AND draft_id=$2")
+            .bind(Self::user_uuid(user_id)?)
+            .bind(draft_id)
+            .execute(&self.pool)
+            .await?;
         let result = sqlx::query(
             "UPDATE mail_drafts SET state='canceled',updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND id=$2 AND state='draft'",
         )

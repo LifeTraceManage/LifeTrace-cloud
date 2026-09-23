@@ -440,9 +440,11 @@ async fn sync_push(
         }
         if !shared_resource_events.is_empty() {
             if let Ok(owner_uuid) = Uuid::parse_str(principal.user_id.as_str()) {
-                if let Ok(editors) =
-                    crate::beecount::collaboration::editor_members_for_owner(&state.pool, owner_uuid)
-                        .await
+                if let Ok(editors) = crate::beecount::collaboration::editor_members_for_owner(
+                    &state.pool,
+                    owner_uuid,
+                )
+                .await
                 {
                     for (ledger_id, editor_user_id) in editors {
                         for (resource_type, action, payload) in &shared_resource_events {
