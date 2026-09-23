@@ -410,11 +410,12 @@ fn mailbox(value: &str) -> Result<Mailbox, MailProtocolError> {
 pub async fn send_mail(
     account: &MailAccountSecret,
     secret: &str,
+    from_address: Option<&str>,
     input: &SendMailInput,
     message_id: &str,
     in_reply_to: Option<&str>,
 ) -> Result<(), MailProtocolError> {
-    let from = mailbox(&account.email_address)?;
+    let from = mailbox(from_address.unwrap_or(&account.email_address))?;
     let first_to = input.to.first().ok_or(MailProtocolError::InvalidAddress)?;
     let mut builder = Message::builder()
         .from(from)
