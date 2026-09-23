@@ -4,8 +4,6 @@ use axum::http::{header::HeaderName, HeaderValue};
 use serde_json::Value;
 use tower_http::set_header::SetResponseHeaderLayer;
 
-use crate::Config;
-
 pub const CONTENT_SECURITY_POLICY: &str =
     "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 pub const PERMISSIONS_POLICY: &str = "camera=(), microphone=(), geolocation=()";
