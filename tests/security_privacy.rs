@@ -132,11 +132,11 @@ async fn policy_is_authenticated_and_documents_object_cleanup_boundary() {
         .contains("blocks account deletion"));
 }
 
-fn database_url() -> Option<String> {
+fn database_path() -> Option<String> {
     std::env::var("TEST_DATABASE_PATH").ok()
 }
 
-fn postgres_config(url: String) -> Config {
+fn sqlite_config(url: String) -> Config {
     Config {
         database_path: url,
         migration_on_startup: true,
@@ -152,20 +152,30 @@ fn postgres_config(url: String) -> Config {
     }
 }
 
-async fn postgres_state() -> Option<AppState> {
-    let url = database_url()?;
-    let state = AppState::new(postgres_config(url));
+async fn sqlite_state() -> Option<AppState> {
+    let url = database_path()?;
+    let state = AppState::new(sqlite_config(url));
     state.initialize().await.unwrap();
-    sqlx::query(
-        "TRUNCATE TABLE auth_audit_log, auth_login_attempts, auth_registration_invites, \
-         auth_password_reset_tokens, auth_web_sessions, auth_refresh_tokens, auth_access_tokens, \
-         auth_sessions, auth_app_grants, sync_snapshot_items, sync_snapshots, \
-         sync_processed_changes, sync_change_log, sync_entities, cloud_devices, cloud_users \
-         RESTART IDENTITY CASCADE",
-    )
-    .execute(&state.pool)
-    .await
-    .unwrap();
+    {
+        for table in [
+            "auth_audit_log",
+            "auth_login_attempts",
+            "auth_registration_invites",
+            "auth_password_reset_tokens",
+            "auth_web_sessions",
+            "auth_refresh_tokens",
+            "auth_access_tokens",
+            "auth_sessions",
+            "auth_app_grants",
+            "cloud_devices",
+            "cloud_users",
+        ] {
+            sqlx::query(&format!("DELETE FROM {table}"))
+                .execute(&state.pool)
+                .await
+                .unwrap();
+        }
+    }
     Some(state)
 }
 
@@ -193,8 +203,8 @@ fn registration() -> RegisterRequestV1 {
 }
 
 #[tokio::test]
-async fn postgres_account_deletion_removes_user_sessions_and_tokens() {
-    let Some(state) = postgres_state().await else {
+async fn sqlite_account_deletion_removes_user_sessions_and_tokens() {
+    let Some(state) = sqlite_state().await else {
         return;
     };
     let issued = state
@@ -236,8 +246,8 @@ async fn postgres_account_deletion_removes_user_sessions_and_tokens() {
 }
 
 #[tokio::test]
-async fn postgres_full_export_excludes_password_and_token_hashes() {
-    let Some(state) = postgres_state().await else {
+async fn sqlite_full_export_excludes_password_and_token_hashes() {
+    let Some(state) = sqlite_state().await else {
         return;
     };
     let issued = state
