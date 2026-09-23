@@ -7,17 +7,17 @@ use std::collections::HashMap;
 use axum::http::StatusCode;
 use lifetrace_contracts::sync::v1::*;
 use lifetrace_contracts::{ErrorCode, UserId};
-use sqlx::{Acquire, Postgres, Transaction};
+use sqlx::{Acquire, Sqlite, Transaction};
 use uuid::Uuid;
 
-use super::PostgresRepository;
+use super::SqliteRepository;
 use crate::error::ApiError;
 use crate::sync::payload_hash::empty_scope;
 
-impl PostgresRepository {
+impl SqliteRepository {
     async fn prune_change_log(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut Transaction<'_, Sqlite>,
         user_uuid: Uuid,
     ) -> Result<(), ApiError> {
         if self.config.retention_entries == 0 {
@@ -175,7 +175,7 @@ impl PostgresRepository {
         tx.commit().await.map_err(Self::db_error)?;
         Ok(PushResponseV1 {
             request_id: request.request_id.clone(),
-            server_time: Self::now(),
+            server_time: Self::CURRENT_TIMESTAMP,
             results,
             latest_cursor: self.cursor_codec.encode(user_id, &empty_scope(), latest),
         })

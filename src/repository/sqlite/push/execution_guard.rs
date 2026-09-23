@@ -1,11 +1,11 @@
 use lifetrace_contracts::sync::v1::{ChangeOperation, PushChangeResultV1, SyncChangeV1};
 use lifetrace_contracts::{ErrorCode, UserId};
-use sqlx::{Postgres, Transaction};
+use sqlx::{Sqlite, Transaction};
 
 use crate::error::ApiError;
-use crate::repository::postgres::PostgresRepository;
+use crate::repository::postgres::SqliteRepository;
 
-impl PostgresRepository {
+impl SqliteRepository {
     /// Enforce finish-before-start dependencies at the authoritative sync layer.
     ///
     /// This runs immediately before each task change inside the same transaction
@@ -14,7 +14,7 @@ impl PostgresRepository {
     /// while stale or out-of-order clients cannot bypass the dependency graph.
     pub(super) async fn validate_execution_transition(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut Transaction<'_, Sqlite>,
         user_id: &UserId,
         change: &SyncChangeV1,
     ) -> Result<Option<PushChangeResultV1>, ApiError> {

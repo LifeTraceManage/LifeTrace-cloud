@@ -4,16 +4,16 @@ use lifetrace_contracts::json_value::JsonValue;
 use lifetrace_contracts::sync::v1::*;
 use lifetrace_contracts::{ConflictId, ErrorCode, ServerVersion, UserId};
 use serde_json::Value;
-use sqlx::{Postgres, Row, Transaction};
+use sqlx::{Sqlite, Row, Transaction};
 
-use super::super::PostgresRepository;
+use super::super::SqliteRepository;
 use crate::error::ApiError;
 use crate::sync::payload_hash::{change_hash, empty_scope, sha256_hex};
 
-impl PostgresRepository {
+impl SqliteRepository {
     pub(super) async fn process_change(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut Transaction<'_, Sqlite>,
         user_id: &UserId,
         client: &SyncClientInfo,
         change: &SyncChangeV1,
@@ -109,8 +109,7 @@ impl PostgresRepository {
         let current = sqlx::query(
             "SELECT server_version, payload, is_deleted \
              FROM sync_entities \
-             WHERE user_id = $1 AND entity_type = $2 AND entity_id = $3 \
-             FOR UPDATE",
+             WHERE user_id = $1 AND entity_type = $2 AND entity_id = $3 \",
         )
         .bind(user_uuid)
         .bind(change.entity_type.as_str())
@@ -261,7 +260,7 @@ impl PostgresRepository {
                 server_version,
                 noop,
             } => {
-                let now = Self::now();
+                let now = Self::CURRENT_TIMESTAMP;
                 if noop {
                     let cursor = self.latest_cursor_raw(&mut **tx, user_uuid).await?;
                     let result = PushChangeResultV1::Accepted {
