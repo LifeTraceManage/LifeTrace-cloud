@@ -21,6 +21,7 @@ services:
       - "8869:8869"
     volumes:
       - lifetrace_data:/data
+      - ./.web-dist:/app/web:ro
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8787/health/ready"]
       interval: 10s
