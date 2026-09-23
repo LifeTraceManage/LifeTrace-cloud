@@ -16,11 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let address = listener.local_addr().unwrap_or(config.bind_addr);
-    let storage = if state.database_enabled {
-        "postgresql"
-    } else {
-        "memory-test-adapter"
-    };
+    let storage = "sqlite";
     println!(
         "[lifetrace-cloud] env={} storage={storage} listening on http://{address}",
         config.environment
