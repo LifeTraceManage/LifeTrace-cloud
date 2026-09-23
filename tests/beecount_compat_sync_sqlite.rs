@@ -10,9 +10,7 @@ use uuid::Uuid;
 
 fn config(database_path: String) -> Config {
     Config {
-        database_path,
-        migration_on_startup: true,
-        dev_auth_enabled: false,
+        database_path,        dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
         auth_password_pepper: Some("beecount-test-password-pepper-0123456789".to_owned()),
         auth_token_hash_pepper: Some("beecount-test-token-pepper-012345678901".to_owned()),
