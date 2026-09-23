@@ -81,7 +81,7 @@ async fn register(router: axum::Router) -> (String, String, String) {
 
 #[tokio::test]
 async fn stock_ledger_stats_match_current_ledger_and_user_totals() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_URL") else {
+    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
     let state = AppState::new(config(database_url));
