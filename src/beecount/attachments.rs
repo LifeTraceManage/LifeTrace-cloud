@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::{SqlitePool, Sqlite, Row, Transaction};
-use uuid;
+use uuid::Uuid;
 
 use crate::error::ApiError;
 
