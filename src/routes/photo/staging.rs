@@ -483,16 +483,8 @@ fn resolve_storage_path(state: &AppState, storage_name: &str) -> Result<PathBuf,
     Ok(staging_root(state).join(relative))
 }
 
-fn ensure_database(state: &AppState) -> Result<(), ApiError> {
-    if state.database_enabled {
-        Ok(())
-    } else {
-        Err(ApiError::new(
-            ErrorCode::TemporarilyUnavailable,
-            "照片云端暂存需要 PostgreSQL",
-            StatusCode::SERVICE_UNAVAILABLE,
-        ))
-    }
+fn ensure_database(_state: &AppState) -> Result<(), ApiError> {
+    Ok(())
 }
 
 fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
