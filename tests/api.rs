@@ -128,24 +128,28 @@ async fn send(
     (status, body)
 }
 
-fn test_app() -> Router {
-    test_app_for(TOKEN_A, "user-a", "device-a")
+async fn test_app() -> Router {
+    test_app_for(TOKEN_A, "user-a", "device-a").await
 }
 
-fn test_app_for(token: &str, user: &str, device: &str) -> Router {
+async fn test_app_for(token: &str, user: &str, device: &str) -> Router {
     let config = Config {
+        database_path: ":memory:".to_owned(),
+        migration_on_startup: true,
         dev_auth_token: token.to_owned(),
         dev_auth_user_id: user.to_owned(),
         dev_auth_device_id: device.to_owned(),
         ..Config::default()
     };
-    app(AppState::new(config))
+    let state = AppState::new(config);
+    state.initialize().await.unwrap();
+    app(state)
 }
 
 #[tokio::test]
 async fn health_live_ok() {
     let (status, body) = send(
-        test_app(),
+        test_app().await,
         Method::GET,
         "/health/live",
         TOKEN_A,
@@ -159,7 +163,7 @@ async fn health_live_ok() {
 #[tokio::test]
 async fn capabilities_ok() {
     let (status, body) = send(
-        test_app(),
+        test_app().await,
         Method::GET,
         "/api/v1/sync/capabilities",
         TOKEN_A,
@@ -176,7 +180,7 @@ async fn capabilities_ok() {
 #[tokio::test]
 async fn auth_capabilities_advertise_execute_android() {
     let (status, body) = send(
-        test_app(),
+        test_app().await,
         Method::GET,
         "/api/v1/auth/capabilities",
         TOKEN_A,
@@ -193,7 +197,7 @@ async fn auth_capabilities_advertise_execute_android() {
 
 #[tokio::test]
 async fn push_create_pull_and_delete() {
-    let app = test_app();
+    let app = test_app().await;
 
     let (status, body) = send(
         app.clone(),
@@ -259,7 +263,7 @@ async fn push_create_pull_and_delete() {
 
 #[tokio::test]
 async fn base_version_conflict() {
-    let app = test_app();
+    let app = test_app().await;
     send(
         app.clone(),
         Method::POST,
@@ -295,7 +299,7 @@ async fn base_version_conflict() {
 
 #[tokio::test]
 async fn duplicate_change_id_is_idempotent() {
-    let app = test_app();
+    let app = test_app().await;
     let request = push_request(vec![change("c1", "tx-1", 100, 0, "upsert", None)]);
     send(
         app.clone(),
@@ -320,7 +324,7 @@ async fn duplicate_change_id_is_idempotent() {
 
 #[tokio::test]
 async fn change_id_reuse_with_different_payload_is_rejected() {
-    let app = test_app();
+    let app = test_app().await;
     send(
         app.clone(),
         Method::POST,
@@ -344,7 +348,7 @@ async fn change_id_reuse_with_different_payload_is_rejected() {
 
 #[tokio::test]
 async fn unknown_entity_type_is_rejected() {
-    let app = test_app();
+    let app = test_app().await;
     let mut unknown = change("c1", "x-1", 100, 0, "upsert", None);
     unknown["entityType"] = json!("foo.bar");
     let (status, body) = send(
@@ -362,7 +366,7 @@ async fn unknown_entity_type_is_rejected() {
 
 #[tokio::test]
 async fn unsupported_protocol_returns_426() {
-    let app = test_app();
+    let app = test_app().await;
     let mut request = push_request(vec![change("c1", "tx-1", 100, 0, "upsert", None)]);
     request["client"]["protocolVersion"] = json!(2);
     let (status, body) = send(
@@ -379,7 +383,7 @@ async fn unsupported_protocol_returns_426() {
 
 #[tokio::test]
 async fn atomic_group_is_all_or_nothing() {
-    let app = test_app();
+    let app = test_app().await;
     send(
         app.clone(),
         Method::POST,
@@ -429,7 +433,7 @@ async fn atomic_group_is_all_or_nothing() {
 
 #[tokio::test]
 async fn pull_pagination_has_no_gaps_or_duplicates() {
-    let app = test_app();
+    let app = test_app().await;
     for (index, change_id) in ["c1", "c2", "c3"].iter().enumerate() {
         send(
             app.clone(),
@@ -498,7 +502,7 @@ async fn pull_pagination_has_no_gaps_or_duplicates() {
 
 #[tokio::test]
 async fn snapshot_is_consistent_and_follow_up_pull_has_no_gaps() {
-    let app = test_app();
+    let app = test_app().await;
     for (index, change_id) in ["c1", "c2"].iter().enumerate() {
         send(
             app.clone(),
@@ -643,8 +647,8 @@ async fn expired_cursor_requires_snapshot() {
 
 #[tokio::test]
 async fn users_are_isolated() {
-    let app_a = test_app_for(TOKEN_A, "user-a", "device-a");
-    let app_b = test_app_for(TOKEN_B, "user-b", "device-b");
+    let app_a = test_app_for(TOKEN_A, "user-a", "device-a").await;
+    let app_b = test_app_for(TOKEN_B, "user-b", "device-b").await;
     send(
         app_a.clone(),
         Method::POST,
@@ -673,7 +677,7 @@ async fn users_are_isolated() {
 
 #[tokio::test]
 async fn sync_endpoints_require_auth() {
-    let app = test_app();
+    let app = test_app().await;
     let (status, body) = send(
         app.clone(),
         Method::POST,
@@ -699,7 +703,7 @@ async fn sync_endpoints_require_auth() {
 #[tokio::test]
 async fn meta_version_endpoint() {
     let (status, body) = send(
-        test_app(),
+        test_app().await,
         Method::GET,
         "/api/v1/meta/version",
         TOKEN_A,
@@ -803,7 +807,7 @@ async fn execution_pull(
 #[tokio::test]
 async fn execution_two_devices_create_update_delete_and_tombstone() {
     let user = "execution-e2e-user-core";
-    let app_a = test_app_for(TOKEN_A, user, "execution-auth-device");
+    let app_a = test_app_for(TOKEN_A, user, "execution-auth-device").await;
     let app_b = app_a.clone();
     let initial = vec![
         execution_change(
@@ -962,7 +966,7 @@ async fn execution_two_devices_create_update_delete_and_tombstone() {
 #[tokio::test]
 async fn execution_duplicate_and_domain_conflicts_are_not_silent() {
     let user = "execution-e2e-user-conflicts";
-    let app_a = test_app_for(TOKEN_A, user, "execution-auth-device");
+    let app_a = test_app_for(TOKEN_A, user, "execution-auth-device").await;
     let app_b = app_a.clone();
 
     let memo_create = execution_push_request(
