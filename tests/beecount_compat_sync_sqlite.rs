@@ -8,9 +8,9 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn config(database_url: String) -> Config {
+fn config(database_path: String) -> Config {
     Config {
-        database_path: database_url,
+        database_path,
         migration_on_startup: true,
         dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
@@ -55,10 +55,10 @@ async fn send(
 
 #[tokio::test]
 async fn stock_client_sync_routes_share_the_lifetrace_entity_log() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
+    let Ok(database_path) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
-    let state = AppState::new(config(database_url));
+    let state = AppState::new(config(database_path));
     state.initialize().await.unwrap();
     let router = app(state.clone());
     let external_device_id = format!("beecount-device-{}", Uuid::new_v4());
@@ -153,9 +153,9 @@ async fn stock_client_sync_routes_share_the_lifetrace_entity_log() {
     let first_cursor = pushed["server_cursor"].as_i64().unwrap();
 
     let canonical_amount: i64 = sqlx::query_scalar(
-        "SELECT (payload->>'amountCents')::BIGINT FROM sync_entities \
+        "SELECT CAST(payload->>'amountCents' AS INTEGER) FROM sync_entities \
          WHERE entity_type='finance.transaction' AND entity_id='beecount:transaction-1' \
-           AND user_id=$1::uuid",
+           AND user_id=$1",
     )
     .bind(registration["user"]["id"].as_str().unwrap())
     .fetch_one(&state.pool)
