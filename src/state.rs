@@ -104,9 +104,7 @@ impl AppState {
         sqlx::query_scalar::<_, i32>("SELECT 1")
             .fetch_one(&self.pool)
             .await?;
-        if self.config.migration_on_startup {
-            sqlx::migrate!().run(&self.pool).await?;
-        }
+        sqlx::migrate!().run(&self.pool).await?;
         Ok(())
     }
 }
