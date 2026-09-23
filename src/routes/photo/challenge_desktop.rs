@@ -46,14 +46,6 @@ async fn desktop_admin(
     State(state): State<AppState>,
     principal: AuthenticatedPrincipal,
 ) -> Result<Json<AdminResponse>, ApiError> {
-    if !state.database_enabled {
-        return Err(ApiError::new(
-            ErrorCode::TemporarilyUnavailable,
-            "摄影挑战云端模式需要 PostgreSQL",
-            StatusCode::SERVICE_UNAVAILABLE,
-        ));
-    }
-
     let owner = challenge_owner(&state).await?;
     if principal.user_id != owner {
         return Err(ApiError::new(
