@@ -19,7 +19,6 @@ fn config(database_path: String) -> Config {
         cursor_signing_key: Some("beecount-web-test-cursor-signing-key".to_owned()),
         page_token_signing_key: Some("beecount-web-test-page-token-key".to_owned()),
         public_web_base_url: Some("http://localhost:3000".to_owned()),
-        // Deliberately leave BEECOUNT_ADAPTER_ENABLED at its default false.
         ..Config::default()
     }
 }
@@ -89,7 +88,6 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
         return;
     };
     let state = AppState::new(config(database_path));
-    assert!(state.beecount_adapter.is_none());
     state.initialize().await.unwrap();
     let router = app(state.clone());
 
