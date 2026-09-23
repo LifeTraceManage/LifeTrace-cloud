@@ -26,7 +26,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --bin lifetrace-cloud \
     --bin mail_worker \
     --bin execution_worker \
-    --bin lifetrace-migrate \
     --bin lifetrace-admin
 
 FROM debian:bookworm-slim
@@ -44,7 +43,6 @@ WORKDIR /app
 COPY --from=builder /build/target/release/lifetrace-cloud /app/lifetrace-cloud
 COPY --from=builder /build/target/release/mail_worker /app/mail_worker
 COPY --from=builder /build/target/release/execution_worker /app/execution_worker
-COPY --from=builder /build/target/release/lifetrace-migrate /app/lifetrace-migrate
 COPY --from=builder /build/target/release/lifetrace-admin /app/lifetrace-admin
 USER lifetrace
 EXPOSE 8787
