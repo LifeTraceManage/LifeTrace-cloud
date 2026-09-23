@@ -44,3 +44,16 @@ WHERE d.account_id=i.account_id
 CREATE INDEX idx_mail_drafts_user_updated
 ON mail_drafts(user_id, updated_at DESC)
 WHERE state='draft';
+
+
+-- Allow the unified file service to hold outbound draft attachments.
+ALTER TABLE file_objects DROP CONSTRAINT file_objects_domain_check;
+ALTER TABLE file_objects ADD CONSTRAINT file_objects_domain_check CHECK (domain IN (
+    'finance_imports',
+    'notes_attachments',
+    'english_audio',
+    'photos',
+    'workout_imports',
+    'backups',
+    'mail_outbound_attachments'
+));
