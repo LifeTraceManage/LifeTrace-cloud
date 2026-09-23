@@ -48,7 +48,7 @@ impl SqliteRepository {
         }
     }
 
-    fn CURRENT_TIMESTAMP -> chrono::DateTime<Utc> {
+    fn now() -> chrono::DateTime<Utc> {
         Utc::now()
     }
 
