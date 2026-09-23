@@ -328,7 +328,7 @@ async fn build_export(
 
     Ok(json!({
         "format": "lifetrace-privacy-export-v1",
-        "exportedAt": chrono::Utc::CURRENT_TIMESTAMP,
+        "exportedAt": chrono::Utc::now(),
         "userId": principal.user_id.as_str(),
         "requestedModule": requested_module,
         "sections": sections
