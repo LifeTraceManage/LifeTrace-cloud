@@ -39,9 +39,8 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 - `src/sync/`：游标、分页令牌和 payload hash
 - `migrations/0001_sqlite.sql`：SQLite 基线 schema
 - `migrations/0002_mail_workspace.sql`：Mail Workspace 增量 schema（Identity / Draft attachment）
-- `apps/web/`：随 Cloud 镜像构建的 Web 前端
-- `apps/photo-challenge-pwa/`：摄影挑战静态页面
-- `deploy/cloud/`：唯一生产 Compose 与环境变量模板
+- `deploy/cloud/.web-dist/`：部署时从独立 `LifeTrace-web` 工作区构建出的静态产物（不入库）
+- `deploy/cloud/`：唯一生产 Compose、部署脚本与环境变量模板
 - `crates/lifetrace-contracts/`：共享协议和领域契约
 - `crates/lifetrace-sync-client/`：Rust Sync v1 客户端
 - `contracts/`：生成的跨语言契约
@@ -115,13 +114,21 @@ cargo run --manifest-path tools/contract-exporter/Cargo.toml
 ```text
 lifetrace container
 ├── lifetrace-cloud
-├── built Web assets
+├── /app/web  <- host bind mount: deploy/cloud/.web-dist
 └── /data
     ├── lifetrace.db
     └── photo-staging/
 ```
 
-首次部署：
+首次部署建议把两个私有仓库放在同一工作目录：
+
+```text
+workspace/
+├── LifeTrace-cloud/
+└── LifeTrace-web/
+```
+
+然后：
 
 ```bash
 cp deploy/cloud/.env.production.example deploy/cloud/.env.production
@@ -131,13 +138,24 @@ bash deploy/cloud/deploy-production.sh
 bash deploy/cloud/verify-production.sh
 ```
 
-等价的核心命令只有：
+`deploy-production.sh` 会先使用临时 `node:22-alpine` 容器构建独立仓库 `LifeTrace-web`，把 `dist` 输出到 `deploy/cloud/.web-dist`，再拉取并启动 Cloud 镜像。Web 源码不会复制回 Cloud 仓库，运行时仍然只有一个 `lifetrace` service。
+
+如果两个仓库不是同级目录，可显式指定：
+
+```bash
+LIFETRACE_WEB_SOURCE_DIR=/absolute/path/to/LifeTrace-web \
+  bash deploy/cloud/deploy-production.sh
+```
+
+底层运行仍然只是：
 
 ```bash
 cd deploy/cloud
 docker compose --env-file .env.production -f docker-compose.production.yml pull
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans --wait
 ```
+
+其中 Compose 会把本机 `./.web-dist` 只读挂载到容器 `/app/web`，由 Axum 作为同源 SPA 提供。
 
 服务端口：
 
@@ -191,7 +209,7 @@ Mail 保留：
 
 ## 设计原则
 
-当前 Cloud 明确按单实例个人服务器优化：
+当前 Cloud 明确按单实例个人服务器优化。`LifeTrace-web` 是独立源码仓库；Cloud 容器只负责托管其构建产物，不再维护第二份 Web 源码：
 
 1. SQLite 是唯一数据库后端，不维护 PostgreSQL / SQLite 双栈。
 2. 测试同样使用 SQLite，不维护第二套内存数据库实现。
