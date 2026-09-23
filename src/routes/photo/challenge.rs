@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use uuid;
+use uuid::Uuid;
 
 use crate::auth::security::cookie_value;
 use crate::auth::{AuthCredential, AuthenticatedPrincipal};
