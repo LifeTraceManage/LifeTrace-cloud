@@ -24,10 +24,6 @@ pub fn router() -> Router<AppState> {
 
 fn map_error(error: AttachmentReadError) -> ApiError {
     let (status, message) = match error {
-        AttachmentReadError::DatabaseRequired => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "mail storage is unavailable",
-        ),
         AttachmentReadError::InvalidUser | AttachmentReadError::InvalidPart => {
             (StatusCode::BAD_REQUEST, "invalid attachment request")
         }
