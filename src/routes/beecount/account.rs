@@ -461,7 +461,7 @@ async fn list_devices(
     }
     let user_id = parse_user_id(principal.user_id.as_str())?;
     let cutoff = (query.active_within_days > 0)
-        .then(|| Utc::CURRENT_TIMESTAMP - Duration::days(query.active_within_days));
+        .then(|| Utc::now() - Duration::days(query.active_within_days));
     let rows = sqlx::query(
         "SELECT external_device_id,device_name,platform,client_version,os_version,device_model, \
                 host(last_login_ip) AS last_ip,last_seen_at,first_seen_at \
@@ -687,7 +687,7 @@ async fn create_invite(
         return Err(conflict("Too many active invites for this ledger"));
     }
     let code = allocate_invite_code(&mut tx).await?;
-    let created_at = Utc::CURRENT_TIMESTAMP;
+    let created_at = Utc::now();
     let expires_at = created_at + Duration::hours(request.expires_in_hours);
     sqlx::query(
         "INSERT INTO beecount_ledger_invites \
@@ -812,7 +812,7 @@ async fn accept_invite(
     authorize(&principal, "finance:write")?;
     let actor = parse_user_id(principal.user_id.as_str())?;
     let code = normalize_code(&code);
-    let now = Utc::CURRENT_TIMESTAMP;
+    let now = Utc::now();
     let mut tx = state.pool.begin().await.map_err(db_error)?;
     let invite = sqlx::query(
         "SELECT i.ledger_id,i.invited_by,i.target_role,s.storage_user_id \
