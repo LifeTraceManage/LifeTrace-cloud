@@ -22,8 +22,6 @@ use super::protocol::{self, MailProtocolError, RemoteFolderSnapshot};
 
 #[derive(Debug, Error)]
 pub enum MailServiceError {
-    #[error("mail storage requires PostgreSQL")]
-    DatabaseRequired,
     #[error("invalid authenticated user id")]
     InvalidUser,
     #[error("invalid mail account configuration")]
@@ -69,25 +67,12 @@ impl From<MailProtocolError> for MailServiceError {
 #[derive(Clone)]
 pub struct MailService {
     pool: SqlitePool,
-    database_enabled: bool,
     config: Arc<Config>,
 }
 
 impl MailService {
-    pub fn new(pool: SqlitePool, database_enabled: bool, config: Arc<Config>) -> Self {
-        Self {
-            pool,
-            database_enabled,
-            config,
-        }
-    }
-
-    fn require_database(&self) -> Result<(), MailServiceError> {
-        if self.database_enabled {
-            Ok(())
-        } else {
-            Err(MailServiceError::DatabaseRequired)
-        }
+    pub fn new(pool: SqlitePool, config: Arc<Config>) -> Self {
+        Self { pool, config }
     }
 
     fn user_uuid(user_id: &UserId) -> Result<Uuid, MailServiceError> {
@@ -158,7 +143,6 @@ impl MailService {
         user_id: &UserId,
         input: MailAccountInput,
     ) -> Result<MailAccount, MailServiceError> {
-        self.require_database()?;
         let user_id = Self::user_uuid(user_id)?;
         let resolved = Self::resolve_input(&input)?;
         let cipher = CredentialCipher::from_config(&self.config)?;
@@ -206,7 +190,6 @@ impl MailService {
         &self,
         user_id: &UserId,
     ) -> Result<Vec<MailAccount>, MailServiceError> {
-        self.require_database()?;
         let user_id = Self::user_uuid(user_id)?;
         sqlx::query_as::<_, MailAccount>(ACCOUNT_SELECT_LIST)
             .bind(user_id)
@@ -259,7 +242,6 @@ impl MailService {
         user_id: &UserId,
         account_id: Uuid,
     ) -> Result<ConnectionTestResult, MailServiceError> {
-        self.require_database()?;
         self.test_account_uuid(Self::user_uuid(user_id)?, account_id)
             .await
     }
@@ -323,11 +305,10 @@ impl MailService {
         user_id: &UserId,
         account_id: Uuid,
     ) -> Result<(), MailServiceError> {
-        self.require_database()?;
         let result = sqlx::query(
             r#"
             UPDATE mail_accounts
-            SET status='disabled',credential_ciphertext=decode('', 'hex'),credential_nonce=decode('', 'hex'),
+            SET status='disabled',credential_ciphertext=X'',credential_nonce=decode('', 'hex'),
                 deleted_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
             WHERE user_id=$1 AND id=$2 AND deleted_at IS NULL
             "#,
@@ -377,7 +358,6 @@ impl MailService {
         user_id: &UserId,
         account_id: Uuid,
     ) -> Result<Vec<MailFolder>, MailServiceError> {
-        self.require_database()?;
         let mut folders = sqlx::query_as::<_, MailFolder>(
             r#"
             SELECT id,account_id,remote_name,normalized_role,uidvalidity,uidnext,last_seen_uid,last_sync_at,sync_enabled
@@ -401,18 +381,16 @@ impl MailService {
         user_id: &UserId,
         account_id: Uuid,
     ) -> Result<usize, MailServiceError> {
-        self.require_database()?;
         self.sync_account_uuid(Self::user_uuid(user_id)?, account_id)
             .await
     }
 
     pub async fn sync_due_accounts(&self, limit: i64) -> Result<usize, MailServiceError> {
-        self.require_database()?;
         let accounts = sqlx::query_as::<_, (Uuid, Uuid)>(
             r#"
             SELECT user_id,id FROM mail_accounts
             WHERE deleted_at IS NULL AND status IN ('active','degraded')
-              AND (last_sync_at IS NULL OR last_sync_at < CURRENT_TIMESTAMP - interval '2 minutes')
+              AND (last_sync_at IS NULL OR last_sync_at < datetime('now','-2 minutes'))
             ORDER BY last_sync_at NULLS FIRST LIMIT $1
             "#,
         )
@@ -488,7 +466,7 @@ impl MailService {
                     .await?;
                 }
                 Err(error) => {
-                    sqlx::query("UPDATE mail_sync_jobs SET state='retry_wait',attempt=attempt+1,finished_at=CURRENT_TIMESTAMP,next_retry_at=CURRENT_TIMESTAMP+interval '3 minutes',error_code='MAIL_SYNC_FAILED',error_detail_redacted=$2 WHERE id=$1")
+                    sqlx::query("UPDATE mail_sync_jobs SET state='retry_wait',attempt=attempt+1,finished_at=CURRENT_TIMESTAMP,next_retry_at=datetime('now','+3 minutes'),error_code='MAIL_SYNC_FAILED',error_detail_redacted=$2 WHERE id=$1")
                         .bind(job_id)
                         .bind(error.to_string())
                         .execute(&self.pool)
@@ -565,7 +543,6 @@ impl MailService {
         user_id: &UserId,
         query: MailListQuery,
     ) -> Result<Vec<MailThread>, MailServiceError> {
-        self.require_database()?;
         let user_id = Self::user_uuid(user_id)?;
         let q = query
             .q
@@ -602,7 +579,6 @@ impl MailService {
         user_id: &UserId,
         thread_id: Uuid,
     ) -> Result<Vec<MailMessage>, MailServiceError> {
-        self.require_database()?;
         let rows = sqlx::query_as::<_, MailMessage>(MESSAGE_SELECT_BY_THREAD)
             .bind(Self::user_uuid(user_id)?)
             .bind(thread_id)
@@ -619,7 +595,6 @@ impl MailService {
         user_id: &UserId,
         message_id: Uuid,
     ) -> Result<MailMessage, MailServiceError> {
-        self.require_database()?;
         sqlx::query_as::<_, MailMessage>(MESSAGE_SELECT_ONE)
             .bind(Self::user_uuid(user_id)?)
             .bind(message_id)
@@ -633,7 +608,6 @@ impl MailService {
         user_id: &UserId,
         message_id: Uuid,
     ) -> Result<Vec<MailAttachment>, MailServiceError> {
-        self.require_database()?;
         sqlx::query_as::<_, MailAttachment>(
             r#"
             SELECT a.id,a.message_id,a.part_id,a.filename,a.mime_type,a.size_bytes,a.content_id,a.disposition,a.checksum,a.storage_ref,a.download_state
@@ -654,7 +628,6 @@ impl MailService {
         message_id: Uuid,
         read: bool,
     ) -> Result<(), MailServiceError> {
-        self.require_database()?;
         let user_id = Self::user_uuid(user_id)?;
         let remote = self.remote_message_ref(user_id, message_id).await?;
         let account = self.account_secret(user_id, remote.account_id).await?;
@@ -677,7 +650,6 @@ impl MailService {
         user_id: &UserId,
         message_id: Uuid,
     ) -> Result<(), MailServiceError> {
-        self.require_database()?;
         let user_id = Self::user_uuid(user_id)?;
         let remote = self.remote_message_ref(user_id, message_id).await?;
         let archive_folder: Option<String> = sqlx::query_scalar(
@@ -733,7 +705,6 @@ impl MailService {
         account_id: Uuid,
         input: SendMailInput,
     ) -> Result<String, MailServiceError> {
-        self.require_database()?;
         let user_id = Self::user_uuid(user_id)?;
         if input.to.is_empty() || input.idempotency_key.trim().is_empty() {
             return Err(MailServiceError::InvalidAccount);
@@ -811,7 +782,7 @@ impl MailService {
                 Ok(message_id)
             }
             Err(_) => {
-                sqlx::query("UPDATE mail_outbox SET state='retry_wait',next_retry_at=CURRENT_TIMESTAMP+interval '3 minutes',updated_at=CURRENT_TIMESTAMP,last_error_code='MAIL_SEND_FAILED' WHERE id=$1")
+                sqlx::query("UPDATE mail_outbox SET state='retry_wait',next_retry_at=datetime('now','+3 minutes'),updated_at=CURRENT_TIMESTAMP,last_error_code='MAIL_SEND_FAILED' WHERE id=$1")
                     .bind(existing.0)
                     .execute(&self.pool)
                     .await?;
