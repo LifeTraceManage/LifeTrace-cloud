@@ -3,7 +3,7 @@ use lifetrace_contracts::{ErrorCode, UserId};
 use sqlx::{Sqlite, Transaction};
 
 use crate::error::ApiError;
-use crate::repository::postgres::SqliteRepository;
+use crate::repository::sqlite::SqliteRepository;
 
 impl SqliteRepository {
     /// Enforce finish-before-start dependencies at the authoritative sync layer.
