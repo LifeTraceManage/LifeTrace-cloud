@@ -500,16 +500,8 @@ fn row_to_metadata(row: &sqlx::sqlite::SqliteRow) -> Result<FileMetadata, ApiErr
     })
 }
 
-fn ensure_database(state: &AppState) -> Result<(), ApiError> {
-    if state.database_enabled {
-        Ok(())
-    } else {
-        Err(ApiError::new(
-            ErrorCode::TemporarilyUnavailable,
-            "文件服务需要 PostgreSQL",
-            StatusCode::SERVICE_UNAVAILABLE,
-        ))
-    }
+fn ensure_database(_state: &AppState) -> Result<(), ApiError> {
+    Ok(())
 }
 
 fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
