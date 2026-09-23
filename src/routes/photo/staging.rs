@@ -82,7 +82,6 @@ async fn list(
     Query(query): Query<ListQuery>,
 ) -> Result<Json<StagedPhotoList>, ApiError> {
     principal.require_scope("files:read")?;
-    ensure_database(&state)?;
     cleanup_expired(&state).await?;
     let user_id = user_uuid(&principal.user_id)?;
     let limit = query.limit.unwrap_or(50).clamp(1, MAX_LIST_LIMIT);
@@ -106,7 +105,6 @@ async fn metadata(
     AxumPath(id): AxumPath<Uuid>,
 ) -> Result<Json<StagedPhoto>, ApiError> {
     principal.require_scope("files:read")?;
-    ensure_database(&state)?;
     cleanup_expired(&state).await?;
     let user_id = user_uuid(&principal.user_id)?;
     let row = sqlx::query(
@@ -139,7 +137,6 @@ async fn content(
     AxumPath(id): AxumPath<Uuid>,
 ) -> Result<Response, ApiError> {
     principal.require_scope("files:read")?;
-    ensure_database(&state)?;
     cleanup_expired(&state).await?;
     let user_id = user_uuid(&principal.user_id)?;
     let row = sqlx::query(
@@ -194,7 +191,6 @@ async fn acknowledge(
     AxumPath(id): AxumPath<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     principal.require_scope("files:write")?;
-    ensure_database(&state)?;
     cleanup_expired(&state).await?;
     let user_id = user_uuid(&principal.user_id)?;
     let row = sqlx::query(
@@ -216,7 +212,6 @@ pub(crate) async fn stage_for_user(
     user_id: &UserId,
     mut input: StageInput,
 ) -> Result<StagedPhoto, ApiError> {
-    ensure_database(state)?;
     validate_input(&mut input)?;
     cleanup_expired(state).await?;
     let owner = user_uuid(user_id)?;
@@ -431,7 +426,6 @@ fn row_to_metadata(row: &sqlx::sqlite::SqliteRow) -> Result<StagedPhoto, ApiErro
 }
 
 async fn cleanup_expired(state: &AppState) -> Result<(), ApiError> {
-    ensure_database(state)?;
     let rows = sqlx::query(
         "DELETE FROM photo_staging_items WHERE expires_at IS NOT NULL AND expires_at<=CURRENT_TIMESTAMP RETURNING storage_name",
     )
@@ -483,9 +477,6 @@ fn resolve_storage_path(state: &AppState, storage_name: &str) -> Result<PathBuf,
     Ok(staging_root(state).join(relative))
 }
 
-fn ensure_database(_state: &AppState) -> Result<(), ApiError> {
-    Ok(())
-}
 
 fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
     Uuid::parse_str(user_id.as_str()).map_err(|_| {
