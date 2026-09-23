@@ -431,7 +431,7 @@ impl MailService {
         }
 
         let mut total = 0;
-        let initial_since = Utc::CURRENT_TIMESTAMP - Duration::days(30);
+        let initial_since = Utc::now() - Duration::days(30);
         for folder in folders {
             let job_id = Uuid::new_v4();
             sqlx::query(
