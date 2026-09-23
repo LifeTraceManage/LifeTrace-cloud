@@ -2,7 +2,7 @@ use axum::{extract::Request, middleware, response::Response};
 use lifetrace_cloud::{app, security, Config};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = Config::from_env();
     config.validate().map_err(|message| {
         eprintln!("[lifetrace-cloud] invalid configuration: {message}");
@@ -36,14 +36,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let beecount = axum::serve(
         beecount_listener,
-        app(state)
+        app(state.clone())
             .layer(middleware::from_fn(rewrite_beecount_request))
             .into_make_service_with_connect_info::<std::net::SocketAddr>(),
     );
+    let mail_worker = tokio::spawn(lifetrace_cloud::workers::mail::run(state.clone()));
+    let execution_worker = tokio::spawn(lifetrace_cloud::workers::execution::run(state));
 
     tokio::select! {
         result = primary => result?,
         result = beecount => result?,
+        result = mail_worker => result??,
+        result = execution_worker => result??,
         _ = shutdown_signal() => {},
     }
 
