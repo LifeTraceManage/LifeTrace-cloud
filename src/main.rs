@@ -40,14 +40,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .layer(middleware::from_fn(rewrite_beecount_request))
             .into_make_service_with_connect_info::<std::net::SocketAddr>(),
     );
-    let mail_worker = tokio::spawn(lifetrace_cloud::workers::mail::run(state.clone()));
-    let execution_worker = tokio::spawn(lifetrace_cloud::workers::execution::run(state));
+    let mail_state = state.clone();
+    tokio::spawn(async move {
+        if let Err(error) = lifetrace_cloud::workers::mail::run(mail_state).await {
+            eprintln!("[lifetrace-cloud] mail worker stopped: {error}");
+        }
+    });
+
+    tokio::spawn(async move {
+        if let Err(error) = lifetrace_cloud::workers::execution::run(state).await {
+            eprintln!("[lifetrace-cloud] execution worker stopped: {error}");
+        }
+    });
 
     tokio::select! {
         result = primary => result?,
         result = beecount => result?,
-        result = mail_worker => result??,
-        result = execution_worker => result??,
         _ = shutdown_signal() => {},
     }
 
