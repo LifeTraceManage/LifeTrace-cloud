@@ -31,6 +31,10 @@ pub enum MailServiceError {
     MessageNotFound,
     #[error("mail thread not found")]
     ThreadNotFound,
+    #[error("mail identity not found")]
+    IdentityNotFound,
+    #[error("mail draft not found")]
+    DraftNotFound,
     #[error("archive folder is unavailable")]
     ArchiveUnavailable,
     #[error("destination mail folder is unavailable")]
@@ -819,6 +823,378 @@ impl MailService {
         .fetch_optional(&self.pool)
         .await?
         .ok_or(MailServiceError::MessageNotFound)
+    }
+
+    pub async fn list_identities(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Vec<MailIdentity>, MailServiceError> {
+        self.require_database()?;
+        sqlx::query_as::<_, MailIdentity>(
+            r#"
+            SELECT id,account_id,email_address,display_name,reply_to,signature_html,
+                   is_default,created_at,updated_at
+            FROM mail_identities
+            WHERE user_id=$1 AND deleted_at IS NULL
+            ORDER BY is_default DESC,created_at ASC
+            "#,
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn identity_by_id(
+        &self,
+        user_id: Uuid,
+        identity_id: Uuid,
+    ) -> Result<MailIdentity, MailServiceError> {
+        sqlx::query_as::<_, MailIdentity>(
+            r#"
+            SELECT id,account_id,email_address,display_name,reply_to,signature_html,
+                   is_default,created_at,updated_at
+            FROM mail_identities
+            WHERE user_id=$1 AND id=$2 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .bind(identity_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(MailServiceError::IdentityNotFound)
+    }
+
+    fn validate_identity_input(input: &MailIdentityInput) -> Result<(), MailServiceError> {
+        let email = input.email_address.trim();
+        if email.is_empty() || !email.contains('@') {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        if input
+            .reply_to
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty() && !value.contains('@'))
+        {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        Ok(())
+    }
+
+    pub async fn create_identity(
+        &self,
+        user_id: &UserId,
+        input: MailIdentityInput,
+    ) -> Result<MailIdentity, MailServiceError> {
+        self.require_database()?;
+        Self::validate_identity_input(&input)?;
+        let user_id = Self::user_uuid(user_id)?;
+        self.account_by_id(user_id, input.account_id).await?;
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM mail_identities WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL",
+        )
+        .bind(user_id)
+        .bind(input.account_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let make_default = input.is_default || count == 0;
+        let mut transaction = self.pool.begin().await?;
+        if make_default {
+            sqlx::query(
+                "UPDATE mail_identities SET is_default=FALSE,updated_at=now() WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL",
+            )
+            .bind(user_id)
+            .bind(input.account_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        let id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO mail_identities (
+                id,user_id,account_id,email_address,display_name,reply_to,signature_html,is_default
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            "#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(input.account_id)
+        .bind(input.email_address.trim().to_ascii_lowercase())
+        .bind(input.display_name.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(input.reply_to.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(input.signature_html.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(make_default)
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        self.identity_by_id(user_id, id).await
+    }
+
+    pub async fn update_identity(
+        &self,
+        user_id: &UserId,
+        identity_id: Uuid,
+        input: MailIdentityInput,
+    ) -> Result<MailIdentity, MailServiceError> {
+        self.require_database()?;
+        Self::validate_identity_input(&input)?;
+        let user_id = Self::user_uuid(user_id)?;
+        let current = self.identity_by_id(user_id, identity_id).await?;
+        if current.account_id != input.account_id {
+            return Err(MailServiceError::InvalidAccount);
+        }
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM mail_identities WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL",
+        )
+        .bind(user_id)
+        .bind(input.account_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let make_default = input.is_default || count <= 1;
+        let mut transaction = self.pool.begin().await?;
+        if make_default {
+            sqlx::query(
+                "UPDATE mail_identities SET is_default=FALSE,updated_at=now() WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL",
+            )
+            .bind(user_id)
+            .bind(input.account_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        sqlx::query(
+            r#"
+            UPDATE mail_identities
+            SET email_address=$3,display_name=$4,reply_to=$5,signature_html=$6,
+                is_default=$7,updated_at=now()
+            WHERE user_id=$1 AND id=$2 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .bind(identity_id)
+        .bind(input.email_address.trim().to_ascii_lowercase())
+        .bind(input.display_name.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(input.reply_to.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(input.signature_html.as_deref().map(str::trim).filter(|value| !value.is_empty()))
+        .bind(make_default)
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        self.identity_by_id(user_id, identity_id).await
+    }
+
+    pub async fn delete_identity(
+        &self,
+        user_id: &UserId,
+        identity_id: Uuid,
+    ) -> Result<(), MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        let current = self.identity_by_id(user_id, identity_id).await?;
+        sqlx::query(
+            "UPDATE mail_identities SET deleted_at=now(),is_default=FALSE,updated_at=now() WHERE user_id=$1 AND id=$2",
+        )
+        .bind(user_id)
+        .bind(identity_id)
+        .execute(&self.pool)
+        .await?;
+        if current.is_default {
+            sqlx::query(
+                r#"
+                UPDATE mail_identities SET is_default=TRUE,updated_at=now()
+                WHERE id=(
+                    SELECT id FROM mail_identities
+                    WHERE user_id=$1 AND account_id=$2 AND deleted_at IS NULL
+                    ORDER BY created_at ASC LIMIT 1
+                )
+                "#,
+            )
+            .bind(user_id)
+            .bind(current.account_id)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn list_drafts(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Vec<MailDraft>, MailServiceError> {
+        self.require_database()?;
+        sqlx::query_as::<_, MailDraft>(
+            r#"
+            SELECT id,account_id,identity_id,thread_id,in_reply_to_message_id,
+                   to_json,cc_json,bcc_json,subject,body_text,state,created_at,updated_at
+            FROM mail_drafts
+            WHERE user_id=$1 AND state='draft'
+            ORDER BY updated_at DESC
+            "#,
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn draft_by_id(
+        &self,
+        user_id: Uuid,
+        draft_id: Uuid,
+    ) -> Result<MailDraft, MailServiceError> {
+        sqlx::query_as::<_, MailDraft>(
+            r#"
+            SELECT id,account_id,identity_id,thread_id,in_reply_to_message_id,
+                   to_json,cc_json,bcc_json,subject,body_text,state,created_at,updated_at
+            FROM mail_drafts
+            WHERE user_id=$1 AND id=$2
+            "#,
+        )
+        .bind(user_id)
+        .bind(draft_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(MailServiceError::DraftNotFound)
+    }
+
+    async fn validate_draft_input(
+        &self,
+        user_id: Uuid,
+        input: &MailDraftInput,
+    ) -> Result<(), MailServiceError> {
+        self.account_by_id(user_id, input.account_id).await?;
+        if let Some(identity_id) = input.identity_id {
+            let identity = self.identity_by_id(user_id, identity_id).await?;
+            if identity.account_id != input.account_id {
+                return Err(MailServiceError::InvalidAccount);
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn create_draft(
+        &self,
+        user_id: &UserId,
+        input: MailDraftInput,
+    ) -> Result<MailDraft, MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        self.validate_draft_input(user_id, &input).await?;
+        let id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO mail_drafts (
+                id,user_id,account_id,identity_id,in_reply_to_message_id,
+                to_json,cc_json,bcc_json,subject,body_text,state
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'draft')
+            "#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(input.account_id)
+        .bind(input.identity_id)
+        .bind(input.in_reply_to_message_id)
+        .bind(serde_json::to_value(&input.to).unwrap_or_default())
+        .bind(serde_json::to_value(&input.cc).unwrap_or_default())
+        .bind(serde_json::to_value(&input.bcc).unwrap_or_default())
+        .bind(input.subject)
+        .bind(input.body_text)
+        .execute(&self.pool)
+        .await?;
+        self.draft_by_id(user_id, id).await
+    }
+
+    pub async fn update_draft(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+        input: MailDraftInput,
+    ) -> Result<MailDraft, MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        self.validate_draft_input(user_id, &input).await?;
+        let result = sqlx::query(
+            r#"
+            UPDATE mail_drafts
+            SET account_id=$3,identity_id=$4,in_reply_to_message_id=$5,
+                to_json=$6,cc_json=$7,bcc_json=$8,subject=$9,body_text=$10,updated_at=now()
+            WHERE user_id=$1 AND id=$2 AND state='draft'
+            "#,
+        )
+        .bind(user_id)
+        .bind(draft_id)
+        .bind(input.account_id)
+        .bind(input.identity_id)
+        .bind(input.in_reply_to_message_id)
+        .bind(serde_json::to_value(&input.to).unwrap_or_default())
+        .bind(serde_json::to_value(&input.cc).unwrap_or_default())
+        .bind(serde_json::to_value(&input.bcc).unwrap_or_default())
+        .bind(input.subject)
+        .bind(input.body_text)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(MailServiceError::DraftNotFound);
+        }
+        self.draft_by_id(user_id, draft_id).await
+    }
+
+    pub async fn delete_draft(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+    ) -> Result<(), MailServiceError> {
+        self.require_database()?;
+        let result = sqlx::query(
+            "UPDATE mail_drafts SET state='canceled',updated_at=now() WHERE user_id=$1 AND id=$2 AND state='draft'",
+        )
+        .bind(Self::user_uuid(user_id)?)
+        .bind(draft_id)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(MailServiceError::DraftNotFound);
+        }
+        Ok(())
+    }
+
+    pub async fn send_draft(
+        &self,
+        user_id: &UserId,
+        draft_id: Uuid,
+    ) -> Result<String, MailServiceError> {
+        self.require_database()?;
+        let user_uuid = Self::user_uuid(user_id)?;
+        let draft = self.draft_by_id(user_uuid, draft_id).await?;
+        if draft.state != "draft" {
+            return Err(MailServiceError::DraftNotFound);
+        }
+        let to: Vec<String> = serde_json::from_value(draft.to_json.clone()).unwrap_or_default();
+        let cc: Vec<String> = serde_json::from_value(draft.cc_json.clone()).unwrap_or_default();
+        let bcc: Vec<String> = serde_json::from_value(draft.bcc_json.clone()).unwrap_or_default();
+        let message_id = self
+            .send(
+                user_id,
+                draft.account_id,
+                SendMailInput {
+                    identity_id: draft.identity_id,
+                    to,
+                    cc,
+                    bcc,
+                    subject: draft.subject.clone(),
+                    body_text: draft.body_text.clone(),
+                    in_reply_to_message_id: draft.in_reply_to_message_id,
+                    idempotency_key: format!("draft:{draft_id}"),
+                },
+            )
+            .await?;
+        sqlx::query(
+            "UPDATE mail_drafts SET state='sent',updated_at=now() WHERE user_id=$1 AND id=$2",
+        )
+        .bind(user_uuid)
+        .bind(draft_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(message_id)
     }
 
     pub async fn send(
