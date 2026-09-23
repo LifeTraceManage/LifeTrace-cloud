@@ -54,14 +54,14 @@ pub fn router() -> Router<AppState> {
 }
 
 fn service(state: &AppState) -> MailService {
-    MailService::new(state.pool.clone(), state.database_enabled, state.config.clone())
+    MailService::new(state.pool.clone(), state.config.clone())
 }
 
 fn map_error(error: MailServiceError) -> ApiError {
     let (status, message) = match error {
         MailServiceError::DatabaseRequired => (
             StatusCode::SERVICE_UNAVAILABLE,
-            "mail storage requires PostgreSQL",
+            "mail storage is unavailable",
         ),
         MailServiceError::InvalidUser | MailServiceError::InvalidAccount => {
             (StatusCode::BAD_REQUEST, "invalid mail request")
