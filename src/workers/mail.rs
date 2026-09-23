@@ -21,7 +21,14 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send
     println!("[lifetrace-mail-worker] started");
 
     loop {
-        let idle_accounts = load_idle_accounts(&state, MAX_IDLE_ACCOUNTS).await?;
+        let idle_accounts = match load_idle_accounts(&state, MAX_IDLE_ACCOUNTS).await {
+            Ok(accounts) => accounts,
+            Err(error) => {
+                eprintln!("[lifetrace-mail-worker] account scan failed error={error}");
+                tokio::time::sleep(EMPTY_IDLE_SLEEP).await;
+                continue;
+            }
+        };
         let mut idle_tasks = JoinSet::new();
         for account in idle_accounts.iter().cloned() {
             let cipher = credential_cipher.clone();
