@@ -1441,15 +1441,6 @@ impl MailService {
         if existing.1 == "sent" {
             return Ok(existing.2.unwrap_or(generated_message_id));
         }
-        let claimed = sqlx::query(
-            "UPDATE mail_outbox SET state='sending',attempt=attempt+1,updated_at=now() WHERE id=$1 AND state IN ('queued','retry_wait','failed')",
-        )
-        .bind(existing.0)
-        .execute(&self.pool)
-        .await?;
-        if claimed.rows_affected() == 0 {
-            return Err(MailServiceError::SendInProgress);
-        }
         let message_id = existing.2.unwrap_or(generated_message_id);
         let in_reply_to = if let Some(source_id) = input.in_reply_to_message_id {
             sqlx::query_scalar::<_, Option<String>>(
@@ -1492,6 +1483,20 @@ impl MailService {
         } else {
             Vec::new()
         };
+
+        // Claim the outbox only after every local validation/query above has
+        // succeeded. From this point forward, the only expected failure is the
+        // actual provider send, which explicitly moves the row to retry_wait.
+        let claimed = sqlx::query(
+            "UPDATE mail_outbox SET state='sending',attempt=attempt+1,updated_at=now() WHERE id=$1 AND state IN ('queued','retry_wait','failed')",
+        )
+        .bind(existing.0)
+        .execute(&self.pool)
+        .await?;
+        if claimed.rows_affected() == 0 {
+            return Err(MailServiceError::SendInProgress);
+        }
+
         match protocol::send_mail(
             &account,
             &secret,
