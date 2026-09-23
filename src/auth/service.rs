@@ -941,8 +941,11 @@ impl AuthService {
     }
 
     pub async fn me(&self, principal: &AuthenticatedPrincipal) -> Result<AuthUserV1, ApiError> {
-        self.user_by_id(Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?)
-            .await
+        self.user_by_id(Self::uuid(
+            principal.user_id.as_str(),
+            ErrorCode::AuthInvalid,
+        )?)
+        .await
     }
 
     pub async fn logout(
