@@ -28,6 +28,7 @@ use axum::http::{
 use axum::{middleware, Router};
 use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
+use tower_http::services::{ServeDir, ServeFile};
 
 const TAURI_DESKTOP_ORIGINS: &[&str] = &["http://tauri.localhost", "https://tauri.localhost"];
 
@@ -90,5 +91,25 @@ pub fn app(state: AppState) -> Router {
     if production {
         router = router.layer(http::security::hsts_layer());
     }
+
+    let web_root = std::env::var("LIFETRACE_WEB_ROOT").unwrap_or_else(|_| "/app/web".to_owned());
+    let photo_root = std::env::var("LIFETRACE_PHOTO_WEB_ROOT")
+        .unwrap_or_else(|_| "/app/photo-challenge".to_owned());
+
+    if std::path::Path::new(&photo_root).exists() {
+        let index = format!("{photo_root}/index.html");
+        router = router.nest_service(
+            "/photo-challenge-upload",
+            ServeDir::new(photo_root).not_found_service(ServeFile::new(index)),
+        );
+    }
+
+    if std::path::Path::new(&web_root).exists() {
+        let index = format!("{web_root}/index.html");
+        router = router.fallback_service(
+            ServeDir::new(web_root).not_found_service(ServeFile::new(index)),
+        );
+    }
+
     router
 }
