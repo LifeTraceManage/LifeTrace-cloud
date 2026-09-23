@@ -3,7 +3,7 @@
 use axum::http::StatusCode;
 use lifetrace_contracts::ErrorCode;
 use sqlx::{SqlitePool, Sqlite, Row, Transaction};
-use uuid;
+use uuid::Uuid;
 
 use crate::beecount::compat::lifetrace_entity_id;
 use crate::error::ApiError;
