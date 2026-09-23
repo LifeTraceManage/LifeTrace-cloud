@@ -33,7 +33,7 @@ impl SqliteRepository {
             let cursor = self.latest_cursor_raw(&mut *tx, user_uuid).await?;
             let scope = scope_hash(&request.entity_types);
             let scope_bytes = hex::decode(scope).map_err(Self::internal_error)?;
-            let expires_at = Self::CURRENT_TIMESTAMP
+            let expires_at = Self::now()
                 + Duration::seconds(self.config.snapshot_ttl_seconds.min(i64::MAX as u64) as i64);
             sqlx::query(
                 r#"
@@ -143,7 +143,7 @@ impl SqliteRepository {
         let status: String = row.try_get("status").map_err(Self::internal_error)?;
         let expires_at: chrono::DateTime<Utc> =
             row.try_get("expires_at").map_err(Self::internal_error)?;
-        if status != "ready" || expires_at <= Self::CURRENT_TIMESTAMP {
+        if status != "ready" || expires_at <= Self::now() {
             return Err(ApiError::new(
                 ErrorCode::SnapshotRequired,
                 "snapshot is unavailable or expired",
@@ -218,7 +218,7 @@ impl SqliteRepository {
             items,
             next_page_token,
             completed,
-            server_time: Self::CURRENT_TIMESTAMP,
+            server_time: Self::now(),
         })
     }
 }
