@@ -51,7 +51,7 @@ CREATE TABLE mail_draft_attachments (
     draft_id UUID NOT NULL REFERENCES mail_drafts(id) ON DELETE CASCADE,
     filename TEXT NOT NULL,
     mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
-    size_bytes BIGINT NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 26214400),
+    size_bytes BIGINT NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 18874368),
     content BYTEA NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
