@@ -55,7 +55,7 @@ async fn send(
 
 #[tokio::test]
 async fn stock_client_sync_routes_share_the_lifetrace_entity_log() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_URL") else {
+    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
     let state = AppState::new(config(database_url));
