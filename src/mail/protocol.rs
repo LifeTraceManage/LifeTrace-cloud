@@ -3,13 +3,13 @@ use std::time::Duration;
 use chrono::{DateTime, FixedOffset, Utc};
 use imap::{ConnectionMode, TlsKind};
 use lettre::{
-    message::{header::ContentType, Mailbox},
+    message::{header::ContentType, Attachment, Mailbox, MultiPart, SinglePart},
     transport::smtp::authentication::Credentials,
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 use thiserror::Error;
 
-use super::domain::{MailAccountSecret, SendMailInput};
+use super::domain::{MailAccountSecret, MailDraftAttachment, SendMailInput};
 
 #[derive(Debug, Error)]
 pub enum MailProtocolError {
@@ -414,6 +414,7 @@ pub async fn send_mail(
     input: &SendMailInput,
     message_id: &str,
     in_reply_to: Option<&str>,
+    attachments: &[MailDraftAttachment],
 ) -> Result<(), MailProtocolError> {
     let from = mailbox(from_address.unwrap_or(&account.email_address))?;
     let first_to = input.to.first().ok_or(MailProtocolError::InvalidAddress)?;
@@ -421,7 +422,6 @@ pub async fn send_mail(
         .from(from)
         .to(mailbox(first_to)?)
         .subject(&input.subject)
-        .header(ContentType::TEXT_PLAIN)
         .message_id(Some(message_id.to_owned()));
     for value in input.to.iter().skip(1) {
         builder = builder.to(mailbox(value)?);
@@ -435,9 +435,32 @@ pub async fn send_mail(
     if let Some(value) = in_reply_to {
         builder = builder.in_reply_to(value.to_owned());
     }
-    let message = builder
-        .body(input.body_text.clone())
-        .map_err(|_| MailProtocolError::MessageBuild)?;
+
+    let message = if attachments.is_empty() {
+        builder
+            .header(ContentType::TEXT_PLAIN)
+            .body(input.body_text.clone())
+            .map_err(|_| MailProtocolError::MessageBuild)?
+    } else {
+        let mut multipart = MultiPart::mixed().singlepart(
+            SinglePart::builder()
+                .header(ContentType::TEXT_PLAIN)
+                .body(input.body_text.clone()),
+        );
+        for attachment in attachments {
+            let content_type = ContentType::parse(&attachment.mime_type)
+                .or_else(|_| ContentType::parse("application/octet-stream"))
+                .map_err(|_| MailProtocolError::MessageBuild)?;
+            multipart = multipart.singlepart(
+                Attachment::new(attachment.filename.clone())
+                    .body(attachment.content.clone(), content_type),
+            );
+        }
+        builder
+            .multipart(multipart)
+            .map_err(|_| MailProtocolError::MessageBuild)?
+    };
+
     let transport = smtp_transport(account, secret)?;
     tokio::time::timeout(Duration::from_secs(35), transport.send(message))
         .await
