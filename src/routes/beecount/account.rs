@@ -464,10 +464,10 @@ async fn list_devices(
         .then(|| Utc::now() - Duration::days(query.active_within_days));
     let rows = sqlx::query(
         "SELECT external_device_id,device_name,platform,client_version,os_version,device_model, \
-                host(last_login_ip) AS last_ip,last_seen_at,first_seen_at \
+                last_login_ip AS last_ip,last_seen_at,first_seen_at \
          FROM cloud_devices WHERE user_id=$1 AND app_id='beecount-mobile' \
            AND status='active' AND revoked_at IS NULL \
-           AND ($2::timestamptz IS NULL OR last_seen_at >= $2) ORDER BY last_seen_at DESC",
+           AND ($2 IS NULL OR last_seen_at >= $2) ORDER BY last_seen_at DESC",
     )
     .bind(user_id)
     .bind(cutoff)
@@ -1088,14 +1088,9 @@ async fn shared_resources(
     let rows = sqlx::query(
         "SELECT entity_type,entity_id,payload FROM sync_entities \
          WHERE user_id=$1 AND is_deleted=FALSE \
-           AND entity_type=ANY($2) ORDER BY entity_type,entity_id",
+           AND entity_type IN ('finance.category','finance.account','finance.tag') ORDER BY entity_type,entity_id",
     )
     .bind(owner_user_id)
-    .bind(vec![
-        "finance.category".to_owned(),
-        "finance.account".to_owned(),
-        "finance.tag".to_owned(),
-    ])
     .fetch_all(&state.pool)
     .await
     .map_err(db_error)?;
