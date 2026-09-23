@@ -407,16 +407,26 @@ fn mailbox(value: &str) -> Result<Mailbox, MailProtocolError> {
     value.parse().map_err(|_| MailProtocolError::InvalidAddress)
 }
 
+fn mailbox_with_name(name: Option<&str>, address: &str) -> Result<Mailbox, MailProtocolError> {
+    let email = address.parse().map_err(|_| MailProtocolError::InvalidAddress)?;
+    Ok(Mailbox::new(
+        name.map(str::trim).filter(|value| !value.is_empty()).map(str::to_owned),
+        email,
+    ))
+}
+
 pub async fn send_mail(
     account: &MailAccountSecret,
     secret: &str,
     from_address: Option<&str>,
+    from_name: Option<&str>,
+    reply_to_address: Option<&str>,
     input: &SendMailInput,
     message_id: &str,
     in_reply_to: Option<&str>,
     attachments: &[MailDraftAttachment],
 ) -> Result<(), MailProtocolError> {
-    let from = mailbox(from_address.unwrap_or(&account.email_address))?;
+    let from = mailbox_with_name(from_name, from_address.unwrap_or(&account.email_address))?;
     let first_to = input.to.first().ok_or(MailProtocolError::InvalidAddress)?;
     let mut builder = Message::builder()
         .from(from)
@@ -431,6 +441,9 @@ pub async fn send_mail(
     }
     for value in &input.bcc {
         builder = builder.bcc(mailbox(value)?);
+    }
+    if let Some(value) = reply_to_address {
+        builder = builder.reply_to(mailbox(value)?);
     }
     if let Some(value) = in_reply_to {
         builder = builder.in_reply_to(value.to_owned());
