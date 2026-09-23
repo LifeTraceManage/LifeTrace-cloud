@@ -7,7 +7,6 @@ pub struct Config {
     pub environment: String,
     pub bind_addr: SocketAddr,
     pub database_path: String,
-    pub migration_on_startup: bool,
 
     pub request_body_limit_bytes: usize,
     pub push_max_changes: usize,
@@ -87,7 +86,6 @@ impl Default for Config {
             environment: "development".to_owned(),
             bind_addr: "127.0.0.1:8787".parse().expect("static addr"),
             database_path: "./data/lifetrace.db".to_owned(),
-            migration_on_startup: true,
             request_body_limit_bytes: 4 * 1024 * 1024,
             push_max_changes: 500,
             pull_max_changes: 200,
@@ -169,7 +167,6 @@ impl Config {
                 c.database_path.clone()
             }
         });
-        c.migration_on_startup = env_bool("MIGRATION_ON_STARTUP", c.migration_on_startup);
         c.request_body_limit_bytes =
             env_usize("REQUEST_BODY_LIMIT_BYTES", c.request_body_limit_bytes);
         c.push_max_changes = env_usize("PUSH_MAX_CHANGES", c.push_max_changes);
