@@ -6,9 +6,7 @@ use std::net::SocketAddr;
 pub struct Config {
     pub environment: String,
     pub bind_addr: SocketAddr,
-    pub database_url: Option<String>,
-    pub database_min_connections: u32,
-    pub database_max_connections: u32,
+    pub database_path: String,
     pub migration_on_startup: bool,
 
     pub request_body_limit_bytes: usize,
@@ -88,9 +86,7 @@ impl Default for Config {
         Self {
             environment: "development".to_owned(),
             bind_addr: "127.0.0.1:8787".parse().expect("static addr"),
-            database_url: None,
-            database_min_connections: 2,
-            database_max_connections: 10,
+            database_path: "./data/lifetrace.db".to_owned(),
             migration_on_startup: true,
             request_body_limit_bytes: 4 * 1024 * 1024,
             push_max_changes: 500,
@@ -166,15 +162,13 @@ impl Config {
                 c.bind_addr = addr;
             }
         }
-        c.database_url = env_var("DATABASE_URL");
-        c.database_min_connections = env_usize(
-            "DATABASE_MIN_CONNECTIONS",
-            c.database_min_connections as usize,
-        ) as u32;
-        c.database_max_connections = env_usize(
-            "DATABASE_MAX_CONNECTIONS",
-            c.database_max_connections as usize,
-        ) as u32;
+        c.database_path = env_var("LIFETRACE_DATABASE_PATH").unwrap_or_else(|| {
+            if c.is_production() {
+                "/data/lifetrace.db".to_owned()
+            } else {
+                c.database_path.clone()
+            }
+        });
         c.migration_on_startup = env_bool("MIGRATION_ON_STARTUP", c.migration_on_startup);
         c.request_body_limit_bytes =
             env_usize("REQUEST_BODY_LIMIT_BYTES", c.request_body_limit_bytes);
@@ -308,16 +302,8 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if self.database_url.is_none() {
-            return Err("cloud runtime requires DATABASE_URL".to_owned());
-        }
-        if self.database_min_connections > self.database_max_connections {
-            return Err(
-                "DATABASE_MIN_CONNECTIONS must not exceed DATABASE_MAX_CONNECTIONS".to_owned(),
-            );
-        }
-        if self.database_max_connections == 0 {
-            return Err("DATABASE_MAX_CONNECTIONS must be greater than zero".to_owned());
+        if self.database_path.trim().is_empty() {
+            return Err("LIFETRACE_DATABASE_PATH must not be empty".to_owned());
         }
         if !matches!(
             self.auth_registration_mode.as_str(),
@@ -423,26 +409,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn cloud_runtime_requires_postgres() {
-        assert!(Config::default()
-            .validate()
-            .unwrap_err()
-            .contains("DATABASE_URL"));
-    }
-
-    #[test]
-    fn development_config_accepts_postgres() {
-        let config = Config {
-            database_url: Some("postgres://user:password@localhost/lifetrace".to_owned()),
-            ..Config::default()
-        };
-        assert!(config.validate().is_ok());
+    fn development_config_accepts_default_sqlite_path() {
+        assert!(Config::default().validate().is_ok());
     }
 
     #[test]
     fn password_policy_rejects_minimum_below_nine() {
         let config = Config {
-            database_url: Some("postgres://user:password@localhost/lifetrace".to_owned()),
             auth_password_min_length: 8,
             ..Config::default()
         };
@@ -456,7 +429,6 @@ mod tests {
     fn production_fails_closed_without_auth_secrets() {
         let config = Config {
             environment: "production".to_owned(),
-            database_url: Some("postgres://user:password@localhost/lifetrace".to_owned()),
             dev_auth_enabled: false,
             auth_cookie_secure: true,
             public_web_base_url: Some("https://lifetrace.example".to_owned()),
@@ -469,7 +441,6 @@ mod tests {
     #[test]
     fn beecount_attachment_limit_is_bounded() {
         let config = Config {
-            database_url: Some("postgres://user:password@localhost/lifetrace".to_owned()),
             beecount_attachment_max_upload_bytes: 129 * 1024 * 1024,
             ..Config::default()
         };
