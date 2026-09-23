@@ -133,7 +133,7 @@ async fn policy_is_authenticated_and_documents_object_cleanup_boundary() {
 }
 
 fn database_url() -> Option<String> {
-    std::env::var("TEST_DATABASE_URL").ok()
+    std::env::var("TEST_DATABASE_PATH").ok()
 }
 
 fn postgres_config(url: String) -> Config {
