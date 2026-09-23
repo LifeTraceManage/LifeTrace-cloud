@@ -259,3 +259,44 @@ async fn readiness_fails_when_sqlite_path_is_unavailable() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
+
+
+#[tokio::test]
+async fn sqlite_mail_workspace_schema_is_migrated() {
+    let config = Config {
+        database_path: ":memory:".to_owned(),
+        ..Config::default()
+    };
+    let state = AppState::new(config);
+    state.initialize().await.unwrap();
+
+    let table_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('mail_identities','mail_draft_attachments')",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(table_count, 2);
+
+    let identity_column_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pragma_table_info('mail_drafts') WHERE name='identity_id'",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(identity_column_count, 1);
+
+    let migration_count: i64 = sqlx::query_scalar("SELECT count(*) FROM _sqlx_migrations")
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+    assert!(migration_count >= 2);
+
+    let attachment_limit: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='mail_draft_attachments' AND sql LIKE '%18874368%'",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(attachment_limit, 1);
+}
