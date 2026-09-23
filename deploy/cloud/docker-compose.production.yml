@@ -1,5 +1,10 @@
 name: lifetrace-prod
 
+x-cloud-env: &cloud-env
+  LIFETRACE_ENV: "development"
+  DEV_AUTH_ENABLED: "false"
+  DATABASE_URL: "postgres://lifetrace:${POSTGRES_PASSWORD}@postgres:5432/lifetrace"
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -21,8 +26,7 @@ services:
     restart: unless-stopped
     env_file: .env.production
     environment:
-      LIFETRACE_ENV: "development"
-      DEV_AUTH_ENABLED: "false"
+      <<: *cloud-env
       LIFETRACE_BIND_ADDRESS: "0.0.0.0:8787"
       MIGRATION_ON_STARTUP: "true"
       PHOTO_STAGING_DIR: "/data/photo-staging"
@@ -47,8 +51,7 @@ services:
     restart: unless-stopped
     env_file: .env.production
     environment:
-      LIFETRACE_ENV: "development"
-      DEV_AUTH_ENABLED: "false"
+      <<: *cloud-env
       MIGRATION_ON_STARTUP: "false"
     depends_on:
       lifetrace-cloud:
@@ -66,8 +69,7 @@ services:
     restart: unless-stopped
     env_file: .env.production
     environment:
-      LIFETRACE_ENV: "development"
-      DEV_AUTH_ENABLED: "false"
+      <<: *cloud-env
       MIGRATION_ON_STARTUP: "false"
     depends_on:
       lifetrace-cloud:
