@@ -999,6 +999,23 @@ impl MailService {
         .bind(make_default)
         .execute(&mut *transaction)
         .await?;
+        if current.is_default && !make_default {
+            sqlx::query(
+                r#"
+                UPDATE mail_identities SET is_default=TRUE,updated_at=now()
+                WHERE id=(
+                    SELECT id FROM mail_identities
+                    WHERE user_id=$1 AND account_id=$2 AND id<>$3 AND deleted_at IS NULL
+                    ORDER BY created_at ASC LIMIT 1
+                )
+                "#,
+            )
+            .bind(user_id)
+            .bind(input.account_id)
+            .bind(identity_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
         transaction.commit().await?;
         self.identity_by_id(user_id, identity_id).await
     }
