@@ -79,18 +79,19 @@ impl SqliteRepository {
                     .collect()
             })
             .unwrap_or_default();
+        let filters_json = serde_json::to_string(&filters).map_err(Self::internal_error)?;
 
         let rows = if request.entity_types.is_some() {
             sqlx::query(
                 "SELECT cursor, entity_type, entity_id, operation, server_version,\
                         server_modified_at, payload, tombstone, origin_device_external_id \
                  FROM sync_change_log \
-                 WHERE user_id = $1 AND cursor > $2 AND entity_type = ANY($3) \
+                 WHERE user_id = $1 AND cursor > $2 AND entity_type IN (SELECT value FROM json_each($3)) \
                  ORDER BY cursor ASC LIMIT $4",
             )
             .bind(user_uuid)
             .bind(after as i64)
-            .bind(&filters)
+            .bind(&filters_json)
             .bind((limit + 1) as i64)
             .fetch_all(&self.pool)
             .await
