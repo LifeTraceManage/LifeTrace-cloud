@@ -33,6 +33,8 @@ pub enum MailServiceError {
     ThreadNotFound,
     #[error("archive folder is unavailable")]
     ArchiveUnavailable,
+    #[error("destination mail folder is unavailable")]
+    DestinationUnavailable,
     #[error("mail credential is unavailable")]
     Credential,
     #[error("mail protocol operation failed")]
@@ -667,40 +669,112 @@ impl MailService {
         Ok(())
     }
 
+    pub async fn set_message_starred(
+        &self,
+        user_id: &UserId,
+        message_id: Uuid,
+        starred: bool,
+    ) -> Result<(), MailServiceError> {
+        self.require_database()?;
+        let user_id = Self::user_uuid(user_id)?;
+        let remote = self.remote_message_ref(user_id, message_id).await?;
+        let account = self.account_secret(user_id, remote.account_id).await?;
+        let secret = Self::decrypt_secret(&account)?;
+        protocol::set_flag(
+            account,
+            secret,
+            remote.folder_name,
+            remote.uid as u32,
+            "\\Flagged",
+            starred,
+        )
+        .await?;
+
+        let current: serde_json::Value = sqlx::query_scalar(
+            "SELECT flags_json FROM mail_messages WHERE user_id=$1 AND id=$2",
+        )
+        .bind(user_id)
+        .bind(message_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let mut flags = current.as_array().cloned().unwrap_or_default();
+        flags.retain(|value| {
+            value.as_str().is_none_or(|flag| {
+                !flag.eq_ignore_ascii_case("\\Flagged") && !flag.eq_ignore_ascii_case("Flagged")
+            })
+        });
+        if starred {
+            flags.push(serde_json::Value::String("\\Flagged".to_owned()));
+        }
+        sqlx::query(
+            "UPDATE mail_messages SET flags_json=$3,updated_at=now() WHERE user_id=$1 AND id=$2",
+        )
+        .bind(user_id)
+        .bind(message_id)
+        .bind(serde_json::Value::Array(flags))
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn move_message(
+        &self,
+        user_id: &UserId,
+        message_id: Uuid,
+        destination_role: &str,
+    ) -> Result<(), MailServiceError> {
+        self.require_database()?;
+        if !matches!(destination_role, "archive" | "trash" | "inbox") {
+            return Err(MailServiceError::DestinationUnavailable);
+        }
+        let user_id = Self::user_uuid(user_id)?;
+        let remote = self.remote_message_ref(user_id, message_id).await?;
+        let destination: Option<(Uuid, String)> = sqlx::query_as(
+            "SELECT id,remote_name FROM mail_folders WHERE user_id=$1 AND account_id=$2 AND normalized_role=$3 LIMIT 1",
+        )
+        .bind(user_id)
+        .bind(remote.account_id)
+        .bind(destination_role)
+        .fetch_optional(&self.pool)
+        .await?;
+        let (_destination_id, destination_name) = destination.ok_or_else(|| {
+            if destination_role == "archive" {
+                MailServiceError::ArchiveUnavailable
+            } else {
+                MailServiceError::DestinationUnavailable
+            }
+        })?;
+
+        let account = self.account_secret(user_id, remote.account_id).await?;
+        let secret = Self::decrypt_secret(&account)?;
+        protocol::move_message(
+            account,
+            secret,
+            remote.folder_name,
+            remote.uid as u32,
+            destination_name,
+        )
+        .await?;
+
+        // A remote MOVE may allocate a new UID in the destination folder. Remove
+        // the stale local row and immediately reconcile the account so we never
+        // keep a row with an invalid (folder, UID) tuple.
+        sqlx::query("DELETE FROM mail_messages WHERE user_id=$1 AND id=$2")
+            .bind(user_id)
+            .bind(message_id)
+            .execute(&self.pool)
+            .await?;
+        refresh_thread_pool(&self.pool, remote.thread_id).await?;
+        let _ = self.sync_account_uuid(user_id, remote.account_id).await;
+        Ok(())
+    }
+
     pub async fn archive_message(
         &self,
         user_id: &UserId,
         message_id: Uuid,
     ) -> Result<(), MailServiceError> {
-        self.require_database()?;
-        let user_id = Self::user_uuid(user_id)?;
-        let remote = self.remote_message_ref(user_id, message_id).await?;
-        let archive_folder: Option<String> = sqlx::query_scalar(
-            "SELECT remote_name FROM mail_folders WHERE user_id=$1 AND account_id=$2 AND normalized_role='archive' LIMIT 1",
-        )
-        .bind(user_id)
-        .bind(remote.account_id)
-        .fetch_optional(&self.pool)
-        .await?;
-        let archive_folder = archive_folder.ok_or(MailServiceError::ArchiveUnavailable)?;
-        let account = self.account_secret(user_id, remote.account_id).await?;
-        let secret = Self::decrypt_secret(&account)?;
-        protocol::archive_message(
-            account,
-            secret,
-            remote.folder_name,
-            remote.uid as u32,
-            archive_folder,
-        )
-        .await?;
-        sqlx::query(
-            "UPDATE mail_messages SET is_archived=TRUE,updated_at=now() WHERE user_id=$1 AND id=$2",
-        )
-        .bind(user_id)
-        .bind(message_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        self.move_message(user_id, message_id, "archive").await
     }
 
     async fn remote_message_ref(
