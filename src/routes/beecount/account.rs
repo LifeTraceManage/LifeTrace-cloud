@@ -16,7 +16,7 @@ use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::{Sqlite, Row, Transaction};
-use uuid;
+use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
 use crate::beecount::collaboration::{
