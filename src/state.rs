@@ -31,9 +31,6 @@ pub struct AppState {
     pub auth_service: Arc<AuthService>,
     pub cursor_codec: Arc<CursorCodec>,
     pub page_token_codec: Arc<PageTokenCodec>,
-    /// Transitional test compatibility marker. The external BeeCount adapter implementation is retired.
-    #[doc(hidden)]
-    pub beecount_adapter: Option<()>,
     pub beecount_realtime: Arc<BeeCountRealtimeHub>,
 }
 
@@ -98,7 +95,6 @@ impl AppState {
             auth_service,
             cursor_codec: Arc::new(cursor_codec),
             page_token_codec: Arc::new(page_token_codec),
-            beecount_adapter: None,
             beecount_realtime: Arc::new(BeeCountRealtimeHub::default()),
         }
     }
