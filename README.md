@@ -39,7 +39,7 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 - `src/sync/`：游标、分页令牌和 payload hash
 - `migrations/0001_sqlite.sql`：SQLite 基线 schema
 - `migrations/0002_mail_workspace.sql`：Mail Workspace 增量 schema（Identity / Draft attachment）
-- `deploy/cloud/.web-dist/`：部署时从独立 `LifeTrace-web` 工作区构建出的静态产物（不入库）
+- `apps/web/`：LifeTrace Web 正式源码；与 Cloud 在同一仓库、同一镜像中构建
 - `deploy/cloud/`：唯一生产 Compose、部署脚本与环境变量模板
 - `crates/lifetrace-contracts/`：共享协议和领域契约
 - `crates/lifetrace-sync-client/`：Rust Sync v1 客户端
@@ -109,66 +109,58 @@ cargo run --manifest-path tools/contract-exporter/Cargo.toml
 
 ## 单容器部署
 
-生产部署只有一个 service：
+生产部署只有一个完整镜像和一个 service：
 
 ```text
-lifetrace container
-├── lifetrace-cloud
-├── /app/web  <- host bind mount: deploy/cloud/.web-dist
+ghcr.io/lifetracemanage/lifetrace-cloud:main
+├── /app/lifetrace-cloud
+├── /app/web
+│   ├── index.html
+│   └── assets/
+├── /app/photo-challenge
 └── /data
     ├── lifetrace.db
     └── photo-staging/
 ```
 
-首次部署建议把两个私有仓库放在同一工作目录：
+Web 正式源码现在位于本仓库 `apps/web/`。GitHub Actions 在同一个 Docker build 中先执行 Web 的 `npm ci / typecheck / test / build`，再编译 Rust Cloud，并把 Web `dist` 与 Photo Challenge 静态资源复制进最终镜像。
 
-```text
-workspace/
-├── LifeTrace-cloud/
-└── LifeTrace-web/
-```
+服务器不再需要 Node、Rust、LifeTrace-web 独立 checkout 或本地构建环境，只需要 Docker / Docker Compose。
 
-然后：
+首次部署：
 
 ```bash
 cp deploy/cloud/.env.production.example deploy/cloud/.env.production
-# 编辑密钥
+# 编辑密钥和服务器地址
+
+# 如果 GHCR package 是 private，先登录：
+echo <GITHUB_TOKEN> | docker login ghcr.io -u <GITHUB_USER> --password-stdin
 
 bash deploy/cloud/deploy-production.sh
 bash deploy/cloud/verify-production.sh
 ```
 
-`deploy-production.sh` 默认完成两次本地构建：先用临时 `node:22-alpine` 容器构建独立仓库 `LifeTrace-web`，把 `dist` 输出到 `deploy/cloud/.web-dist`；再从当前 `LifeTrace-cloud` checkout 构建 Cloud 镜像并启动。这样部署结果与当前源码一致，不依赖 GitHub Actions 或私有 GHCR 拉取权限。Web 源码不会复制回 Cloud 仓库，运行时仍然只有一个 `lifetrace` service。
-
-如果两个仓库不是同级目录，可显式指定：
-
-```bash
-LIFETRACE_WEB_SOURCE_DIR=/absolute/path/to/LifeTrace-web \
-  bash deploy/cloud/deploy-production.sh
-```
-
-默认后端部署模式是本地构建：
+部署脚本等价于：
 
 ```bash
 cd deploy/cloud
-docker compose --env-file .env.production -f docker-compose.production.yml build lifetrace
+docker compose --env-file .env.production -f docker-compose.production.yml pull lifetrace
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans --wait
 ```
 
-如果后续 GHCR 镜像发布恢复稳定，并且服务器已对私有 package 完成 `docker login ghcr.io`，可以显式选择预构建镜像：
-
-```bash
-LIFETRACE_DEPLOY_MODE=pull \
-  bash deploy/cloud/deploy-production.sh
-```
-
-Pull 模式下可在 `.env.production` 设置：
+默认镜像：
 
 ```text
-LIFETRACE_CLOUD_IMAGE=ghcr.io/lifetracemanage/lifetrace-cloud:main
+ghcr.io/lifetracemanage/lifetrace-cloud:main
 ```
 
-默认本地 build 使用 `CARGO_BUILD_JOBS=2`，更适合小型自托管服务器；需要时可在 `.env.production` 调整。Compose 会把本机 `./.web-dist` 只读挂载到容器 `/app/web`，由 Axum 作为同源 SPA 提供。
+也可以在 `.env.production` 固定到某个 Actions 生成的 SHA 镜像：
+
+```text
+LIFETRACE_CLOUD_IMAGE=ghcr.io/lifetracemanage/lifetrace-cloud:sha-<commit>
+```
+
+固定 SHA 更适合稳定生产部署和回滚；`:main` 适合持续跟踪主分支。
 
 服务端口：
 
@@ -222,9 +214,9 @@ Mail 保留：
 
 ## 设计原则
 
-当前 Cloud 明确按单实例个人服务器优化。`LifeTrace-web` 是独立源码仓库；Cloud 容器只负责托管其构建产物，不再维护第二份 Web 源码：
+当前 Cloud 明确按单实例个人服务器优化。Web 正式源码已合并到 `apps/web`，Actions 直接发布包含 Web + Cloud 的完整镜像：
 
-1. SQLite 是唯一数据库后端，不维护 PostgreSQL / SQLite 双栈；生产脚本默认从当前 checkout 本地构建，预构建 registry 镜像只是可选加速路径。
+1. SQLite 是唯一数据库后端，不维护 PostgreSQL / SQLite 双栈；生产服务器默认只拉取 GitHub Actions 构建好的完整镜像。
 2. 测试同样使用 SQLite，不维护第二套内存数据库实现。
 3. 后台任务运行在 Cloud Tokio runtime 内，不拆独立 worker 服务。
 4. 管理命令与服务端共用 `lifetrace-cloud` 一个二进制，不维护独立 admin/migration/worker 入口。
