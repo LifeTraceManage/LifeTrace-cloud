@@ -94,9 +94,7 @@ async fn sqlite_runtime_migrates_persists_and_replays_idempotently() {
     };
 
     let config = Config {
-        database_path: url,
-        migration_on_startup: true,
-        dev_auth_token: "postgres-token".to_owned(),
+        database_path: url,        dev_auth_token: "postgres-token".to_owned(),
         dev_auth_user_id: "postgres-user".to_owned(),
         dev_auth_device_id: "postgres-device".to_owned(),
         cursor_signing_key: Some("postgres-cursor-key".to_owned()),
