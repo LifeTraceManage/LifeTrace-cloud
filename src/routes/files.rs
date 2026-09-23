@@ -365,7 +365,7 @@ async fn orphans(
     let hours = query.older_than_hours.unwrap_or(24).clamp(1, 24 * 365);
     let rows = sqlx::query(
         "SELECT * FROM file_objects WHERE user_id=$1 AND deleted_at IS NULL AND entity_type IS NULL \
-         AND status IN ('pending','failed') AND created_at < CURRENT_TIMESTAMP - ($2 || ' hours')::interval \
+         AND status IN ('pending','failed') AND created_at < datetime('now', '-' || $2 || ' hours') \
          ORDER BY created_at ASC LIMIT 200",
     )
     .bind(owner)
