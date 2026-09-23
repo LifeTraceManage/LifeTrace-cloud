@@ -15,7 +15,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 fn database_url() -> Option<String> {
-    std::env::var("TEST_DATABASE_URL").ok()
+    std::env::var("TEST_DATABASE_PATH").ok()
 }
 
 fn config(url: String) -> Config {
