@@ -83,7 +83,7 @@ async fn register(router: axum::Router, label: &str) -> (String, String, String)
 
 #[tokio::test]
 async fn stock_profile_devices_and_shared_ledger_flow_use_lifetrace_state() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_URL") else {
+    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
     let state = AppState::new(config(database_url));
