@@ -3,13 +3,13 @@ use std::time::Duration;
 use chrono::{DateTime, FixedOffset, Utc};
 use imap::{ConnectionMode, TlsKind};
 use lettre::{
-    message::{header::ContentType, Mailbox},
+    message::{header::ContentType, Attachment, Mailbox, MultiPart, SinglePart},
     transport::smtp::authentication::Credentials,
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 use thiserror::Error;
 
-use super::domain::{MailAccountSecret, SendMailInput};
+use super::domain::{MailAccountSecret, MailDraftAttachment, SendMailInput};
 
 #[derive(Debug, Error)]
 pub enum MailProtocolError {
@@ -247,12 +247,13 @@ pub async fn fetch_raw_message(
     .map_err(|_| MailProtocolError::Task)?
 }
 
-pub async fn set_seen(
+pub async fn set_flag(
     account: MailAccountSecret,
     secret: String,
     folder: String,
     uid: u32,
-    seen: bool,
+    flag: &'static str,
+    enabled: bool,
 ) -> Result<(), MailProtocolError> {
     tokio::task::spawn_blocking(move || {
         let client = imap_client(&account)?;
@@ -263,10 +264,10 @@ pub async fn set_seen(
         session
             .select(&folder)
             .map_err(|_| MailProtocolError::Folder)?;
-        let operation = if seen {
-            "+FLAGS.SILENT (\\Seen)"
+        let operation = if enabled {
+            format!("+FLAGS.SILENT ({flag})")
         } else {
-            "-FLAGS.SILENT (\\Seen)"
+            format!("-FLAGS.SILENT ({flag})")
         };
         session
             .uid_store(uid.to_string(), operation)
@@ -278,12 +279,22 @@ pub async fn set_seen(
     .map_err(|_| MailProtocolError::Task)?
 }
 
-pub async fn archive_message(
+pub async fn set_seen(
     account: MailAccountSecret,
     secret: String,
     folder: String,
     uid: u32,
-    archive_folder: String,
+    seen: bool,
+) -> Result<(), MailProtocolError> {
+    set_flag(account, secret, folder, uid, "\\Seen", seen).await
+}
+
+pub async fn move_message(
+    account: MailAccountSecret,
+    secret: String,
+    folder: String,
+    uid: u32,
+    destination_folder: String,
 ) -> Result<(), MailProtocolError> {
     tokio::task::spawn_blocking(move || {
         let client = imap_client(&account)?;
@@ -299,11 +310,11 @@ pub async fn archive_message(
             .map_err(|_| MailProtocolError::Capability)?;
         if capabilities.has_str("MOVE") {
             session
-                .uid_mv(uid.to_string(), archive_folder)
+                .uid_mv(uid.to_string(), destination_folder)
                 .map_err(|_| MailProtocolError::State)?;
         } else {
             session
-                .uid_copy(uid.to_string(), &archive_folder)
+                .uid_copy(uid.to_string(), &destination_folder)
                 .map_err(|_| MailProtocolError::State)?;
             session
                 .uid_store(uid.to_string(), "+FLAGS.SILENT (\\Deleted)")
@@ -315,6 +326,16 @@ pub async fn archive_message(
     })
     .await
     .map_err(|_| MailProtocolError::Task)?
+}
+
+pub async fn archive_message(
+    account: MailAccountSecret,
+    secret: String,
+    folder: String,
+    uid: u32,
+    archive_folder: String,
+) -> Result<(), MailProtocolError> {
+    move_message(account, secret, folder, uid, archive_folder).await
 }
 
 pub async fn wait_for_inbox_change(
@@ -386,20 +407,31 @@ fn mailbox(value: &str) -> Result<Mailbox, MailProtocolError> {
     value.parse().map_err(|_| MailProtocolError::InvalidAddress)
 }
 
+fn mailbox_with_name(name: Option<&str>, address: &str) -> Result<Mailbox, MailProtocolError> {
+    let email = address.parse().map_err(|_| MailProtocolError::InvalidAddress)?;
+    Ok(Mailbox::new(
+        name.map(str::trim).filter(|value| !value.is_empty()).map(str::to_owned),
+        email,
+    ))
+}
+
 pub async fn send_mail(
     account: &MailAccountSecret,
     secret: &str,
+    from_address: Option<&str>,
+    from_name: Option<&str>,
+    reply_to_address: Option<&str>,
     input: &SendMailInput,
     message_id: &str,
     in_reply_to: Option<&str>,
-) -> Result<(), MailProtocolError> {
-    let from = mailbox(&account.email_address)?;
+    attachments: &[MailDraftAttachment],
+) -> Result<Vec<u8>, MailProtocolError> {
+    let from = mailbox_with_name(from_name, from_address.unwrap_or(&account.email_address))?;
     let first_to = input.to.first().ok_or(MailProtocolError::InvalidAddress)?;
     let mut builder = Message::builder()
         .from(from)
         .to(mailbox(first_to)?)
         .subject(&input.subject)
-        .header(ContentType::TEXT_PLAIN)
         .message_id(Some(message_id.to_owned()));
     for value in input.to.iter().skip(1) {
         builder = builder.to(mailbox(value)?);
@@ -410,18 +442,83 @@ pub async fn send_mail(
     for value in &input.bcc {
         builder = builder.bcc(mailbox(value)?);
     }
+    if let Some(value) = reply_to_address {
+        builder = builder.reply_to(mailbox(value)?);
+    }
     if let Some(value) = in_reply_to {
         builder = builder.in_reply_to(value.to_owned());
     }
-    let message = builder
-        .body(input.body_text.clone())
-        .map_err(|_| MailProtocolError::MessageBuild)?;
+
+    let message = if attachments.is_empty() {
+        builder
+            .header(ContentType::TEXT_PLAIN)
+            .body(input.body_text.clone())
+            .map_err(|_| MailProtocolError::MessageBuild)?
+    } else {
+        let mut multipart = MultiPart::mixed().singlepart(
+            SinglePart::builder()
+                .header(ContentType::TEXT_PLAIN)
+                .body(input.body_text.clone()),
+        );
+        for attachment in attachments {
+            let content_type = ContentType::parse(&attachment.mime_type)
+                .or_else(|_| ContentType::parse("application/octet-stream"))
+                .map_err(|_| MailProtocolError::MessageBuild)?;
+            multipart = multipart.singlepart(
+                Attachment::new(attachment.filename.clone())
+                    .body(attachment.content.clone(), content_type),
+            );
+        }
+        builder
+            .multipart(multipart)
+            .map_err(|_| MailProtocolError::MessageBuild)?
+    };
+
+    let raw = message.formatted();
     let transport = smtp_transport(account, secret)?;
     tokio::time::timeout(Duration::from_secs(35), transport.send(message))
         .await
         .map_err(|_| MailProtocolError::Send)?
         .map_err(|_| MailProtocolError::Send)?;
-    Ok(())
+    Ok(raw)
+}
+
+pub async fn ensure_sent_copy(
+    account: MailAccountSecret,
+    secret: String,
+    sent_folder: String,
+    message_id: String,
+    raw: Vec<u8>,
+) -> Result<(), MailProtocolError> {
+    tokio::task::spawn_blocking(move || {
+        let client = imap_client(&account)?;
+        let mut session = client
+            .login(&account.username, &secret)
+            .map_err(|_| MailProtocolError::Authentication)?;
+        identify_imap_session(&mut session, &account)?;
+        session
+            .select(&sent_folder)
+            .map_err(|_| MailProtocolError::Folder)?;
+
+        // Some providers automatically create a Sent copy after SMTP delivery.
+        // Search by our generated Message-ID first so APPEND never creates a
+        // second visible copy when the provider already persisted one.
+        let query = format!("HEADER Message-ID \"{message_id}\"");
+        let existing = session
+            .uid_search(query)
+            .map_err(|_| MailProtocolError::Fetch)?;
+        if existing.is_empty() {
+            session
+                .append(&sent_folder, &raw)
+                .flag(imap::types::Flag::Seen)
+                .finish()
+                .map_err(|_| MailProtocolError::State)?;
+        }
+        let _ = session.logout();
+        Ok(())
+    })
+    .await
+    .map_err(|_| MailProtocolError::Task)?
 }
 
 #[cfg(test)]
