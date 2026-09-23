@@ -38,6 +38,50 @@ LifeTrace 独立云端后端服务（Rust + Axum + PostgreSQL）。它与桌面�
 | GET | `/api/v1/integrations/beecount/ledgers` | Bearer / Web Session + `finance:read` | BeeCount 账本列表 |
 | GET | `/api/v1/integrations/beecount/ledgers/{ledger_id}/snapshot` | Bearer / Web Session + `finance:read` | 规范化交易、账户、分类、标签与预算快照 |
 
+
+## LifeTrace Mail Runtime
+
+Mail 已直接集成在 LifeTrace Cloud 中，不要求额外部署第二套 Mail API。Web 使用当前 LifeTrace Session 调用 `/api/v1/mail/*`，邮箱授权码/应用密码只保存在 Cloud 侧并由 `MAIL_CREDENTIAL_KEY` 加密。
+
+主要能力：
+
+- 多 Mail Account：QQ、163、126、Yeah，以及显式填写 IMAP/SMTP 的 Generic Provider；
+- `mail_worker`：IMAP IDLE + 定时轮询，首次同步回填最近 30 天；
+- Inbox / Sent / Drafts / Archive / Trash / Starred；
+- Subject / Sender / Recipient / Body 搜索；
+- Read / Star / MOVE 同步；
+- MIME 解析、服务端 HTML 清洗（移除远程图片，避免打开邮件触发 tracking pixel）；
+- Identity：From、Display Name、Reply-To、默认身份、纯文本签名；
+- 服务端 Draft 与幂等发送；
+- 出站附件：绑定 Draft，单封邮件附件总大小上限 18 MiB，发送成功后清理临时字节；
+- 入站附件按需从原邮箱取回。
+
+生产环境至少需要：
+
+```text
+DATABASE_URL=postgres://...
+MAIL_CREDENTIAL_KEY=<32-byte envelope key configured by deployment>
+MIGRATION_ON_STARTUP=false
+```
+
+API 进程和 `mail_worker` 必须使用同一个 `DATABASE_URL` 与 `MAIL_CREDENTIAL_KEY`。生产 Compose 已包含 `lifetrace-mail-worker`；数据库迁移由独立 `lifetrace-migrate` 执行。
+
+Mail Workspace 相关端点包括：
+
+```text
+/api/v1/mail/accounts
+/api/v1/mail/accounts/{id}/test
+/api/v1/mail/accounts/{id}/sync
+/api/v1/mail/messages
+/api/v1/mail/messages/{id}
+/api/v1/mail/messages/{id}/read
+/api/v1/mail/messages/{id}/star
+/api/v1/mail/messages/{id}/move
+/api/v1/mail/identities
+/api/v1/mail/drafts
+/api/v1/mail/drafts/{id}/attachments
+```
+
 ## EPIC-12 对象存储
 
 长期普通文件使用 `file_objects` 元数据 + S3 兼容对象存储。Cloud 只签发短时 URL，不代理大文件字节；`file.metadata` 继续通过既有 Sync 协议跨端同步，因此 Push/Pull/Snapshot 中不会携带原文件。
