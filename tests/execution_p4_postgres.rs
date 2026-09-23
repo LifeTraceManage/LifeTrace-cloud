@@ -101,11 +101,11 @@ fn request(id: &str, changes: Vec<SyncChangeV1>) -> PushRequestV1 {
 #[tokio::test]
 async fn finish_before_start_is_server_authoritative_and_atomic_group_aware() {
     let Some(url) = database_url() else {
-        eprintln!("TEST_DATABASE_URL not set; execution P4 PostgreSQL test skipped");
+        eprintln!("TEST_DATABASE_URL not set; execution P4 SQLite test skipped");
         return;
     };
     let config = Config {
-        database_url: Some(url),
+        database_path: url,
         migration_on_startup: true,
         dev_auth_token: "execution-p4-token".to_owned(),
         dev_auth_user_id: "execution-p4-user".to_owned(),
