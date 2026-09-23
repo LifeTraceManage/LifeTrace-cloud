@@ -51,7 +51,7 @@ impl BeeCountSyncService {
         let mut tx = self.pool.begin().await.map_err(db_error)?;
         verify_device(&mut tx, actor_uuid, device_uuid, &request.device_id).await?;
 
-        let server_now = Utc::CURRENT_TIMESTAMP;
+        let server_now = Utc::now();
         let mut accepted = 0usize;
         let mut rejected = 0usize;
         let mut conflict_count = 0usize;
@@ -612,7 +612,7 @@ impl BeeCountSyncService {
         let mut snapshot_cursor = ledger.try_get::<i64, _>("last_cursor").unwrap_or(0);
         let mut snapshot_updated = ledger
             .try_get::<DateTime<Utc>, _>("server_modified_at")
-            .unwrap_or_else(|_| Utc::CURRENT_TIMESTAMP);
+            .unwrap_or_else(|_| Utc::now());
         for row in rows {
             let entity_type: String = row.try_get("entity_type").map_err(internal)?;
             let Some(kind) = BeeCountEntityKind::from_lifetrace(&entity_type) else {
@@ -644,7 +644,7 @@ impl BeeCountSyncService {
         }
         let content = json!({
             "version": 6,
-            "exportedAt": Utc::CURRENT_TIMESTAMP,
+            "exportedAt": Utc::now(),
             "ledgerSyncId": ledger_id,
             "ledgerName": ledger_raw.get("ledgerName").and_then(Value::as_str).unwrap_or(ledger_id),
             "currency": ledger_raw.get("currency").and_then(Value::as_str).unwrap_or("CNY"),
