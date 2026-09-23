@@ -24,6 +24,7 @@ docker compose version >/dev/null 2>&1 || {
   echo "[LifeTrace deploy] set LIFETRACE_WEB_SOURCE_DIR=/path/to/LifeTrace-web if it is not a sibling checkout" >&2
   exit 1
 }
+WEB_SOURCE_DIR="$(cd -- "${WEB_SOURCE_DIR}" && pwd)"
 
 echo "[LifeTrace deploy] building LifeTrace-web from ${WEB_SOURCE_DIR}"
 rm -rf "${WEB_DIST_DIR}"
