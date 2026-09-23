@@ -66,7 +66,7 @@ async fn send(
 
 #[tokio::test]
 async fn one_account_can_keep_lifetrace_and_beecount_sessions_active_together() {
-    let Ok(database_url) = std::env::var("TEST_DATABASE_URL") else {
+    let Ok(database_url) = std::env::var("TEST_DATABASE_PATH") else {
         return;
     };
     let state = AppState::new(config(database_url));
