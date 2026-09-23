@@ -195,6 +195,30 @@ impl MailService {
         .execute(&self.pool)
         .await?;
 
+        // Every connected account starts with one usable default sending identity.
+        // Using the account UUID keeps the backfilled and newly-created default
+        // identity stable and avoids a second identifier lookup for the common case.
+        sqlx::query(
+            r#"
+            INSERT INTO mail_identities (
+                id,user_id,account_id,email_address,display_name,is_default
+            ) VALUES ($1,$2,$1,$3,$4,TRUE)
+            ON CONFLICT DO NOTHING
+            "#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(&resolved.email)
+        .bind(
+            input
+                .display_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
+        .execute(&self.pool)
+        .await?;
+
         let _ = self.test_account_uuid(user_id, id).await;
         self.account_by_id(user_id, id).await
     }
