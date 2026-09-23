@@ -37,7 +37,8 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 - `src/workers/`：随 Cloud 进程启动的后台任务
 - `src/repository/sqlite/`：Sync v1 SQLite 持久化
 - `src/sync/`：游标、分页令牌和 payload hash
-- `migrations/0001_sqlite.sql`：当前 SQLite 基线 schema
+- `migrations/0001_sqlite.sql`：SQLite 基线 schema
+- `migrations/0002_mail_workspace.sql`：Mail Workspace 增量 schema（Identity / Draft attachment）
 - `apps/web/`：随 Cloud 镜像构建的 Web 前端
 - `apps/photo-challenge-pwa/`：摄影挑战静态页面
 - `deploy/cloud/`：唯一生产 Compose 与环境变量模板
@@ -91,7 +92,7 @@ export LIFETRACE_DATABASE_PATH=/tmp/lifetrace.db
 cargo run --bin lifetrace-cloud
 ```
 
-首次启动会创建 SQLite 文件并执行 `migrations/0001_sqlite.sql`。
+首次启动会创建 SQLite 文件并执行全部尚未应用的版本化 migration；已执行的 migration 不会被重写。
 
 ## 测试
 
@@ -165,6 +166,29 @@ FILE_MAX_UPLOAD_BYTES
 
 没有配置对象存储时，不影响核心同步、认证、Web、邮件和 BeeCount 功能。
 
+## Notes / Mail 兼容性
+
+SQLite 单容器重构保持 Web 已上线的 Notes / Mail 契约，不以“简化部署”为理由删减产品能力。
+
+Notes 保留：
+
+- `note.folder.parentFolderId` 层级目录契约；
+- Note / Tag / Relation / Revision 等 Sync v1 entity；
+- Web 的 Wiki Link、Backlinks、Properties、Revision History 与 Calendar/Mail 联动无需后端分叉。
+
+Mail 保留：
+
+- Account / Identity / Draft；
+- Unified Inbox、Mailbox Role、Starred 与正文/发件人/收件人搜索；
+- Read / Star / MOVE；
+- Identity Display Name / Reply-To / Signature；
+- Draft attachment（SQLite BLOB，单封总量 18 MiB 上限）；
+- SMTP multipart send；
+- SMTP 成功后按 Message-ID 检查 Sent，Provider 未自动保存时才通过 IMAP APPEND 补副本，避免重复；
+- Mail privacy export 中的 Identity / Draft metadata。
+
+`MAIL_CREDENTIAL_KEY` 未配置时只关闭邮件聚合后台任务，不影响 Cloud 的其他功能。
+
 ## 设计原则
 
 当前 Cloud 明确按单实例个人服务器优化：
@@ -174,5 +198,5 @@ FILE_MAX_UPLOAD_BYTES
 3. 后台任务运行在 Cloud Tokio runtime 内，不拆独立 worker 服务。
 4. 管理命令与服务端共用 `lifetrace-cloud` 一个二进制，不维护独立 admin/migration/worker 入口。
 5. Web 静态资源由 Axum 提供，不增加 Caddy/Nginx 依赖.
-6. 数据库 schema 以当前 SQLite 基线为准，不保留 PostgreSQL 历史 migration 链。
+6. 数据库 schema 使用精简的 SQLite migration 链：一个当前基线 + 必要的向前兼容增量；不保留 PostgreSQL 历史 migration 链。
 7. Sync v1 wire contract 保持兼容，数据库实现细节不暴露给客户端。
