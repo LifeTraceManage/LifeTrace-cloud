@@ -74,15 +74,15 @@ async fn list_messages(
         FROM mail_messages m
         JOIN mail_folders f ON f.id=m.folder_id
         WHERE m.user_id=$1
-          AND ($2::uuid IS NULL OR m.account_id=$2)
-          AND (($3::uuid IS NULL AND f.normalized_role='inbox') OR m.folder_id=$3)
-          AND m.received_at >= now() - interval '30 days'
-          AND ($3::uuid IS NOT NULL OR m.is_archived=FALSE)
-          AND ($4::text IS NULL
-               OR m.subject ILIKE '%' || $4 || '%'
-               OR coalesce(m.snippet,'') ILIKE '%' || $4 || '%'
-               OR m.from_json::text ILIKE '%' || $4 || '%')
-          AND ($5::boolean IS NULL OR ($5=TRUE AND m.is_read=FALSE) OR $5=FALSE)
+          AND ($2 IS NULL OR m.account_id=$2)
+          AND (($3 IS NULL AND f.normalized_role='inbox') OR m.folder_id=$3)
+          AND m.received_at >= datetime('now','-30 days')
+          AND ($3 IS NOT NULL OR m.is_archived=FALSE)
+          AND ($4 IS NULL
+               OR lower(m.subject) LIKE '%' || lower($4) || '%'
+               OR lower(coalesce(m.snippet,'')) LIKE '%' || lower($4) || '%'
+               OR lower(m.from_json) LIKE '%' || lower($4) || '%')
+          AND ($5 IS NULL OR ($5=TRUE AND m.is_read=FALSE) OR $5=FALSE)
         ORDER BY m.received_at DESC
         LIMIT $6 OFFSET $7
         "#,
