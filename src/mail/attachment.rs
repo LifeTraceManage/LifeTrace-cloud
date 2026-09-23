@@ -4,7 +4,7 @@ use lifetrace_contracts::UserId;
 use mail_parser::MessageParser;
 use sqlx::SqlitePool;
 use thiserror::Error;
-use uuid;
+use uuid::Uuid;
 
 use super::credential::CredentialCipher;
 use super::domain::MailAccountSecret;
