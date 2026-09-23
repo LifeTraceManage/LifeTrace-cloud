@@ -154,7 +154,7 @@ impl BeeCountAttachmentService {
         let file_uuid = Uuid::new_v4();
         let file_id = file_uuid.to_string();
         let file_entity_id = format!("{FILE_ENTITY_PREFIX}{file_id}");
-        let created_at = Utc::CURRENT_TIMESTAMP;
+        let created_at = Utc::now();
         let inserted = sqlx::query(
             "INSERT INTO cloud_file_blobs ( \
                 id,user_id,file_entity_id,ledger_id,attachment_kind,sha256,size_bytes, \
