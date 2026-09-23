@@ -37,7 +37,7 @@ Application state
 - `src/mail/`：邮件协议、解析、凭据与服务
 - `src/repository/`：Sync 仓库抽象、PostgreSQL 生产实现与仅用于测试/协议 harness 的内存实现
 - `src/sync/`：游标、分页令牌、哈希等同步基础设施
-- `src/bin/`：独立 worker / admin / migration 二进制
+- `src/bin/`：独立 worker 与 admin 二进制
 - `crates/lifetrace-contracts/`：共享协议与领域契约
 - `crates/lifetrace-sync-client/`：Rust Sync v1 客户端库
 - `contracts/`：由 contract exporter 生成的跨语言契约产物
@@ -76,10 +76,9 @@ cargo run
 
 无数据库的内存仓库只通过测试/协议 harness 直接构造 `AppState` 使用，不是可启动的 Cloud 运行模式。
 
-常用数据库工具：
+数据库 migration 随 Cloud 启动自动执行；仅保留 `lifetrace-admin` 作为必要的运维 CLI：
 
 ```bash
-cargo run --bin lifetrace-migrate
 cargo run --bin lifetrace-admin
 ```
 
