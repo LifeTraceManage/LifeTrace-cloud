@@ -16,23 +16,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 50
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: lifetrace
-          POSTGRES_PASSWORD: lifetrace_test_password
-          POSTGRES_DB: lifetrace_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U lifetrace -d lifetrace_test"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
     env:
-      DATABASE_URL: postgres://lifetrace:lifetrace_test_password@127.0.0.1:5432/lifetrace_test
-      TEST_DATABASE_URL: postgres://lifetrace:lifetrace_test_password@127.0.0.1:5432/lifetrace_test
+      TEST_DATABASE_PATH: /tmp/lifetrace-ci.db
       AUTH_PASSWORD_PEPPER: cloud-ci-password-pepper
       AUTH_TOKEN_HASH_PEPPER: cloud-ci-token-pepper
     steps:
