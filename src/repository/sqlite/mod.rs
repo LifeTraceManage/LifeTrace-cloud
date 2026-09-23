@@ -49,7 +49,7 @@ impl SqliteRepository {
     }
 
     fn CURRENT_TIMESTAMP -> chrono::DateTime<Utc> {
-        Utc::CURRENT_TIMESTAMP
+        Utc::now()
     }
 
     fn stable_uuid(kind: &str, value: &str) -> Uuid {
