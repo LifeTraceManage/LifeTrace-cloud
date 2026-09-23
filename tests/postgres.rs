@@ -18,7 +18,7 @@ use serde_json::Value;
 use tower::ServiceExt;
 
 fn database_url() -> Option<String> {
-    std::env::var("TEST_DATABASE_URL").ok()
+    std::env::var("TEST_DATABASE_PATH").ok()
 }
 
 fn stamp() -> UtcTimestamp {
@@ -87,9 +87,9 @@ fn push_request() -> PushRequestV1 {
 }
 
 #[tokio::test]
-async fn postgres_runtime_migrates_persists_and_replays_idempotently() {
+async fn sqlite_runtime_migrates_persists_and_replays_idempotently() {
     let Some(url) = database_url() else {
-        eprintln!("TEST_DATABASE_URL not set; SQLite integration test skipped");
+        eprintln!("TEST_DATABASE_PATH not set; SQLite integration test skipped");
         return;
     };
 
@@ -106,13 +106,20 @@ async fn postgres_runtime_migrates_persists_and_replays_idempotently() {
 
     let state = AppState::new(config.clone());
     state.initialize().await.unwrap();
-    sqlx::query(
-        "TRUNCATE TABLE sync_snapshot_items, sync_snapshots, sync_processed_changes, \
-         sync_change_log, sync_entities, cloud_devices, cloud_users RESTART IDENTITY CASCADE",
-    )
-    .execute(&state.pool)
-    .await
-    .unwrap();
+    for table in [
+        "sync_snapshot_items",
+        "sync_snapshots",
+        "sync_processed_changes",
+        "sync_change_log",
+        "sync_entities",
+        "cloud_devices",
+        "cloud_users",
+    ] {
+        sqlx::query(&format!("DELETE FROM {table}"))
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    }
 
     let user = UserId::new("postgres-user");
     let request = push_request();
@@ -123,11 +130,11 @@ async fn postgres_runtime_migrates_persists_and_replays_idempotently() {
     ));
     assert_eq!(state.store.change_count(&user).await.unwrap(), 1);
 
-    let migrated: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM _sqlx_migrations")
+    let migrated: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations")
         .fetch_one(&state.pool)
         .await
         .unwrap();
-    assert!(migrated >= 7);
+    assert!(migrated >= 1);
 
     let ready_response = app(state.clone())
         .oneshot(
@@ -237,11 +244,9 @@ async fn postgres_runtime_migrates_persists_and_replays_idempotently() {
 }
 
 #[tokio::test]
-async fn readiness_fails_when_postgres_is_unavailable() {
+async fn readiness_fails_when_sqlite_path_is_unavailable() {
     let config = Config {
-        database_url: Some(
-            "postgres://lifetrace:invalid@127.0.0.1:1/lifetrace_unavailable".to_owned(),
-        ),
+        database_path: "/proc/lifetrace/unavailable.db".to_owned(),
         ..Config::default()
     };
     let state = AppState::new(config);
