@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use uuid::Uuid;
+use uuid;
 
 use crate::auth::security::cookie_value;
 use crate::auth::{AuthCredential, AuthenticatedPrincipal};
@@ -217,7 +217,7 @@ async fn admin(
     }
     let owner_uuid = user_uuid(&owner)?;
     let rows = sqlx::query(
-        "SELECT id,file_name,captured_at,score::bigint AS score,qualified,breakdown,feedback,model,thumbnail_data_url,scored_at,staging_id \
+        "SELECT id,file_name,captured_at,score AS score,qualified,breakdown,feedback,model,thumbnail_data_url,scored_at,staging_id \
          FROM photo_challenge_scores WHERE user_id=$1 ORDER BY scored_at DESC LIMIT 1000",
     )
     .bind(owner_uuid)
@@ -246,7 +246,7 @@ async fn score_photo(
     let image_hash = hex::encode(Sha256::digest(&upload.original));
 
     if let Some(row) = sqlx::query(
-        "SELECT id,score::bigint AS score,qualified,breakdown,feedback FROM photo_challenge_scores WHERE user_id=$1 AND image_hash=$2",
+        "SELECT id,score AS score,qualified,breakdown,feedback FROM photo_challenge_scores WHERE user_id=$1 AND image_hash=$2",
     )
     .bind(owner_uuid)
     .bind(&image_hash)
@@ -301,7 +301,7 @@ async fn score_photo(
         "INSERT INTO photo_challenge_scores \
          (id,user_id,staging_id,image_hash,file_name,captured_at,score,qualified,breakdown,feedback,model,thumbnail_data_url) \
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) \
-         RETURNING id,score::bigint AS score,qualified,breakdown,feedback",
+         RETURNING id,score AS score,qualified,breakdown,feedback",
     )
     .bind(id)
     .bind(owner_uuid)
@@ -542,7 +542,7 @@ pub(super) async fn load_stats(state: &AppState, owner: &UserId) -> Result<Chall
     })
 }
 
-fn read_db_score(row: &sqlx::postgres::PgRow) -> Result<i64, ApiError> {
+fn read_db_score(row: &sqlx::sqlite::SqliteRow) -> Result<i64, ApiError> {
     // Every score projection casts the INT4 storage column to BIGINT so the SQL
     // result type exactly matches the API's i64 representation. This keeps the
     // database schema compact while eliminating SQLx INT4/INT8 decode ambiguity.
@@ -550,7 +550,7 @@ fn read_db_score(row: &sqlx::postgres::PgRow) -> Result<i64, ApiError> {
 }
 
 fn response_from_row(
-    row: &sqlx::postgres::PgRow,
+    row: &sqlx::sqlite::SqliteRow,
     duplicate: bool,
 ) -> Result<ScoreResponse, ApiError> {
     let breakdown_value: Value = row.try_get("breakdown").map_err(database_error)?;
@@ -577,7 +577,7 @@ fn response_from_row(
     })
 }
 
-fn row_to_entry(row: &sqlx::postgres::PgRow) -> Result<ChallengeEntry, ApiError> {
+fn row_to_entry(row: &sqlx::sqlite::SqliteRow) -> Result<ChallengeEntry, ApiError> {
     let breakdown_value: Value = row.try_get("breakdown").map_err(database_error)?;
     Ok(ChallengeEntry {
         id: row
