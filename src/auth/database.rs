@@ -155,9 +155,15 @@ impl AuthProvider for DatabaseAuthProvider {
                 "application grant revoked",
             ));
         }
-        let session_scopes: Vec<String> = row.try_get("scopes").unwrap_or_default();
+        let session_scopes: Vec<String> = row
+            .try_get::<String, _>("scopes")
+            .ok()
+            .and_then(|value| serde_json::from_str(&value).ok())
+            .unwrap_or_default();
         let grant_scopes: BTreeSet<String> = row
-            .try_get::<Vec<String>, _>("grant_scopes")
+            .try_get::<String, _>("grant_scopes")
+            .ok()
+            .and_then(|value| serde_json::from_str::<Vec<String>>(&value).ok())
             .unwrap_or_default()
             .into_iter()
             .collect();
