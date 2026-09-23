@@ -116,7 +116,6 @@ async fn prepare(
     Json(mut input): Json<PrepareRequest>,
 ) -> Result<(StatusCode, Json<PrepareResponse>), ApiError> {
     principal.require_scope("files:write")?;
-    ensure_database(&state)?;
     validate_prepare(&mut input, state.config.file_max_upload_bytes)?;
     let storage = storage_config(&state)?;
     let user_id = user_uuid(&principal.user_id)?;
@@ -198,7 +197,6 @@ async fn list(
     Query(query): Query<ListQuery>,
 ) -> Result<Json<FileList>, ApiError> {
     principal.require_scope("files:read")?;
-    ensure_database(&state)?;
     if let Some(domain) = query.domain.as_deref() {
         validate_domain(domain)?;
     }
@@ -268,7 +266,6 @@ async fn mark_complete(
 ) -> Result<Json<FileMetadata>, ApiError> {
     principal.require_scope("files:write")?;
     let owner = user_uuid(&principal.user_id)?;
-    ensure_database(&state)?;
     let row = sqlx::query(
         "UPDATE file_objects SET status='available', available_at=COALESCE(available_at,CURRENT_TIMESTAMP), failure_reason=NULL, updated_at=CURRENT_TIMESTAMP \
          WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL RETURNING *",
@@ -290,7 +287,6 @@ async fn mark_failed(
 ) -> Result<Json<FileMetadata>, ApiError> {
     principal.require_scope("files:write")?;
     let owner = user_uuid(&principal.user_id)?;
-    ensure_database(&state)?;
     let reason = input
         .reason
         .unwrap_or_else(|| "client upload failed".to_owned());
@@ -339,7 +335,6 @@ async fn delete_metadata(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     principal.require_scope("files:write")?;
     let owner = user_uuid(&principal.user_id)?;
-    ensure_database(&state)?;
     let changed = sqlx::query(
         "UPDATE file_objects SET deleted_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL",
     )
@@ -360,7 +355,6 @@ async fn orphans(
     Query(query): Query<OrphanQuery>,
 ) -> Result<Json<FileList>, ApiError> {
     principal.require_scope("files:read")?;
-    ensure_database(&state)?;
     let owner = user_uuid(&principal.user_id)?;
     let hours = query.older_than_hours.unwrap_or(24).clamp(1, 24 * 365);
     let rows = sqlx::query(
@@ -383,7 +377,6 @@ async fn owned_row(
     user_id: &UserId,
     id: Uuid,
 ) -> Result<sqlx::sqlite::SqliteRow, ApiError> {
-    ensure_database(state)?;
     let owner = user_uuid(user_id)?;
     sqlx::query("SELECT * FROM file_objects WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL")
         .bind(id)
@@ -500,9 +493,6 @@ fn row_to_metadata(row: &sqlx::sqlite::SqliteRow) -> Result<FileMetadata, ApiErr
     })
 }
 
-fn ensure_database(_state: &AppState) -> Result<(), ApiError> {
-    Ok(())
-}
 
 fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
     Uuid::parse_str(user_id.as_str()).map_err(|_| bad_request("当前账号不能使用文件服务"))
