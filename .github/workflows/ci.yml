@@ -104,6 +104,17 @@ jobs:
           context: .
           file: Dockerfile
           push: false
+          load: true
           tags: lifetrace-cloud:ci
           cache-from: type=gha,scope=lifetrace-cloud-ci
           cache-to: type=gha,mode=max,scope=lifetrace-cloud-ci
+
+
+      - name: Verify full image payload
+        run: |
+          docker run --rm --entrypoint sh lifetrace-cloud:ci -ec '
+            test -x /app/lifetrace-cloud
+            test -s /app/web/index.html
+            test -d /app/web/assets
+            test -s /app/photo-challenge/index.html
+          '
