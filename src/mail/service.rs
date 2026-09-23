@@ -308,7 +308,7 @@ impl MailService {
         let result = sqlx::query(
             r#"
             UPDATE mail_accounts
-            SET status='disabled',credential_ciphertext=X'',credential_nonce=decode('', 'hex'),
+            SET status='disabled',credential_ciphertext=X'',credential_nonce=X'',
                 deleted_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
             WHERE user_id=$1 AND id=$2 AND deleted_at IS NULL
             "#,
@@ -556,7 +556,7 @@ impl MailService {
             WHERE user_id=$1
               AND ($2 IS NULL OR account_id=$2)
               AND ($3 IS NULL OR EXISTS (SELECT 1 FROM mail_messages m WHERE m.thread_id=mail_threads.id AND m.folder_id=$3))
-              AND ($4 IS NULL OR normalized_subject ILIKE '%' || $4 || '%' OR coalesce(snippet,'') ILIKE '%' || $4 || '%')
+              AND ($4 IS NULL OR normalized_subject LIKE '%' || $4 || '%' OR coalesce(snippet,'') LIKE '%' || $4 || '%')
               AND ($5 IS NULL OR ($5=TRUE AND unread_count>0) OR $5=FALSE)
             ORDER BY latest_message_at DESC NULLS LAST
             LIMIT $6 OFFSET $7
