@@ -55,7 +55,7 @@ async fn status(
         "enabled": state.database_enabled,
         "readOnly": true,
         "source": "beecount-cloud",
-        "storage": "lifetrace-postgresql",
+        "storage": "lifetrace-sqlite",
         "upstreamReachable": state.database_enabled,
         "upstreamVersion": {
             "name": "LifeTrace BeeCount compatibility",
@@ -78,7 +78,7 @@ async fn ledgers(
     let items = rows.iter().map(normalize_ledger).collect::<Vec<_>>();
     Ok(Json(json!({
         "source": "beecount-cloud",
-        "storage": "lifetrace-postgresql",
+        "storage": "lifetrace-sqlite",
         "readOnly": true,
         "items": items,
         "fetchedAt": Utc::now()
@@ -176,7 +176,7 @@ async fn snapshot(
 
     Ok(Json(json!({
         "source": "beecount-cloud",
-        "storage": "lifetrace-postgresql",
+        "storage": "lifetrace-sqlite",
         "readOnly": true,
         "fetchedAt": Utc::now(),
         "ledger": normalize_ledger(&ledger),
@@ -213,7 +213,7 @@ async fn beecount_user_global_sources(
     let rows = sqlx::query(
         "SELECT e.entity_type, \
                 COALESCE(c.entity_sync_id, \
-                  CASE WHEN e.entity_id LIKE 'beecount:%' THEN substring(e.entity_id from 10) \
+                  CASE WHEN e.entity_id LIKE 'beecount:%' THEN substr(e.entity_id, 10) \
                        ELSE 'lifetrace:' || e.entity_id END) AS source_id \
          FROM sync_entities e \
          LEFT JOIN beecount_entity_clocks c \
@@ -226,17 +226,12 @@ async fn beecount_user_global_sources(
           AND d.external_device_id=e.origin_device_external_id \
           AND d.app_id='beecount-mobile' \
          WHERE e.user_id=$1 \
-           AND e.entity_type = ANY($2) \
+           AND e.entity_type IN ('finance.account','finance.category','finance.tag') \
            AND e.is_deleted=FALSE \
            AND ((c.entity_sync_id IS NOT NULL AND c.is_deleted=FALSE) \
                 OR (c.entity_sync_id IS NULL AND d.id IS NOT NULL))",
     )
     .bind(resource_owner_uuid)
-    .bind(vec![
-        "finance.account".to_owned(),
-        "finance.category".to_owned(),
-        "finance.tag".to_owned(),
-    ])
     .fetch_all(&state.pool)
     .await
     .map_err(|_| internal("BeeCount user-global provenance lookup failed"))?;
@@ -273,16 +268,8 @@ fn filter_user_global(
         .collect()
 }
 
-fn require_database(state: &AppState) -> Result<(), ApiError> {
-    if state.database_enabled {
-        Ok(())
-    } else {
-        Err(ApiError::new(
-            ErrorCode::TemporarilyUnavailable,
-            "BeeCount finance requires the LifeTrace PostgreSQL store",
-            StatusCode::SERVICE_UNAVAILABLE,
-        ))
-    }
+fn require_database(_state: &AppState) -> Result<(), ApiError> {
+    Ok(())
 }
 
 fn normalize_ledger(row: &BeeCountReadLedgerOut) -> Value {
@@ -301,7 +288,7 @@ fn normalize_ledger(row: &BeeCountReadLedgerOut) -> Value {
         "isShared": row.is_shared,
         "memberCount": row.member_count,
         "source": "beecount-cloud",
-        "storage": "lifetrace-postgresql",
+        "storage": "lifetrace-sqlite",
         "readOnly": true
     })
 }
@@ -427,7 +414,7 @@ fn normalize_account(
         "hidden": optional_bool(row, "hidden").unwrap_or(false),
         "note": row.get("note").cloned().unwrap_or(Value::Null),
         "source": "beecount-cloud",
-        "storage": "lifetrace-postgresql",
+        "storage": "lifetrace-sqlite",
         "readOnly": true
     }))
 }
@@ -460,7 +447,7 @@ fn normalize_category(
         "parentName": parent_id.and_then(|id| category_names.get(id).cloned()),
         "transactionCount": count,
         "source": "beecount-cloud",
-        "storage": "lifetrace-postgresql",
+        "storage": "lifetrace-sqlite",
         "readOnly": true
     }))
 }
@@ -498,7 +485,7 @@ fn normalize_tag(value: &Value, transactions: &[Value]) -> Result<Value, ApiErro
         "incomeTotalCents": income,
         "expenseTotalCents": expense,
         "source": "beecount-cloud",
-        "storage": "lifetrace-postgresql",
+        "storage": "lifetrace-sqlite",
         "readOnly": true
     }))
 }
@@ -521,7 +508,7 @@ fn normalize_budget(
         "startDay": optional_i64(row, "startDay").unwrap_or(1),
         "enabled": optional_bool(row, "enabled").unwrap_or(true),
         "source": "beecount-cloud",
-        "storage": "lifetrace-postgresql",
+        "storage": "lifetrace-sqlite",
         "readOnly": true
     }))
 }
