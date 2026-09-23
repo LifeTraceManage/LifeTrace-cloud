@@ -358,6 +358,8 @@ impl BeeCountSyncService {
             "finance.tag".to_owned(),
             "finance.budget".to_owned(),
         ];
+        let supported_entity_types_json =
+            serde_json::to_string(&supported_entity_types).map_err(internal)?;
         let rows = sqlx::query(
             "SELECT l.cursor,l.entity_type,l.entity_id,l.operation,l.payload, \
                     l.server_modified_at,l.origin_device_external_id, \
