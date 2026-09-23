@@ -24,7 +24,7 @@ Browser / Mobile / Desktop / BeeCount
          /data/lifetrace.db
 ```
 
-生产环境只有一个常驻应用进程和一个持久化数据目录。没有 PostgreSQL、Caddy、migration container、mail worker container 或 execution worker container。
+自托管环境只有一个常驻应用进程和一个持久化数据目录。没有 PostgreSQL、Caddy、migration container、mail worker container 或 execution worker container。
 
 SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行。
 
@@ -127,6 +127,7 @@ cp deploy/cloud/.env.production.example deploy/cloud/.env.production
 # 编辑密钥
 
 bash deploy/cloud/deploy-production.sh
+bash deploy/cloud/verify-production.sh
 ```
 
 等价的核心命令只有：
