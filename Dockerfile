@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
 FROM rust:1.88-slim AS rust-builder
+ARG CARGO_BUILD_JOBS=2
 WORKDIR /build
 ENV CARGO_NET_RETRY=3 \
     CARGO_HTTP_TIMEOUT=60 \
@@ -17,7 +18,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    cargo build --offline --locked --release --bin lifetrace-cloud
+    cargo build --offline --locked --release --bin lifetrace-cloud --jobs "${CARGO_BUILD_JOBS}"
 
 FROM debian:bookworm-slim
 RUN sed -i \
