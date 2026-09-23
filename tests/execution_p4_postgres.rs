@@ -11,7 +11,7 @@ use lifetrace_contracts::{
 use serde_json::{json, Value};
 
 fn database_url() -> Option<String> {
-    std::env::var("TEST_DATABASE_URL").ok()
+    std::env::var("TEST_DATABASE_PATH").ok()
 }
 
 fn client() -> SyncClientInfo {
@@ -101,7 +101,7 @@ fn request(id: &str, changes: Vec<SyncChangeV1>) -> PushRequestV1 {
 #[tokio::test]
 async fn finish_before_start_is_server_authoritative_and_atomic_group_aware() {
     let Some(url) = database_url() else {
-        eprintln!("TEST_DATABASE_URL not set; execution P4 SQLite test skipped");
+        eprintln!("TEST_DATABASE_PATH not set; execution P4 SQLite test skipped");
         return;
     };
     let config = Config {
