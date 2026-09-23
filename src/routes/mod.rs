@@ -15,6 +15,7 @@ pub mod health;
 pub mod mail;
 pub mod mail_attachment;
 pub mod mail_list;
+pub mod mail_workspace;
 pub mod meta;
 pub mod photo_challenge;
 pub mod photo_challenge_desktop;
@@ -56,6 +57,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .merge(mail::router())
         .merge(mail_attachment::router())
         .merge(mail_list::router())
+        .merge(mail_workspace::router())
         .merge(privacy::router())
         .merge(sync::router());
 
