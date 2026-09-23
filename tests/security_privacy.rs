@@ -13,13 +13,17 @@ use uuid::Uuid;
 
 const DEV_TOKEN: &str = "epic17-dev-token";
 
-fn memory_app() -> Router {
-    app(AppState::new(Config {
+async fn memory_app() -> Router {
+    let state = AppState::new(Config {
+        database_path: ":memory:".to_owned(),
+        migration_on_startup: true,
         dev_auth_token: DEV_TOKEN.to_owned(),
         dev_auth_user_id: "epic17-user".to_owned(),
         dev_auth_device_id: "epic17-device".to_owned(),
         ..Config::default()
-    }))
+    });
+    state.initialize().await.unwrap();
+    app(state)
 }
 
 async fn request(
@@ -46,7 +50,7 @@ async fn json_body(response: axum::response::Response) -> Value {
 
 #[tokio::test]
 async fn all_api_responses_receive_security_headers() {
-    let response = request(memory_app(), Method::GET, "/health/live", None).await;
+    let response = request(memory_app().await, Method::GET, "/health/live", None).await;
     assert_eq!(response.status(), StatusCode::OK);
     let headers = response.headers();
     assert_eq!(headers["x-content-type-options"], "nosniff");
@@ -78,14 +82,14 @@ async fn production_responses_include_hsts() {
 
 #[tokio::test]
 async fn privacy_endpoints_reject_anonymous_access() {
-    let response = request(memory_app(), Method::GET, "/api/v1/privacy/export", None).await;
+    let response = request(memory_app().await, Method::GET, "/api/v1/privacy/export", None).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
 async fn account_export_is_readable_and_contains_no_authentication_secret() {
     let response = request(
-        memory_app(),
+        memory_app().await,
         Method::GET,
         "/api/v1/privacy/export/account",
         Some(DEV_TOKEN),
@@ -106,7 +110,7 @@ async fn account_export_is_readable_and_contains_no_authentication_secret() {
 #[tokio::test]
 async fn unknown_export_module_fails_closed() {
     let response = request(
-        memory_app(),
+        memory_app().await,
         Method::GET,
         "/api/v1/privacy/export/future-secret",
         Some(DEV_TOKEN),
@@ -118,7 +122,7 @@ async fn unknown_export_module_fails_closed() {
 #[tokio::test]
 async fn policy_is_authenticated_and_documents_object_cleanup_boundary() {
     let response = request(
-        memory_app(),
+        memory_app().await,
         Method::GET,
         "/api/v1/privacy/policy",
         Some(DEV_TOKEN),
