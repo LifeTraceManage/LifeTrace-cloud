@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity, Bot, CalendarDays, CheckSquare2, ChevronLeft, ChevronRight, Command,
-  Dumbbell, FileText, GraduationCap, HeartPulse, Home, Leaf, Menu, Moon, NotebookPen,
+  Dumbbell, FileText, HeartPulse, Home, Leaf, Mail, Menu, Moon, NotebookPen,
   RefreshCw, Search, Settings, Sun, WalletCards, X,
 } from "lucide-react";
 import { useApp } from "../app/AppContext";
@@ -16,12 +16,12 @@ const nav = [
     ["/app/habits", "坚持", Activity], ["/app/fitness", "健身", Dumbbell], ["/app/health", "健康", HeartPulse], ["/app/review", "复盘", FileText],
   ] },
   { group: "知识与资产", items: [
-    ["/notes", "笔记", NotebookPen], ["/app/english", "英语学习", GraduationCap], ["/app/finance", "财务", WalletCards],
+    ["/notes", "笔记", NotebookPen], ["/mail", "邮件", Mail], ["/app/finance", "财务", WalletCards],
   ] },
 ] as const;
 
 const mobile = [
-  ["/app/today", "今日", Home], ["/app/execution", "计划", CheckSquare2], ["/app/finance", "财务", WalletCards], ["/notes", "笔记", NotebookPen],
+  ["/app/today", "今日", Home], ["/app/execution", "计划", CheckSquare2], ["/app/finance", "财务", WalletCards], ["/notes", "笔记", NotebookPen], ["/mail", "邮件", Mail],
 ] as const;
 
 const commands = [
@@ -93,7 +93,7 @@ export function AppShell() {
       <Outlet />
     </div>
 
-    <nav className="fixed inset-x-0 bottom-0 z-40 grid h-[68px] grid-cols-5 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="移动端导航">
+    <nav className="fixed inset-x-0 bottom-0 z-40 grid h-[68px] grid-cols-6 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="移动端导航">
       {mobile.map(([path, label, Icon]) => <NavLink key={path} to={path} className={({ isActive }) => cn("flex min-h-11 flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground", isActive || routeActive(location.pathname, path) ? "text-primary" : "")}><Icon size={19} /><span>{label}</span></NavLink>)}
       <button className="flex min-h-11 flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground" onClick={() => setMoreOpen(true)}><Menu size={19} /><span>更多</span></button>
     </nav>
