@@ -29,7 +29,7 @@ service_count="$("${compose[@]}" config --services | wc -l | tr -d ' ')"
   exit 1
 }
 
-"${compose[@]}" up -d --remove-orphans --wait
+"${compose[@]}" up -d --remove-orphans --wait --pull never
 
 # Cloud runtime and embedded SQLite.
 "${compose[@]}" exec -T cloud sh -ec 'test -x /app/lifetrace-cloud'
@@ -44,7 +44,7 @@ service_count="$("${compose[@]}" config --services | wc -l | tr -d ' ')"
 before="$("${compose[@]}" exec -T cloud sh -ec 'test -s /data/lifetrace.db && stat -c "%i:%s" /data/lifetrace.db')"
 
 "${compose[@]}" restart cloud
-"${compose[@]}" up -d --wait cloud web
+"${compose[@]}" up -d --wait --pull never cloud web
 
 "${compose[@]}" exec -T cloud curl --fail --silent http://127.0.0.1:8787/health/ready >/dev/null
 "${compose[@]}" exec -T web wget -q -O - http://127.0.0.1/health/ready >/dev/null
@@ -59,8 +59,8 @@ after_inode="${after%%:*}"
 }
 
 echo "[LifeTrace verify] OK"
-echo "  web:      ghcr.io/lifetracemanage/lifetrace-web-app"
-echo "  cloud:    ghcr.io/lifetracemanage/lifetrace-cloud"
+echo "  web:      lifetrace-web-app:local"
+echo "  cloud:    lifetrace-cloud:local"
 echo "  storage:  /data/lifetrace.db"
-echo "  public:   http://127.0.0.1/"
+echo "  public:   $(grep '^PUBLIC_WEB_BASE_URL=' "$ENV_FILE" | cut -d= -f2-)"
 echo "  beecount: http://127.0.0.1:8869/ready"
