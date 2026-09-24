@@ -7,7 +7,7 @@ const modules = [
   {
     to: "/notes",
     name: "Notes",
-    description: "Markdown 笔记、Folder/Tags、Wiki Link、Backlinks、附件、标签页与命令面板，数据统一同步到 LifeTrace Cloud。",
+    description: "笔记与知识管理。",
     icon: NotebookPen,
     accent: "text-primary",
   },
