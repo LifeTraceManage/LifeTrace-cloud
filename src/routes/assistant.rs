@@ -108,7 +108,7 @@ async fn run_assistant(
             provider: "local",
         }));
     };
-    if contains_newline(&api_key) {
+    if contains_newline(api_key) {
         return Ok(Json(AssistantResponse {
             reply: fallback,
             provider: "local",
@@ -137,7 +137,7 @@ async fn run_assistant(
 
     let provider = tokio::time::timeout(
         Duration::from_secs(50),
-        call_provider(&endpoint, &api_key, &provider_request),
+        call_provider(&endpoint, api_key, &provider_request),
     )
     .await;
     let parsed = match provider {
