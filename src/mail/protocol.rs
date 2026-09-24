@@ -419,6 +419,7 @@ fn mailbox_with_name(name: Option<&str>, address: &str) -> Result<Mailbox, MailP
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn send_mail(
     account: &MailAccountSecret,
     secret: &str,
