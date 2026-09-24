@@ -70,7 +70,6 @@ export function NotesCommandPalette({
       onOpenChange(next);
     }}
     title="Notes 命令面板"
-    description="Ctrl / Cmd + P 打开。支持创建、搜索、打开、移动、删除和标签操作。"
   >
     <div className="relative">
       <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
