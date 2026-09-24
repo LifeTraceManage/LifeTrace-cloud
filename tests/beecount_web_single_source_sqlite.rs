@@ -55,7 +55,7 @@ async fn send(
 
 async fn clone_without_beecount_provenance(
     state: &AppState,
-    user_id: &str,
+    user_id: Uuid,
     entity_type: &str,
     source_entity_id: &str,
     legacy_entity_id: &str,
@@ -111,6 +111,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     assert_eq!(status, StatusCode::CREATED, "{registration}");
     let token = registration["access_token"].as_str().unwrap().to_owned();
     let user_id = registration["user"]["id"].as_str().unwrap().to_owned();
+    let user_uuid = Uuid::parse_str(&user_id).unwrap();
 
     let updated_at =
         (Utc::now() - Duration::seconds(10)).to_rfc3339_opts(SecondsFormat::Millis, true);
@@ -196,7 +197,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     let stored: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sync_entities WHERE user_id=$1 AND entity_type LIKE 'finance.%' AND is_deleted=FALSE",
     )
-    .bind(&user_id)
+    .bind(user_uuid)
     .fetch_one(&state.pool)
     .await
     .unwrap();
@@ -207,7 +208,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     // registered BeeCount-mobile external-device origin.
     clone_without_beecount_provenance(
         &state,
-        &user_id,
+        user_uuid,
         "finance.account",
         "beecount:account-web-1",
         "legacy-account-web-1",
@@ -215,7 +216,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     .await;
     clone_without_beecount_provenance(
         &state,
-        &user_id,
+        user_uuid,
         "finance.category",
         "beecount:category-web-1",
         "legacy-category-web-1",
@@ -223,7 +224,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     .await;
     clone_without_beecount_provenance(
         &state,
-        &user_id,
+        user_uuid,
         "finance.tag",
         "beecount:tag-web-1",
         "legacy-tag-web-1",
@@ -234,7 +235,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
         "SELECT COUNT(*) FROM beecount_entity_clocks \
          WHERE user_id=$1 AND lifetrace_entity_id LIKE 'legacy-%'",
     )
-    .bind(&user_id)
+    .bind(user_uuid)
     .fetch_one(&state.pool)
     .await
     .unwrap();
