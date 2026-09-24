@@ -206,6 +206,8 @@ pub struct ConnectionTestResult {
     pub smtp_ok: bool,
     pub idle_supported: bool,
     pub folders: Vec<String>,
+    pub imap_error: Option<String>,
+    pub smtp_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
