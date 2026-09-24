@@ -81,10 +81,10 @@ async fn json_body(response: axum::response::Response) -> Value {
 
 #[tokio::test]
 async fn prepare_deduplicates_and_signed_headers_are_browser_safe() {
+    configure_object_storage();
     let Some(state) = state().await else {
         return;
     };
-    configure_object_storage();
     let tokens = state
         .auth_service
         .register(registration(), &context())
@@ -150,10 +150,10 @@ async fn prepare_deduplicates_and_signed_headers_are_browser_safe() {
 
 #[tokio::test]
 async fn file_id_cannot_cross_user_boundary() {
+    configure_object_storage();
     let Some(state) = state().await else {
         return;
     };
-    configure_object_storage();
     let owner = state
         .auth_service
         .register(registration(), &context())
