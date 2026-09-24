@@ -156,7 +156,7 @@ async fn stock_client_sync_routes_share_the_lifetrace_entity_log() {
          WHERE entity_type='finance.transaction' AND entity_id='beecount:transaction-1' \
            AND user_id=$1",
     )
-    .bind(registration["user"]["id"].as_str().unwrap())
+    .bind(Uuid::parse_str(registration["user"]["id"].as_str().unwrap()).unwrap())
     .fetch_one(&state.pool)
     .await
     .unwrap();
