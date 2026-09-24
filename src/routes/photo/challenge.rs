@@ -638,7 +638,7 @@ async fn call_glm_score(state: &AppState, image_data_url: &str) -> Result<ModelS
 
     let provider = tokio::time::timeout(
         Duration::from_secs(55),
-        call_provider(&endpoint, &api_key, &request),
+        call_provider(&endpoint, api_key, &request),
     )
     .await
     .map_err(|_| {

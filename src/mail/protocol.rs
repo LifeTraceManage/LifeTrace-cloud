@@ -419,24 +419,32 @@ fn mailbox_with_name(name: Option<&str>, address: &str) -> Result<Mailbox, MailP
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
+pub struct SendMailOptions<'a> {
+    pub from_address: Option<&'a str>,
+    pub from_name: Option<&'a str>,
+    pub reply_to_address: Option<&'a str>,
+    pub message_id: &'a str,
+    pub in_reply_to: Option<&'a str>,
+    pub attachments: &'a [MailDraftAttachment],
+}
+
 pub async fn send_mail(
     account: &MailAccountSecret,
     secret: &str,
-    from_address: Option<&str>,
-    from_name: Option<&str>,
-    reply_to_address: Option<&str>,
     input: &SendMailInput,
-    message_id: &str,
-    in_reply_to: Option<&str>,
-    attachments: &[MailDraftAttachment],
+    options: SendMailOptions<'_>,
 ) -> Result<Vec<u8>, MailProtocolError> {
-    let from = mailbox_with_name(from_name, from_address.unwrap_or(&account.email_address))?;
+    let from = mailbox_with_name(
+        options.from_name,
+        options.from_address.unwrap_or(&account.email_address),
+    )?;
     let first_to = input.to.first().ok_or(MailProtocolError::InvalidAddress)?;
     let mut builder = Message::builder()
         .from(from)
         .to(mailbox(first_to)?)
         .subject(&input.subject)
-        .message_id(Some(message_id.to_owned()));
+        .message_id(Some(options.message_id.to_owned()));
     for value in input.to.iter().skip(1) {
         builder = builder.to(mailbox(value)?);
     }
@@ -446,14 +454,14 @@ pub async fn send_mail(
     for value in &input.bcc {
         builder = builder.bcc(mailbox(value)?);
     }
-    if let Some(value) = reply_to_address {
+    if let Some(value) = options.reply_to_address {
         builder = builder.reply_to(mailbox(value)?);
     }
-    if let Some(value) = in_reply_to {
+    if let Some(value) = options.in_reply_to {
         builder = builder.in_reply_to(value.to_owned());
     }
 
-    let message = if attachments.is_empty() {
+    let message = if options.attachments.is_empty() {
         builder
             .header(ContentType::TEXT_PLAIN)
             .body(input.body_text.clone())
@@ -464,7 +472,7 @@ pub async fn send_mail(
                 .header(ContentType::TEXT_PLAIN)
                 .body(input.body_text.clone()),
         );
-        for attachment in attachments {
+        for attachment in options.attachments {
             let content_type = ContentType::parse(&attachment.mime_type)
                 .or_else(|_| ContentType::parse("application/octet-stream"))
                 .map_err(|_| MailProtocolError::MessageBuild)?;
