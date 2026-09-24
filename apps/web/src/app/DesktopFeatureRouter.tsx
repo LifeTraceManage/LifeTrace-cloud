@@ -8,7 +8,6 @@ const HabitsPage = lazy(() => import("../features/habits/HabitsPage").then((modu
 const FitnessPage = lazy(() => import("../features/fitness/FitnessPage").then((module) => ({ default: module.FitnessPage })));
 const HealthPage = lazy(() => import("../features/health/HealthPage").then((module) => ({ default: module.HealthPage })));
 const NotesPage = lazy(() => import("../features/notes/NotesPage").then((module) => ({ default: module.NotesPage })));
-const EnglishPage = lazy(() => import("../features/english/EnglishPage").then((module) => ({ default: module.EnglishPage })));
 const ReviewPage = lazy(() => import("../features/review/ReviewPage").then((module) => ({ default: module.ReviewPage })));
 const FinanceWorkspace = lazy(() => import("../features/finance/FinanceWorkspace").then((module) => ({ default: module.FinanceWorkspace })));
 const FinanceTransactionsPage = lazy(() => import("../features/finance/FinanceTransactionsPage").then((module) => ({ default: module.FinanceTransactionsPage })));
@@ -57,7 +56,6 @@ function FeatureRoutes() {
       <Route path="/app/fitness" element={withSuspense(<FitnessPage />)} />
       <Route path="/app/health" element={withSuspense(<HealthPage />)} />
       <Route path="/app/notes" element={withSuspense(<NotesPage />)} />
-      <Route path="/app/english/*" element={withSuspense(<EnglishPage />)} />
       <Route path="/app/review" element={withSuspense(<ReviewPage />)} />
       <Route path="/app/finance/transactions" element={withSuspense(<FinanceTransactionsPage />)} />
       <Route path="/app/finance/*" element={withSuspense(<FinanceWorkspace />)} />
