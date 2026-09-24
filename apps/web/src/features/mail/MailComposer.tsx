@@ -281,7 +281,7 @@ export function MailComposer({
     open={open}
     onOpenChange={onOpenChange}
     title={mode === "draft" ? "编辑草稿" : mode === "forward" ? "转发邮件" : mode === "reply" || mode === "replyAll" ? "回复邮件" : "写邮件"}
-    description="正文、草稿和附件都保存在 LifeTrace Cloud；只有明确点击“发送”才会执行 SMTP 投递。Identity 签名会在服务端发送前自动附加。"
+    description="只有点击“发送”才会投递邮件。"
   >
     <div className="space-y-3">
       <label className="block space-y-1.5 text-xs font-medium">发件身份

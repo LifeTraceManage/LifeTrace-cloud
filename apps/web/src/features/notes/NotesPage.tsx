@@ -647,7 +647,6 @@ export function NotesPage() {
 
   return <WorkspaceShell
     title="Notes"
-    description="Markdown 知识库与信息组织中心"
     icon={<NotebookPen size={17} />}
     action={<>
       <Button size="sm" variant="outline" onClick={() => void openDailyNote()}><CalendarDays size={14} /><span className="hidden lg:inline">Daily</span></Button>
@@ -758,7 +757,7 @@ export function NotesPage() {
               <span>{new Date(note.meta.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
               {text(note, "folderId") ? <span className="truncate">· {text(folderById.get(text(note, "folderId")), "name")}</span> : null}
             </div>
-          </button>) : <EmptyState title={query ? "没有匹配的笔记" : "这里还没有笔记"} description={query ? "搜索会同时匹配标题、Markdown 正文、文件夹和标签。" : scope === "trash" ? "废纸篓是空的。" : "创建一篇 Markdown 笔记开始记录。"} />}
+          </button>) : <EmptyState title={query ? "没有匹配的笔记" : "这里还没有笔记"} />}
         </div>
       </section>
 
@@ -828,10 +827,10 @@ export function NotesPage() {
               {selected.isArchived !== true ? <NoteAttachments noteId={selected.meta.id} onInsertMarkdown={insertMarkdown} /> : null}
             </div>
           </div>
-        </> : <EmptyState title="选择一篇笔记" description="从列表选择，或创建新的 Markdown 笔记。" />}
+        </> : <EmptyState title="选择一篇笔记" />}
       </main>
     </div>
-    <Dialog open={graphOpen} onOpenChange={setGraphOpen} title="Notes Graph" description="基于已同步的 Wiki Link 关系生成轻量知识图谱。点击节点打开对应笔记。">
+    <Dialog open={graphOpen} onOpenChange={setGraphOpen} title="Notes Graph" description="点击节点打开笔记。">
       <NotesGraphView notes={activeNotes} relations={noteRelations} onOpenNote={(id) => { setGraphOpen(false); void selectNote(id); }} />
     </Dialog>
     <NoteRevisionHistory

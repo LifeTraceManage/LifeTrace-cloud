@@ -42,7 +42,7 @@ export function LoginPage() {
           <div className="mb-6">
             <div className="eyebrow">LifeTrace account</div>
             <h1 className="mt-2 text-2xl font-semibold tracking-[-0.025em]">登录 LifeTrace</h1>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">同一份 LifeTrace Cloud 会话用于 Portal、Notes、Mail 与 Execute。登录后会返回你原本要访问的工作区。</p>
+            
           </div>
           {!online ? <div className="mb-4 flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm"><WifiOff size={17} className="mt-0.5 shrink-0" /><span>当前离线，恢复网络后才能登录。</span></div> : null}
           {error ? <div role="alert" className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}

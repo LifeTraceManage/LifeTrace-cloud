@@ -59,7 +59,7 @@ export function AppShell() {
     <aside className={cn("sticky top-0 hidden h-screen border-r bg-card lg:flex lg:flex-col", collapsed ? "w-[76px]" : "w-[236px]") }>
       <div className="flex h-16 items-center gap-3 border-b px-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Leaf size={18} /></div>
-        {!collapsed ? <div className="min-w-0"><div className="font-semibold tracking-[-0.02em]">LifeTrace</div><div className="text-[11px] text-muted-foreground">Personal OS</div></div> : null}
+        {!collapsed ? <div className="min-w-0"><div className="font-semibold tracking-[-0.02em]">LifeTrace</div></div> : null}
       </div>
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 py-4" aria-label="主导航">
         {nav.map((group) => <div key={group.group} className="mb-5">

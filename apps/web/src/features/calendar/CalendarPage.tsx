@@ -143,7 +143,6 @@ export function CalendarPage() {
   return <div className="page-shell">
     <PageHeader
       title="日历"
-      description="Month / Week / Day / Agenda 四种视图；移动端默认 Agenda，避免强行压缩桌面月视图。"
       action={<Button onClick={() => setShowNew(true)}><Plus size={16} />新建日程</Button>}
     />
 
@@ -201,7 +200,7 @@ function WeekView({ days, items, onSelect, onSaveToNote }: { days: Date[]; items
 
 function DayView({ date, items, onSaveToNote }: { date: string; items: CalendarItem[]; onSaveToNote(id: string): void }) {
   const dayItems = items.filter((item) => item.date === date);
-  return <Card>{dayItems.length ? <div className="divide-y">{dayItems.map((item) => <CalendarRow key={`${item.kind}-${item.id}`} item={item} onSaveToNote={onSaveToNote} />)}</div> : <CardContent className="pt-5"><EmptyState title="今天没有安排" description="新建日程或为任务设置时间后会显示在这里。" /></CardContent>}</Card>;
+  return <Card>{dayItems.length ? <div className="divide-y">{dayItems.map((item) => <CalendarRow key={`${item.kind}-${item.id}`} item={item} onSaveToNote={onSaveToNote} />)}</div> : <CardContent className="pt-5"><EmptyState title="今天没有安排" /></CardContent>}</Card>;
 }
 
 function AgendaView({ items, onSaveToNote }: { items: CalendarItem[]; onSaveToNote(id: string): void }) {

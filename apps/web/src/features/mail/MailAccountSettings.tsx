@@ -202,7 +202,7 @@ export function MailAccountSettings({
     open={open}
     onOpenChange={onOpenChange}
     title="Mail 账号与 Identity"
-    description="邮箱密码/授权码只提交给 LifeTrace Cloud，浏览器不会持久化 IMAP/SMTP 凭据。"
+    description="凭据不会保存在浏览器中。"
   >
     <div className="space-y-6">
       {notice ? <div className="rounded-md border border-success/30 bg-success/10 p-3 text-xs">{notice}</div> : null}

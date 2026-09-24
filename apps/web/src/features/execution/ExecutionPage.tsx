@@ -89,7 +89,6 @@ export function ExecutionPage() {
   return <div className="page-shell">
     <PageHeader
       title="计划与待办"
-      description="Inbox → Today → Upcoming → Projects → Completed。页面结构参考 Shadcnblocks Todo，列表/详情层级参考 Catalyst。"
       action={<Button onClick={() => setParams({ new: "task" })}><Plus size={16} />新建任务</Button>}
     />
 
@@ -134,7 +133,7 @@ export function ExecutionPage() {
             <button className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", text(task, "status") === "done" && "border-primary bg-primary text-primary-foreground")} onClick={() => void toggle(task)} aria-label="切换完成状态">{text(task, "status") === "done" ? <Check size={13} /> : <Circle size={12} className="opacity-0" />}</button>
             <div className="min-w-0 flex-1"><div className={cn("text-sm font-medium", text(task, "status") === "done" && "text-muted-foreground line-through")}>{text(task, "title", "未命名任务")}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">{task.dueAt ? <span className="flex items-center gap-1"><Clock3 size={12} />{formatDateTime(task.dueAt)}</span> : null}<Badge className={text(task, "priority") === "urgent" ? "border-destructive/30 text-destructive" : ""}>{text(task, "priority", "normal")}</Badge>{task.projectId ? <span>{text(projects.find((item) => item.meta.id === task.projectId), "name", "项目")}</span> : null}</div></div>
             <Button size="icon" variant="ghost" className="opacity-60 sm:opacity-0 sm:group-hover:opacity-100" onClick={() => void remove("execution.task", task.meta.id)} aria-label="删除任务"><Trash2 size={15} /></Button>
-          </div>)}</div></Card> : <EmptyState title="这里还没有任务" description={view === "today" ? "把真正要做的事情安排到今天，避免 KPI 墙和无意义堆积。" : "新建任务后会自动出现在对应视图。"} action={<Button variant="outline" onClick={() => setParams({ new: "task" })}>添加任务</Button>} />}
+          </div>)}</div></Card> : <EmptyState title="这里还没有任务" action={<Button variant="outline" onClick={() => setParams({ new: "task" })}>添加任务</Button>} />}
         </Section>}
       </div>
 
@@ -162,7 +161,7 @@ function ProjectsView({ projects, tasks, showComposer, projectName, loading, onS
       const open = projectTasks.filter(isOpenExecutionTask).length;
       const done = projectTasks.filter((task) => text(task, "status") === "done").length;
       const total = open + done;
-      return <Card key={project.meta.id}><CardContent className="pt-5"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold">{text(project, "name", "Project")}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">{text(project, "description", "把相关任务聚合成一个持续推进的结果。")}</p></div><Badge>{open} open</Badge></div><div className="mt-4 flex items-center justify-between text-xs text-muted-foreground"><span>{done} 已完成 / {total} 总任务</span><Button size="sm" variant="ghost" onClick={() => onNewTask(project.meta.id)}><Plus size={13} />添加任务</Button></div></CardContent></Card>;
-    })}</div> : <EmptyState icon={<FolderKanban size={24} />} title="还没有 Project" description="用 Project 聚合同一目标下的任务，避免把所有事情塞进 Today。" action={<Button variant="outline" onClick={onShowComposer}>创建第一个 Project</Button>} />}
+      return <Card key={project.meta.id}><CardContent className="pt-5"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold">{text(project, "name", "Project")}</div>{text(project, "description") ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{text(project, "description")}</p> : null}</div><Badge>{open} open</Badge></div><div className="mt-4 flex items-center justify-between text-xs text-muted-foreground"><span>{done} 已完成 / {total} 总任务</span><Button size="sm" variant="ghost" onClick={() => onNewTask(project.meta.id)}><Plus size={13} />添加任务</Button></div></CardContent></Card>;
+    })}</div> : <EmptyState icon={<FolderKanban size={24} />} title="还没有 Project" action={<Button variant="outline" onClick={onShowComposer}>创建第一个 Project</Button>} />}
   </Section>;
 }

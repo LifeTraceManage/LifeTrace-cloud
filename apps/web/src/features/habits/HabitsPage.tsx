@@ -46,7 +46,6 @@ export function HabitsPage() {
   return <div className="page-shell">
     <PageHeader
       title="坚持"
-      description="今日打卡、streak、7/30 天完成率与 30 天 Heatmap。信息表达参考 Tremor，操作密度参考 Shadcnblocks。"
       action={<Button onClick={() => setShowNew(true)}><Plus size={16} />新建项目</Button>}
     />
 
@@ -84,6 +83,6 @@ export function HabitsPage() {
           <div className="grid grid-cols-10 gap-1">{days30.map((day) => <div key={day} title={`${day}${completedDates.has(day) ? " · 已完成" : ""}`} className={`aspect-square min-h-3 rounded-sm ${completedDates.has(day) ? "bg-primary" : "bg-muted"}`} />)}</div>
         </div>
       </CardContent></Card>;
-    })}</div> : <EmptyState title="还没有坚持项目" description="创建一个可以长期追踪、每天只需一次明确动作的项目。" action={<Button variant="outline" onClick={() => setShowNew(true)}>创建第一个项目</Button>} />}
+    })}</div> : <EmptyState title="还没有坚持项目" action={<Button variant="outline" onClick={() => setShowNew(true)}>创建第一个项目</Button>} />}
   </div>;
 }

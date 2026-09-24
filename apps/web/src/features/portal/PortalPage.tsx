@@ -41,11 +41,9 @@ export function PortalPage() {
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Leaf size={20} /></span>
             <div>
               <div className="text-lg font-semibold tracking-[-0.025em]">LifeTrace</div>
-              <div className="text-xs text-muted-foreground">Personal OS · Web Portal</div>
-            </div>
+              </div>
           </div>
           <h1 className="max-w-2xl text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">一个账号，进入不同工作区。</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">Notes、Mail 与 Execute 共用 LifeTrace 登录态和基础设计语言，但各自保持适合业务的独立界面，不再把所有功能挤在一个页面中。</p>
         </div>
         <div className="rounded-lg border bg-card px-4 py-3 text-sm">
           <div className="text-xs text-muted-foreground">当前账号</div>

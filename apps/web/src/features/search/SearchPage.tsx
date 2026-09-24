@@ -33,7 +33,7 @@ export function SearchPage() {
   const hits = useMemo(() => searchEntities(state, query), [state, query]);
 
   return <div className="page-shell">
-    <PageHeader title="全局搜索" description="跨任务、坚持、训练、交易、笔记、英语和复盘查询。" />
+    <PageHeader title="全局搜索" />
     <div className="mx-auto max-w-3xl">
       <Card>
         <CardContent className="pt-5">
@@ -42,7 +42,7 @@ export function SearchPage() {
             <Input autoFocus className="border-0 bg-muted/50 focus:ring-0" placeholder="输入关键词…" value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
           <div className="mt-4">
-            {query && !hits.length ? <EmptyState title="没有结果" description="尝试任务名、商户、笔记标题、正文或单词。" /> : hits.map((hit) => <button
+            {query && !hits.length ? <EmptyState title="没有结果" /> : hits.map((hit) => <button
               key={`${hit.entityType}-${hit.id}`}
               onClick={() => navigate(destination(hit))}
               className="mb-1 flex w-full items-start gap-3 rounded-md px-3 py-3 text-left hover:bg-muted"

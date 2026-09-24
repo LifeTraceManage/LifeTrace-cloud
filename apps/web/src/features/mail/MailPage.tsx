@@ -279,7 +279,6 @@ export function MailPage() {
 
   return <WorkspaceShell
     title="Mail"
-    description="统一邮箱工作区 · LifeTrace Cloud Mail"
     icon={<Mail size={17} />}
     action={<>
       <Button size="sm" variant="outline" onClick={() => setSettingsOpen(true)}><Settings size={14} /><span className="hidden sm:inline">设置</span></Button>
@@ -350,9 +349,9 @@ export function MailPage() {
               </button>
               <div className="mt-2 flex justify-end"><Button size="sm" variant="ghost" onClick={() => void deleteDraft(draft.id)}><Trash2 size={13} />删除草稿</Button></div>
             </div>)}
-            {!visibleDrafts.length ? <EmptyState icon={<FileText size={22} />} title="没有草稿" description="写邮件时点击“保存草稿”，草稿会保存在 LifeTrace Cloud。" /> : null}
+            {!visibleDrafts.length ? <EmptyState icon={<FileText size={22} />} title="没有草稿" /> : null}
           </> : <>
-            {runtimeReady && !listLoading && !messages.length ? <EmptyState icon={<MailOpen size={22} />} title={query ? "没有匹配的邮件" : `${current.label}为空`} description={query ? "换个关键词试试。" : "当前邮箱视图没有邮件。"} /> : null}
+            {runtimeReady && !listLoading && !messages.length ? <EmptyState icon={<MailOpen size={22} />} title={query ? "没有匹配的邮件" : `${current.label}为空`} /> : null}
             {messages.map((message) => <button key={message.id} onClick={() => selectMessage(message.id)} className={cn("mb-1 w-full rounded-md px-3 py-3 text-left transition-colors hover:bg-muted", selectedId === message.id && "bg-accent", !message.isRead && "font-medium")}>
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-xs">{addressesText(message.from) || "未知发件人"}</span>
@@ -418,7 +417,7 @@ export function MailPage() {
           <div className="max-w-md text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">{detailLoading ? <Loader2 size={21} className="animate-spin" /> : <Mail size={21} />}</div>
             <h2 className="mt-4 text-lg font-semibold">{runtimeReady ? mailbox === "drafts" ? "选择或新建草稿" : "选择一封邮件" : "LifeTrace Mail"}</h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">{runtimeReady ? mailbox === "drafts" ? "草稿保存在服务端，可从任意 LifeTrace Web 会话继续编辑。" : "从邮件列表选择一封邮件查看正文和 LifeTrace 联动操作。" : runtimeDescription}</p>
+            {!runtimeReady ? <p className="mt-2 text-sm leading-6 text-muted-foreground">{runtimeDescription}</p> : null}
           </div>
         </div>}
       </main>
