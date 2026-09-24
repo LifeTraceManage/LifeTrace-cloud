@@ -13,7 +13,6 @@ const FitnessPage = lazy(() => import("../features/fitness/FitnessPage").then((m
 const HealthPage = lazy(() => import("../features/health/HealthPage").then((module) => ({ default: module.HealthPage })));
 const NotesPage = lazy(() => import("../features/notes/NotesPage").then((module) => ({ default: module.NotesPage })));
 const MailPage = lazy(() => import("../features/mail/MailPage").then((module) => ({ default: module.MailPage })));
-const EnglishPage = lazy(() => import("../features/english/EnglishPage").then((module) => ({ default: module.EnglishPage })));
 const ReviewPage = lazy(() => import("../features/review/ReviewPage").then((module) => ({ default: module.ReviewPage })));
 const FinanceWorkspace = lazy(() => import("../features/finance/FinanceWorkspace").then((module) => ({ default: module.FinanceWorkspace })));
 const FinanceTransactionsPage = lazy(() => import("../features/finance/FinanceTransactionsPage").then((module) => ({ default: module.FinanceTransactionsPage })));
@@ -77,7 +76,6 @@ export const router = createBrowserRouter([
       { path: "fitness", element: withSuspense(<FitnessPage />) },
       { path: "health", element: withSuspense(<HealthPage />) },
       { path: "notes", element: <Navigate to="/notes" replace /> },
-      { path: "english/*", element: withSuspense(<EnglishPage />) },
       { path: "review", element: withSuspense(<ReviewPage />) },
       { path: "finance/transactions", element: withSuspense(<FinanceTransactionsPage />) },
       { path: "finance/*", element: withSuspense(<FinanceWorkspace />) },
