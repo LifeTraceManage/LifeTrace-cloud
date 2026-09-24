@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amountToCents, formatMoney, normalizeApiBase } from "../core";
+import { amountToCents, formatMoney, normalizeApiBase, REQUESTED_SCOPES } from "../core";
 
 describe("reused cloud contract helpers", () => {
   it("converts decimal money without floating point drift", () => {
@@ -9,4 +9,8 @@ describe("reused cloud contract helpers", () => {
   it("rejects over-precision", () => expect(() => amountToCents("1.234")).toThrow());
   it("supports privacy masking", () => expect(formatMoney(1234, "CNY", true)).toBe("••••"));
   it("normalizes API base URLs", () => expect(normalizeApiBase("https://example.test///")).toBe("https://example.test"));
+  it("requests entity-link scopes for web sync", () => {
+    expect(REQUESTED_SCOPES).toContain("links:read");
+    expect(REQUESTED_SCOPES).toContain("links:write");
+  });
 });
