@@ -107,7 +107,7 @@ async fn stats(
              FROM beecount_ledger_members m \
              JOIN beecount_shared_ledgers s ON s.ledger_id=m.ledger_id \
              WHERE m.user_id=$1 AND s.storage_user_id=e.user_id \
-               AND e.json_extract(payload, '$.beecountLedgerId')=m.ledger_id \
+               AND json_extract(e.payload, '$.beecountLedgerId')=m.ledger_id \
            ))",
     )
     .bind(actor_uuid)
