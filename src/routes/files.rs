@@ -394,8 +394,7 @@ fn validate_prepare(input: &mut PrepareRequest, max_file_bytes: i64) -> Result<(
         clean_text(&input.mime_type, 120, "application/octet-stream").to_ascii_lowercase();
     if input.size_bytes <= 0 || input.size_bytes > max_file_bytes {
         return Err(bad_request(format!(
-            "文件大小必须在 1..={} bytes",
-            max_file_bytes
+            "文件大小必须在 1..={max_file_bytes} bytes"
         )));
     }
     input.sha256 = input.sha256.trim().to_ascii_lowercase();
