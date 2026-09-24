@@ -254,7 +254,7 @@ export const REQUESTED_SCOPES = [
   "english:read", "english:write", "habits:read", "habits:write",
   "reviews:read", "reviews:write", "workouts:read", "workouts:write",
   "execution:read", "execution:write", "files:read", "files:write",
-  "mail:read", "mail:write",
+  "links:read", "links:write", "mail:read", "mail:write",
 ] as const;
 
 export const EMPTY_CLOUD_STATE: CloudState = { cursor: null, entities: {}, conflicts: [], lastLoadedAt: null };
