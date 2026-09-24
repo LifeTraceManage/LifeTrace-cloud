@@ -804,6 +804,7 @@ export function NotesPage() {
                 key={selected.meta.id}
                 value={content}
                 cacheKey={`lifetrace:notes:draft:${session?.user.id ?? "anonymous"}:${selected.meta.id}`}
+                legacyCacheKey={`lifetrace:vditor:${session?.user.id ?? "anonymous"}:${selected.meta.id}`}
                 cloudSaveRevision={cloudSavedNoteId === selected.meta.id ? cloudSaveRevision : 0}
                 wikiSuggestions={activeNotes
                   .filter((note) => note.meta.id !== selected.meta.id)

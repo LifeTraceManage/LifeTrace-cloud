@@ -21,6 +21,7 @@ export interface WikiSuggestion {
 export interface MarkdownEditorProps {
   value: string;
   cacheKey: string;
+  legacyCacheKey?: string;
   cloudSaveRevision: number;
   wikiSuggestions?: WikiSuggestion[];
   onChange(value: string): void;
@@ -32,12 +33,36 @@ function draftKey(cacheKey: string) {
   return cacheKey + ":markdown";
 }
 
-function readDraft(cacheKey: string): Draft | null {
+function readDraft(cacheKey: string, legacyCacheKey?: string): Draft | null {
   try {
     const raw = localStorage.getItem(draftKey(cacheKey));
-    return raw ? JSON.parse(raw) as Draft : null;
+    if (raw) return JSON.parse(raw) as Draft;
+
+    if (!legacyCacheKey) return null;
+    const legacyMetaRaw = localStorage.getItem(legacyCacheKey + ":meta");
+    const legacyMeta = legacyMetaRaw
+      ? JSON.parse(legacyMetaRaw) as { dirty?: boolean; updatedAt?: string }
+      : null;
+    const legacyValue = localStorage.getItem(legacyCacheKey);
+    if (!legacyMeta?.dirty || legacyValue === null) return null;
+
+    return {
+      value: legacyValue,
+      dirty: true,
+      updatedAt: legacyMeta.updatedAt ?? new Date().toISOString(),
+    };
   } catch {
     return null;
+  }
+}
+
+function clearLegacyDraft(legacyCacheKey?: string) {
+  if (!legacyCacheKey) return;
+  try {
+    localStorage.removeItem(legacyCacheKey);
+    localStorage.removeItem(legacyCacheKey + ":meta");
+  } catch {
+    // Ignore browser storage failures.
   }
 }
 
@@ -132,6 +157,7 @@ function ToolButton({
 export function MarkdownEditor({
   value,
   cacheKey,
+  legacyCacheKey,
   cloudSaveRevision,
   wikiSuggestions = [],
   onChange,
@@ -157,7 +183,7 @@ export function MarkdownEditor({
     const host = hostRef.current;
     if (!host) return;
 
-    const cached = readDraft(cacheKey);
+    const cached = readDraft(cacheKey, legacyCacheKey);
     const initialValue = cached?.dirty ? cached.value : valueRef.current;
 
     function wikiCompletion(context: CompletionContext) {
@@ -241,7 +267,7 @@ export function MarkdownEditor({
       editor.destroy();
       editorRef.current = null;
     };
-  }, [cacheKey]);
+  }, [cacheKey, legacyCacheKey]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -259,7 +285,8 @@ export function MarkdownEditor({
   useEffect(() => {
     if (!cloudSaveRevision) return;
     writeDraft(cacheKey, valueRef.current, false);
-  }, [cacheKey, cloudSaveRevision]);
+    clearLegacyDraft(legacyCacheKey);
+  }, [cacheKey, cloudSaveRevision, legacyCacheKey]);
 
   function wrapSelection(prefix: string, suffix = prefix, placeholder = "文本") {
     const editor = editorRef.current;
