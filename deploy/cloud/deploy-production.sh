@@ -21,10 +21,10 @@ docker compose version >/dev/null 2>&1 || {
 cd "${SCRIPT_DIR}"
 compose=(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}")
 
-echo "[LifeTrace deploy] pulling prebuilt LifeTrace image"
-if ! "${compose[@]}" pull lifetrace; then
+echo "[LifeTrace deploy] pulling Cloud and Web images"
+if ! "${compose[@]}" pull cloud web; then
   echo "[LifeTrace deploy] image pull failed." >&2
-  echo "[LifeTrace deploy] if the GHCR package is private, login first:" >&2
+  echo "[LifeTrace deploy] if a GHCR package is private, login first:" >&2
   echo "  echo <GITHUB_TOKEN> | docker login ghcr.io -u <GITHUB_USER> --password-stdin" >&2
   exit 1
 fi
