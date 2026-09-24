@@ -1491,13 +1491,15 @@ impl MailService {
         match protocol::send_mail(
             &account,
             &secret,
-            from_address,
-            from_name,
-            reply_to_address,
             &input,
-            &message_id,
-            in_reply_to.as_deref(),
-            &attachments,
+            protocol::SendMailOptions {
+                from_address,
+                from_name,
+                reply_to_address,
+                message_id: &message_id,
+                in_reply_to: in_reply_to.as_deref(),
+                attachments: &attachments,
+            },
         )
         .await
         {
