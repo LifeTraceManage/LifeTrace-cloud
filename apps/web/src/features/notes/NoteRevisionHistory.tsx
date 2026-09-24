@@ -25,7 +25,7 @@ export function NoteRevisionHistory({
     open={open}
     onOpenChange={onOpenChange}
     title="版本历史"
-    description="每次成功保存新内容前，LifeTrace 会保留上一份已保存版本。恢复版本不会改变当前 Folder、Tags 或收藏状态。"
+    description="恢复不会改变文件夹、标签或收藏。"
   >
     {values.length ? <div className="max-h-[60vh] space-y-2 overflow-y-auto">
       {values.map((revision) => <div key={revision.meta.id} className="rounded-md border bg-card p-3">
@@ -47,7 +47,6 @@ export function NoteRevisionHistory({
     </div> : <EmptyState
       icon={<History size={22} />}
       title="还没有历史版本"
-      description="修改并成功保存后，会自动保留之前的内容。"
     />}
   </Dialog>;
 }
