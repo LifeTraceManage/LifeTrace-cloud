@@ -821,7 +821,7 @@ impl MailService {
             .execute(&self.pool)
             .await?;
         refresh_thread_pool(&self.pool, remote.thread_id).await?;
-        let _ = self.sync_account_uuid(user_id, remote.account_id).await;
+        let _ = self.sync_account_uuid(user_id, remote.account_id, false).await;
         Ok(())
     }
 
