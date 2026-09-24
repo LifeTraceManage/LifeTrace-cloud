@@ -87,7 +87,7 @@ impl MailService {
 
     fn resolve_input(input: &MailAccountInput) -> Result<ResolvedAccount, MailServiceError> {
         let email = input.email_address.trim().to_ascii_lowercase();
-        if email.is_empty() || !email.contains('@') || input.authorization_code.is_empty() {
+        if email.is_empty() || !email.contains('@') || input.authorization_code.trim().is_empty() {
             return Err(MailServiceError::InvalidAccount);
         }
         let username = input
@@ -153,7 +153,7 @@ impl MailService {
         let resolved = Self::resolve_input(&input)?;
         let cipher = CredentialCipher::from_config(&self.config)?;
         let (credential_ciphertext, credential_nonce) =
-            cipher.encrypt(&input.authorization_code)?;
+            cipher.encrypt(input.authorization_code.trim())?;
         let id = Uuid::new_v4();
         sqlx::query(
             r#"
@@ -284,6 +284,8 @@ impl MailService {
         let smtp_probe = protocol::probe_smtp(&account, &secret).await;
         let imap_ok = imap_probe.is_ok();
         let smtp_ok = smtp_probe.is_ok();
+        let imap_error = imap_probe.as_ref().err().map(ToString::to_string);
+        let smtp_error = smtp_probe.as_ref().err().map(ToString::to_string);
         let (idle_supported, folders) = match imap_probe {
             Ok(value) => (value.idle_supported, value.folders),
             Err(_) => (false, Vec::new()),
@@ -324,6 +326,8 @@ impl MailService {
             smtp_ok,
             idle_supported,
             folders,
+            imap_error,
+            smtp_error,
         })
     }
 
