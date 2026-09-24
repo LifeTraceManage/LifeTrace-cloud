@@ -152,6 +152,8 @@ interface RawAttachment {
   filename?: string | null;
   mimeType?: string | null;
   sizeBytes?: number | null;
+  contentId?: string | null;
+  disposition?: string | null;
 }
 
 interface RawDraft {
@@ -384,6 +386,8 @@ export class MailApi {
       filename: item.filename || "attachment",
       contentType: item.mimeType,
       sizeBytes: item.sizeBytes,
+      contentId: item.contentId,
+      disposition: item.disposition,
       downloadUrl: apiUrl(`/api/v1/mail/attachments/${encodeURIComponent(item.id)}/content`),
     }));
     return {
