@@ -97,6 +97,7 @@ async fn one_account_can_keep_lifetrace_and_beecount_sessions_active_together() 
         .await
         .unwrap();
     let canonical_user_id = native.user.id.as_str().to_owned();
+    let canonical_user_uuid = Uuid::parse_str(&canonical_user_id).unwrap();
     let native_access_token = native.access_token.clone();
 
     // Log into the BeeCount compatibility surface with the exact same email
@@ -148,7 +149,7 @@ async fn one_account_can_keep_lifetrace_and_beecount_sessions_active_together() 
     assert_eq!(bee_profile["user_id"], canonical_user_id);
 
     let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cloud_users WHERE id=$1")
-        .bind(&canonical_user_id)
+        .bind(canonical_user_uuid)
         .fetch_one(&state.pool)
         .await
         .unwrap();
@@ -158,7 +159,7 @@ async fn one_account_can_keep_lifetrace_and_beecount_sessions_active_together() 
         "SELECT app_id,status FROM auth_sessions \
          WHERE user_id=$1 AND status='active' ORDER BY app_id",
     )
-    .bind(&canonical_user_id)
+    .bind(canonical_user_uuid)
     .fetch_all(&state.pool)
     .await
     .unwrap();
