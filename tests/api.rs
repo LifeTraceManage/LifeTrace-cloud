@@ -598,11 +598,14 @@ async fn snapshot_is_consistent_and_follow_up_pull_has_no_gaps() {
 #[tokio::test]
 async fn expired_cursor_requires_snapshot() {
     let config = Config {
+        database_path: ":memory:".to_owned(),
         dev_auth_token: TOKEN_A.to_owned(),
         retention_entries: 1,
         ..Config::default()
     };
-    let app = app(AppState::new(config));
+    let state = AppState::new(config);
+    state.initialize().await.unwrap();
+    let app = app(state);
     let (_, first) = send(
         app.clone(),
         Method::POST,
