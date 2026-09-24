@@ -79,7 +79,7 @@ export function NoteFolderSettings({
     open={open}
     onOpenChange={onOpenChange}
     title="文件夹设置"
-    description="调整名称或父级。删除文件夹时，笔记和直接子目录会迁移到它的父级，不会删除笔记内容。"
+    description="删除文件夹不会删除笔记。"
   >
     {folder ? <div className="space-y-4">
       <label className="block space-y-1.5 text-xs font-medium">名称
