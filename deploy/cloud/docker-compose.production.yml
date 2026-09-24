@@ -2,7 +2,10 @@ name: lifetrace
 
 services:
   cloud:
-    image: ${LIFETRACE_CLOUD_IMAGE:-ghcr.io/lifetracemanage/lifetrace-cloud:main}
+    image: ${LIFETRACE_CLOUD_IMAGE:-lifetrace-cloud:local}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
     restart: unless-stopped
     env_file: .env.production
     environment:
@@ -30,7 +33,10 @@ services:
       start_period: 5s
 
   web:
-    image: ${LIFETRACE_WEB_IMAGE:-ghcr.io/lifetracemanage/lifetrace-web-app:main}
+    image: ${LIFETRACE_WEB_IMAGE:-lifetrace-web-app:local}
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
     restart: unless-stopped
     depends_on:
       cloud:
