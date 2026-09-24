@@ -137,7 +137,9 @@ export function MailAccountSettings({
     try {
       if (action === "test") {
         const result = await onTest(id);
-        setNotice(`连接测试：IMAP ${result.imapOk ? "正常" : "失败"}，SMTP ${result.smtpOk ? "正常" : "失败"}，发现 ${result.folders.length} 个文件夹。`);
+        const imap = result.imapOk ? "正常" : `失败（${result.imapError || "未知错误"}）`;
+        const smtp = result.smtpOk ? "正常" : `失败（${result.smtpError || "未知错误"}）`;
+        setNotice(`连接测试：IMAP ${imap}，SMTP ${smtp}，发现 ${result.folders.length} 个文件夹。`);
       } else if (action === "sync") {
         const result = await onSync(id);
         setNotice(`同步完成，本轮写入/更新 ${result.syncedMessages} 封邮件。`);
