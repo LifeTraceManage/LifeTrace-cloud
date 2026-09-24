@@ -115,7 +115,7 @@ cargo run --manifest-path tools/contract-exporter/Cargo.toml
 Web 与 Cloud 源码仍然位于同一个仓库，但 GitHub Actions 独立构建两个镜像：
 
 ```text
-ghcr.io/lifetracemanage/lifetrace-web:main
+ghcr.io/lifetracemanage/lifetrace-web-app:main
 ghcr.io/lifetracemanage/lifetrace-cloud:main
 ```
 
@@ -164,7 +164,7 @@ docker compose --env-file .env.production \
 可以分别固定 Web/Cloud 到不同 SHA，独立升级和回滚：
 
 ```text
-LIFETRACE_WEB_IMAGE=ghcr.io/lifetracemanage/lifetrace-web:sha-<commit>
+LIFETRACE_WEB_IMAGE=ghcr.io/lifetracemanage/lifetrace-web-app:sha-<commit>
 LIFETRACE_CLOUD_IMAGE=ghcr.io/lifetracemanage/lifetrace-cloud:sha-<commit>
 ```
 
