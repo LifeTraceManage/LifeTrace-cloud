@@ -90,13 +90,25 @@ impl MailService {
         if email.is_empty() || !email.contains('@') || input.authorization_code.trim().is_empty() {
             return Err(MailServiceError::InvalidAccount);
         }
-        let username = input
-            .username
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(&email)
-            .to_owned();
+        let username = if matches!(
+            input.provider,
+            super::domain::MailProvider::NetEase126
+                | super::domain::MailProvider::NetEase163
+                | super::domain::MailProvider::Yeah
+        ) {
+            // NetEase SMTP expects the complete mailbox address as the login
+            // name. Keep presets deterministic even if a user entered only
+            // the local part in the optional username field.
+            email.clone()
+        } else {
+            input
+                .username
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or(&email)
+                .to_owned()
+        };
         let preset = provider_preset(&input.provider);
         let imap_host = input
             .imap_host
@@ -243,7 +255,7 @@ impl MailService {
         user_id: Uuid,
         account_id: Uuid,
     ) -> Result<MailAccountSecret, MailServiceError> {
-        sqlx::query_as::<_, MailAccountSecret>(
+        let mut account = sqlx::query_as::<_, MailAccountSecret>(
             r#"
             SELECT id,user_id,provider,email_address,display_name,
                    imap_host,imap_port,imap_security,smtp_host,smtp_port,smtp_security,
@@ -256,7 +268,12 @@ impl MailService {
         .bind(account_id)
         .fetch_optional(&self.pool)
         .await?
-        .ok_or(MailServiceError::AccountNotFound)
+        .ok_or(MailServiceError::AccountNotFound)?;
+
+        if matches!(account.provider.as_str(), "126" | "163" | "yeah") {
+            account.username = account.email_address.clone();
+        }
+        Ok(account)
     }
 
     fn decrypt_secret(&self, account: &MailAccountSecret) -> Result<String, MailServiceError> {
