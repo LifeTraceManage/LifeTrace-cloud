@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Home, ArrowRight, Leaf, Mail, NotebookPen } from "lucide-react";
 import { useApp } from "../../app/AppContext";
-import { Badge, Card, CardContent, cn } from "../../components/ui";
+import { Card, CardContent, cn } from "../../components/ui";
 
 const modules = [
   {
@@ -9,23 +9,20 @@ const modules = [
     name: "Notes",
     description: "Markdown 笔记、Folder/Tags、Wiki Link、Backlinks、附件、标签页与命令面板，数据统一同步到 LifeTrace Cloud。",
     icon: NotebookPen,
-    status: "Knowledge Core",
     accent: "text-primary",
   },
   {
     to: "/mail",
     name: "Mail",
-    description: "多邮箱统一工作区，支持 IMAP/SMTP 同步、搜索、草稿、Identity、附件以及 Mail → Notes / Execute 联动。",
+    description: "收发、搜索与管理邮件。",
     icon: Mail,
-    status: "Cloud Mail",
     accent: "text-info",
   },
   {
     to: "/app/today",
     name: "Execute",
-    description: "进入现有 LifeTrace 执行工作台，继续管理任务、日历、习惯与其他生活数据。",
+    description: "任务、日历与日常执行。",
     icon: Home,
-    status: "现有工作台",
     accent: "text-warning",
   },
 ] as const;
@@ -56,17 +53,13 @@ export function PortalPage() {
           <div className="eyebrow">Workspaces</div>
           <h2 className="mt-1 text-lg font-semibold">选择工作区</h2>
         </div>
-        <Badge>统一 Session</Badge>
       </div>
 
       <section className="grid gap-4 md:grid-cols-3">
-        {modules.map(({ to, name, description, icon: Icon, status, accent }) => <Link key={to} to={to} className="group block">
+        {modules.map(({ to, name, description, icon: Icon, accent }) => <Link key={to} to={to} className="group block">
           <Card className="h-full transition-colors group-hover:border-primary/35 group-hover:bg-accent/25">
             <CardContent className="flex h-full flex-col pt-5">
-              <div className="flex items-start justify-between gap-3">
-                <span className={cn("flex h-10 w-10 items-center justify-center rounded-lg bg-muted", accent)}><Icon size={19} /></span>
-                <Badge>{status}</Badge>
-              </div>
+              <span className={cn("flex h-10 w-10 items-center justify-center rounded-lg bg-muted", accent)}><Icon size={19} /></span>
               <div className="mt-5 text-lg font-semibold tracking-[-0.02em]">{name}</div>
               <p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">{description}</p>
               <div className="mt-6 flex items-center gap-2 text-sm font-medium text-primary">打开 {name}<ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" /></div>
