@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_RAW_BASE="https://raw.githubusercontent.com/LifeTraceManage/LifeTrace-cloud"
+REPO_URL="https://github.com/LifeTraceManage/LifeTrace-cloud.git"
 REF="${LIFETRACE_REF:-main}"
 INSTALL_DIR="${LIFETRACE_INSTALL_DIR:-$HOME/lifetrace}"
 BASE_URL="${PUBLIC_WEB_BASE_URL:-}"
-IMAGE_TAG="${LIFETRACE_IMAGE_TAG:-main}"
 SKIP_VERIFY="false"
 
 usage() {
   cat <<'EOF'
-LifeTrace one-command installer
+LifeTrace local-build installer
 
 Usage:
   install.sh --base-url http://YOUR_SERVER_IP [options]
@@ -18,13 +17,13 @@ Usage:
 Options:
   --base-url URL   Public URL used by LifeTrace auth/CORS (required on first install)
   --dir PATH       Install directory (default: ~/lifetrace)
-  --tag TAG        Image tag for both Web and Cloud (default: main; e.g. sha-abcdef0)
-  --ref REF        Git ref used to download deployment files (default: main)
-  --skip-verify    Start services without running verify-production.sh
+  --ref REF        Git branch/tag/commit to deploy (default: main)
+  --skip-verify    Build and start services without running verify-production.sh
+  --tag TAG        Deprecated compatibility option; ignored in local-build mode
   -h, --help       Show this help
 
 Environment equivalents:
-  PUBLIC_WEB_BASE_URL, LIFETRACE_INSTALL_DIR, LIFETRACE_IMAGE_TAG, LIFETRACE_REF
+  PUBLIC_WEB_BASE_URL, LIFETRACE_INSTALL_DIR, LIFETRACE_REF
 EOF
 }
 
@@ -36,12 +35,13 @@ while [[ $# -gt 0 ]]; do
     --dir)
       [[ $# -ge 2 ]] || { echo "[LifeTrace install] --dir requires a value" >&2; exit 2; }
       INSTALL_DIR="$2"; shift 2 ;;
-    --tag)
-      [[ $# -ge 2 ]] || { echo "[LifeTrace install] --tag requires a value" >&2; exit 2; }
-      IMAGE_TAG="$2"; shift 2 ;;
     --ref)
       [[ $# -ge 2 ]] || { echo "[LifeTrace install] --ref requires a value" >&2; exit 2; }
       REF="$2"; shift 2 ;;
+    --tag)
+      [[ $# -ge 2 ]] || { echo "[LifeTrace install] --tag requires a value" >&2; exit 2; }
+      echo "[LifeTrace install] --tag is ignored; production images are built locally."
+      shift 2 ;;
     --skip-verify)
       SKIP_VERIFY="true"; shift ;;
     -h|--help)
@@ -53,8 +53,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-command -v curl >/dev/null 2>&1 || {
-  echo "[LifeTrace install] curl is required" >&2
+command -v git >/dev/null 2>&1 || {
+  echo "[LifeTrace install] git is required" >&2
   exit 1
 }
 command -v docker >/dev/null 2>&1 || {
@@ -65,7 +65,6 @@ docker compose version >/dev/null 2>&1 || {
   echo "[LifeTrace install] Docker Compose v2 is required" >&2
   exit 1
 }
-
 if ! docker info >/dev/null 2>&1; then
   echo "[LifeTrace install] current user cannot access the Docker daemon." >&2
   echo "[LifeTrace install] configure Docker permissions or run this installer as a user with Docker access." >&2
@@ -79,24 +78,27 @@ fi
 
 mkdir -p "$INSTALL_DIR"
 INSTALL_DIR="$(cd -- "$INSTALL_DIR" && pwd)"
-ENV_FILE="$INSTALL_DIR/.env.production"
-COMPOSE_FILE="$INSTALL_DIR/docker-compose.production.yml"
-DEPLOY_FILE="$INSTALL_DIR/deploy-production.sh"
-VERIFY_FILE="$INSTALL_DIR/verify-production.sh"
+SOURCE_DIR="$INSTALL_DIR/source"
 
-download() {
-  local path="$1"
-  local target="$2"
-  local url="$REPO_RAW_BASE/$REF/deploy/cloud/$path"
-  echo "[LifeTrace install] downloading $path"
-  curl --fail --silent --show-error --location "$url" --output "$target.tmp"
-  mv "$target.tmp" "$target"
-}
+if [[ -d "$SOURCE_DIR/.git" ]]; then
+  echo "[LifeTrace install] updating source: $REF"
+  git -C "$SOURCE_DIR" fetch --depth 1 origin "$REF"
+  git -C "$SOURCE_DIR" checkout --detach FETCH_HEAD
+  git -C "$SOURCE_DIR" reset --hard FETCH_HEAD
+else
+  if [[ -e "$SOURCE_DIR" ]]; then
+    echo "[LifeTrace install] $SOURCE_DIR exists but is not a git repository" >&2
+    exit 1
+  fi
+  echo "[LifeTrace install] cloning source: $REF"
+  git clone --depth 1 --branch "$REF" "$REPO_URL" "$SOURCE_DIR"
+fi
 
-download "docker-compose.production.yml" "$COMPOSE_FILE"
-download "deploy-production.sh" "$DEPLOY_FILE"
-download "verify-production.sh" "$VERIFY_FILE"
-chmod +x "$DEPLOY_FILE" "$VERIFY_FILE"
+SCRIPT_DIR="$SOURCE_DIR/deploy/cloud"
+ENV_FILE="$SCRIPT_DIR/.env.production"
+LEGACY_ENV_FILE="$INSTALL_DIR/.env.production"
+DEPLOY_FILE="$SCRIPT_DIR/deploy-production.sh"
+VERIFY_FILE="$SCRIPT_DIR/verify-production.sh"
 
 random_secret() {
   if command -v openssl >/dev/null 2>&1; then
@@ -108,6 +110,11 @@ random_secret() {
     return 1
   fi
 }
+
+if [[ ! -f "$ENV_FILE" && -f "$LEGACY_ENV_FILE" ]]; then
+  cp "$LEGACY_ENV_FILE" "$ENV_FILE"
+  echo "[LifeTrace install] migrated existing environment from $LEGACY_ENV_FILE"
+fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
   [[ -n "$BASE_URL" ]] || {
@@ -130,30 +137,47 @@ PUBLIC_WEB_BASE_URL=$BASE_URL
 CORS_ALLOWED_ORIGINS=$BASE_URL
 AUTH_COOKIE_SECURE=$cookie_secure
 
-LIFETRACE_WEB_IMAGE=ghcr.io/lifetracemanage/lifetrace-web-app:$IMAGE_TAG
-LIFETRACE_CLOUD_IMAGE=ghcr.io/lifetracemanage/lifetrace-cloud:$IMAGE_TAG
+LIFETRACE_WEB_IMAGE=lifetrace-web-app:local
+LIFETRACE_CLOUD_IMAGE=lifetrace-cloud:local
 
 # Optional Mail aggregation:
 # MAIL_CREDENTIAL_KEY=
 EOF
   echo "[LifeTrace install] created $ENV_FILE with generated secrets"
 else
-  echo "[LifeTrace install] preserving existing $ENV_FILE"
-  if [[ "$IMAGE_TAG" != "main" ]]; then
-    echo "[LifeTrace install] note: existing env controls image tags; --tag is only written on first install."
+  echo "[LifeTrace install] preserving existing secrets in $ENV_FILE"
+fi
+
+set_env_value() {
+  local key="$1"
+  local value="$2"
+  if grep -q "^$key=" "$ENV_FILE"; then
+    sed -i "s|^$key=.*|$key=$value|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value" >>"$ENV_FILE"
+  fi
+}
+
+# Local-build mode must never depend on GHCR at runtime.
+set_env_value "LIFETRACE_WEB_IMAGE" "lifetrace-web-app:local"
+set_env_value "LIFETRACE_CLOUD_IMAGE" "lifetrace-cloud:local"
+
+if [[ -n "$BASE_URL" ]]; then
+  set_env_value "PUBLIC_WEB_BASE_URL" "$BASE_URL"
+  set_env_value "CORS_ALLOWED_ORIGINS" "$BASE_URL"
+  if [[ "$BASE_URL" == https://* ]]; then
+    set_env_value "AUTH_COOKIE_SECURE" "true"
+  else
+    set_env_value "AUTH_COOKIE_SECURE" "false"
   fi
 fi
 
-echo "[LifeTrace install] install directory: $INSTALL_DIR"
-cd "$INSTALL_DIR"
+chmod 600 "$ENV_FILE"
+chmod +x "$DEPLOY_FILE" "$VERIFY_FILE"
 
-if ! "$DEPLOY_FILE"; then
-  echo >&2
-  echo "[LifeTrace install] deployment failed." >&2
-  echo "[LifeTrace install] if GHCR images are private, authenticate and retry:" >&2
-  echo "  echo <GITHUB_TOKEN> | docker login ghcr.io -u <GITHUB_USER> --password-stdin" >&2
-  exit 1
-fi
+echo "[LifeTrace install] source directory: $SOURCE_DIR"
+echo "[LifeTrace install] building Web and Cloud locally"
+"$DEPLOY_FILE" all
 
 if [[ "$SKIP_VERIFY" != "true" ]]; then
   "$VERIFY_FILE"
@@ -161,6 +185,6 @@ fi
 
 echo
 echo "[LifeTrace install] deployment complete"
-echo "  URL: ${BASE_URL:-$(grep '^PUBLIC_WEB_BASE_URL=' "$ENV_FILE" | cut -d= -f2-)}"
-echo "  Dir: $INSTALL_DIR"
+echo "  URL: $(grep '^PUBLIC_WEB_BASE_URL=' "$ENV_FILE" | cut -d= -f2-)"
+echo "  Source: $SOURCE_DIR"
 echo "  Data: Docker volume lifetrace_lifetrace_data"
