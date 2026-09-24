@@ -4,6 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env.production"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.production.yml"
+TARGET="${1:-all}"
 
 command -v docker >/dev/null 2>&1 || {
   echo "[LifeTrace deploy] docker is required" >&2
@@ -18,16 +19,22 @@ docker compose version >/dev/null 2>&1 || {
   exit 1
 }
 
+case "${TARGET}" in
+  all) build_services=(cloud web) ;;
+  cloud) build_services=(cloud) ;;
+  web) build_services=(web) ;;
+  *)
+    echo "[LifeTrace deploy] usage: $0 [all|cloud|web]" >&2
+    exit 2
+    ;;
+esac
+
 cd "${SCRIPT_DIR}"
 compose=(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}")
 
-echo "[LifeTrace deploy] pulling Cloud and Web images"
-if ! "${compose[@]}" pull cloud web; then
-  echo "[LifeTrace deploy] image pull failed." >&2
-  echo "[LifeTrace deploy] if a GHCR package is private, login first:" >&2
-  echo "  echo <GITHUB_TOKEN> | docker login ghcr.io -u <GITHUB_USER> --password-stdin" >&2
-  exit 1
-fi
+echo "[LifeTrace deploy] building local image(s): ${build_services[*]}"
+"${compose[@]}" build "${build_services[@]}"
 
-"${compose[@]}" up -d --remove-orphans --wait
+echo "[LifeTrace deploy] starting LifeTrace with local images only"
+"${compose[@]}" up -d --remove-orphans --wait --pull never
 "${compose[@]}" ps
