@@ -193,7 +193,11 @@ amountCents: bigint, currency: CurrencyCode, };
 
 export type Note = { meta: EntityMeta, title: string | null, noteType: NoteType, folderId: EntityId | null, contentJson: JsonValue, contentHtml: string, contentText: string, contentMarkdown: string, summary: string, isPinned: boolean, isFavorite: boolean, isArchived: boolean, aiSummary: string | null, aiTags: string | null, embeddingStatus: string | null, lastAiProcessedAt: string | null, };
 
-export type NoteFolder = { meta: EntityMeta, name: string, icon: string, color: string, sortOrder: bigint, };
+export type NoteFolder = { meta: EntityMeta, name: string, icon: string, color: string, 
+/**
+ * Optional parent folder for hierarchical Notes organization.
+ */
+parentFolderId: EntityId | null, sortOrder: bigint, };
 
 export type NoteRelation = { meta: EntityMeta, noteId: EntityId, entityType: EntityType, entityId: EntityId, relationType: string, };
 
