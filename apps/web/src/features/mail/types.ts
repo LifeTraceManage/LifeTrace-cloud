@@ -166,4 +166,6 @@ export interface MailConnectionTest {
   smtpOk: boolean;
   idleSupported: boolean;
   folders: string[];
+  imapError?: string | null;
+  smtpError?: string | null;
 }
