@@ -8,7 +8,7 @@ use lifetrace_contracts::sync::v1::AppId;
 use lifetrace_contracts::{ErrorCode, UserId};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx::{SqlitePool, Sqlite, Row, Transaction};
+use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
 use crate::auth::password::PasswordManager;
@@ -309,7 +309,8 @@ impl AuthService {
         let password_hash = self.passwords.hash(password)?;
         let user_id = Uuid::new_v4();
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
-        self.consume_invite(&mut tx, invite_token, &normalized).await?;
+        self.consume_invite(&mut tx, invite_token, &normalized)
+            .await?;
         let inserted = sqlx::query(
             "INSERT INTO cloud_users (id,status,email,email_normalized,display_name,password_hash,password_version,password_changed_at,registration_source,auth_state) \
              VALUES ($1,'active',$2,$3,$4,$5,1,CURRENT_TIMESTAMP,$6,'active') ON CONFLICT (email_normalized) DO NOTHING"
@@ -804,8 +805,9 @@ impl AuthService {
                 StatusCode::UNAUTHORIZED,
             ));
         }
-        let grant_scopes: BTreeSet<String> =
-            Self::decode_scopes(&row, "grant_scopes").into_iter().collect();
+        let grant_scopes: BTreeSet<String> = Self::decode_scopes(&row, "grant_scopes")
+            .into_iter()
+            .collect();
         let scopes: Vec<String> = Self::decode_scopes(&row, "scopes")
             .into_iter()
             .filter(|value| grant_scopes.contains(value))
@@ -939,7 +941,7 @@ impl AuthService {
     }
 
     pub async fn me(&self, principal: &AuthenticatedPrincipal) -> Result<AuthUserV1, ApiError> {
-        self.user_by_id(Self(
+        self.user_by_id(Self::uuid(
             principal.user_id.as_str(),
             ErrorCode::AuthInvalid,
         )?)
@@ -951,7 +953,7 @@ impl AuthService {
         principal: &AuthenticatedPrincipal,
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
-        let session_id = Self(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
+        let session_id = Self::uuid(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
         self.revoke_session_internal(session_id, "logout", context)
             .await?;
         Ok(AcceptedResponseV1 { accepted: true })
@@ -962,7 +964,7 @@ impl AuthService {
         principal: &AuthenticatedPrincipal,
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
         sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='logout_all' WHERE user_id=$1 AND status='active'").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
         sqlx::query("UPDATE auth_access_tokens SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='logout_all' WHERE session_id IN (SELECT id FROM auth_sessions WHERE user_id=$1)").bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
@@ -1023,8 +1025,8 @@ impl AuthService {
         principal: &AuthenticatedPrincipal,
     ) -> Result<SessionListV1, ApiError> {
         principal.require_scope("sessions:read")?;
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
-        let current = Self(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let current = Self::uuid(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
         let rows =
             sqlx::query("SELECT id FROM auth_sessions WHERE user_id=$1 ORDER BY created_at DESC")
                 .bind(user_id)
@@ -1048,8 +1050,8 @@ impl AuthService {
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
         principal.require_scope("sessions:write")?;
-        let session_id = Self(session, ErrorCode::InvalidRequest)?;
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let session_id = Self::uuid(session, ErrorCode::InvalidRequest)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let owner: Option<Uuid> =
             sqlx::query_scalar("SELECT user_id FROM auth_sessions WHERE id=$1")
                 .bind(session_id)
@@ -1073,8 +1075,8 @@ impl AuthService {
         principal: &AuthenticatedPrincipal,
     ) -> Result<DeviceListV1, ApiError> {
         principal.require_scope("devices:read")?;
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
-        let current = Self(principal.device_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let current = Self::uuid(principal.device_id.as_str(), ErrorCode::AuthInvalid)?;
         let rows = sqlx::query(
             "SELECT id,external_device_id,device_group_id,device_name,app_id,platform,status,client_version,first_seen_at,last_seen_at,last_login_at,last_sync_at,revoked_at FROM cloud_devices WHERE user_id=$1 ORDER BY last_seen_at DESC"
         ).bind(user_id).fetch_all(&self.pool).await.map_err(Self::db)?;
@@ -1118,8 +1120,8 @@ impl AuthService {
                 StatusCode::BAD_REQUEST,
             ));
         }
-        let device_id = Self(device, ErrorCode::InvalidRequest)?;
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let device_id = Self::uuid(device, ErrorCode::InvalidRequest)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let updated = sqlx::query(
             "UPDATE cloud_devices SET device_name=$3 WHERE id=$1 AND user_id=$2 RETURNING id",
         )
@@ -1156,8 +1158,8 @@ impl AuthService {
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
         principal.require_scope("devices:write")?;
-        let device_id = Self(device, ErrorCode::InvalidRequest)?;
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let device_id = Self::uuid(device, ErrorCode::InvalidRequest)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
         let changed = sqlx::query("UPDATE cloud_devices SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='user_revoke' WHERE id=$1 AND user_id=$2").bind(device_id).bind(user_id).execute(&mut *tx).await.map_err(Self::db)?;
         if changed.rows_affected() == 0 {
@@ -1205,7 +1207,7 @@ impl AuthService {
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
         principal.require_scope("devices:write")?;
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
         let rows = sqlx::query("UPDATE cloud_devices SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='group_revoke' WHERE user_id=$1 AND device_group_id=$2 RETURNING id").bind(user_id).bind(group).fetch_all(&mut *tx).await.map_err(Self::db)?;
         for row in rows {
@@ -1233,7 +1235,7 @@ impl AuthService {
         principal: &AuthenticatedPrincipal,
     ) -> Result<AppGrantListV1, ApiError> {
         principal.require_scope("account:read")?;
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let rows = sqlx::query("SELECT id,app_id,scopes,status,granted_at,updated_at,revoked_at FROM auth_app_grants WHERE user_id=$1 ORDER BY app_id").bind(user_id).fetch_all(&self.pool).await.map_err(Self::db)?;
         Ok(AppGrantListV1 {
             grants: rows
@@ -1265,7 +1267,7 @@ impl AuthService {
             .map(|value| value.0)
             .filter(|value| allowed.contains(value))
             .collect();
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let row = sqlx::query("UPDATE auth_app_grants SET scopes=$3,status='active',revoked_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND app_id=$2 RETURNING id,app_id,scopes,status,granted_at,updated_at,revoked_at")
             .bind(user_id).bind(app_id).bind(Self::encode_scopes(&values)).fetch_optional(&self.pool).await.map_err(Self::db)?
             .ok_or_else(|| Self::error(ErrorCode::InvalidRequest, "application grant not found", StatusCode::NOT_FOUND))?;
@@ -1293,7 +1295,7 @@ impl AuthService {
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
         principal.require_scope("account:write")?;
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let mut tx = self.pool.begin().await.map_err(Self::db)?;
         sqlx::query("UPDATE auth_app_grants SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND app_id=$2").bind(user_id).bind(app_id).execute(&mut *tx).await.map_err(Self::db)?;
         sqlx::query("UPDATE auth_sessions SET status='revoked',revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),revoked_reason='app_grant_revoke' WHERE user_id=$1 AND app_id=$2").bind(user_id).bind(app_id).execute(&mut *tx).await.map_err(Self::db)?;
@@ -1322,7 +1324,7 @@ impl AuthService {
         context: &RequestContext,
     ) -> Result<AcceptedResponseV1, ApiError> {
         principal.require_scope("account:write")?;
-        let user_id = Self(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
+        let user_id = Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid)?;
         let encoded: String =
             sqlx::query_scalar("SELECT password_hash FROM cloud_users WHERE id=$1")
                 .bind(user_id)
@@ -1572,7 +1574,7 @@ impl AuthService {
         &self,
         principal: &AuthenticatedPrincipal,
     ) -> Result<WebSessionResponseV1, ApiError> {
-        let session_id = Self(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
+        let session_id = Self::uuid(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
         let csrf = self.tokens.generate(TokenKind::Csrf);
         sqlx::query(
             "UPDATE auth_web_sessions SET csrf_hash=$2 WHERE session_id=$1 AND revoked_at IS NULL",
@@ -1676,7 +1678,7 @@ impl AuthService {
                     StatusCode::UNAUTHORIZED,
                 )
             })?;
-        let session_id = Self(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
+        let session_id = Self::uuid(principal.session_id.as_str(), ErrorCode::AuthInvalid)?;
         let web = self.tokens.generate(TokenKind::WebSession);
         let csrf = self.tokens.generate(TokenKind::Csrf);
         let expires: DateTime<Utc> =
@@ -1690,9 +1692,9 @@ impl AuthService {
         let _ = self
             .audit(
                 &self.pool,
-                Self(principal.user_id.as_str(), ErrorCode::AuthInvalid).ok(),
+                Self::uuid(principal.user_id.as_str(), ErrorCode::AuthInvalid).ok(),
                 Some(session_id),
-                Self(principal.device_id.as_str(), ErrorCode::AuthInvalid).ok(),
+                Self::uuid(principal.device_id.as_str(), ErrorCode::AuthInvalid).ok(),
                 Some(principal.app_id.as_str()),
                 "auth.web_rotate",
                 "success",

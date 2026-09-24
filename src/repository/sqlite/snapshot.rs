@@ -172,7 +172,7 @@ impl SqliteRepository {
             FROM sync_snapshot_items
             WHERE snapshot_id = $1
             ORDER BY entity_type, entity_id
-            OFFSET $2 LIMIT $3
+            LIMIT $3 OFFSET $2
             "#,
         )
         .bind(snapshot_uuid)

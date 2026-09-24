@@ -154,7 +154,7 @@ async fn content(
     let sha256: String = row.try_get("sha256").map_err(database_error)?;
     let expected_size: i64 = row.try_get("size_bytes").map_err(database_error)?;
     let storage_name: String = row.try_get("storage_name").map_err(database_error)?;
-    let storage_path = resolve_storage_path(state, &storage_name)?;
+    let storage_path = resolve_storage_path(&state, &storage_name)?;
     let bytes = fs::read(&storage_path).await.map_err(|error| {
         storage_error(format!(
             "读取暂存照片文件失败 {}: {error}",
@@ -203,7 +203,7 @@ async fn acknowledge(
     .map_err(database_error)?
     .ok_or_else(not_found)?;
     let storage_name: String = row.try_get("storage_name").map_err(database_error)?;
-    remove_storage_file(state, &storage_name).await;
+    remove_storage_file(&state, &storage_name).await;
     Ok(Json(serde_json::json!({ "deleted": true, "id": id })))
 }
 
@@ -476,7 +476,6 @@ fn resolve_storage_path(state: &AppState, storage_name: &str) -> Result<PathBuf,
     }
     Ok(staging_root(state).join(relative))
 }
-
 
 fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
     Uuid::parse_str(user_id.as_str()).map_err(|_| {

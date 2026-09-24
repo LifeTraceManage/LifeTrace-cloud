@@ -6,7 +6,7 @@ use lifetrace_contracts::json_value::JsonValue;
 use lifetrace_contracts::{ErrorCode, UserId};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx::{SqlitePool, Sqlite, Row, Transaction};
+use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
 use crate::beecount::collaboration::{
@@ -358,6 +358,8 @@ impl BeeCountSyncService {
             "finance.tag".to_owned(),
             "finance.budget".to_owned(),
         ];
+        let supported_entity_types_json =
+            serde_json::to_string(&supported_entity_types).map_err(internal)?;
         let rows = sqlx::query(
             "SELECT l.cursor,l.entity_type,l.entity_id,l.operation,l.payload, \
                     l.server_modified_at,l.origin_device_external_id, \

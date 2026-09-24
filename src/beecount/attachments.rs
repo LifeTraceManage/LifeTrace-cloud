@@ -6,7 +6,7 @@ use lifetrace_contracts::{ErrorCode, UserId};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx::{SqlitePool, Sqlite, Row, Transaction};
+use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
 use crate::error::ApiError;
@@ -268,7 +268,9 @@ impl BeeCountAttachmentService {
                 AttachmentExistsItem {
                     sha256: hash,
                     exists: row.is_some(),
-                    file_id: row.and_then(|value| value.try_get("id").ok()),
+                    file_id: row
+                        .and_then(|value| value.try_get::<Uuid, _>("id").ok())
+                        .map(|value| value.to_string()),
                     size: row.and_then(|value| value.try_get("size_bytes").ok()),
                     mime_type: row.and_then(|value| value.try_get("mime_type").ok()),
                 }
@@ -351,7 +353,7 @@ async fn find_existing(
 
 fn upload_from_row(row: sqlx::sqlite::SqliteRow) -> Result<AttachmentUploadOut, ApiError> {
     Ok(AttachmentUploadOut {
-        file_id: row.try_get("id").map_err(internal)?,
+        file_id: row.try_get::<Uuid, _>("id").map_err(internal)?.to_string(),
         ledger_id: row
             .try_get::<Option<String>, _>("ledger_id")
             .map_err(internal)?

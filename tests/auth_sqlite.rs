@@ -20,7 +20,8 @@ fn database_path() -> Option<String> {
 
 fn config(url: String) -> Config {
     Config {
-        database_path: url,        dev_auth_enabled: false,
+        database_path: url,
+        dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
         auth_password_pepper: Some("test-password-pepper-01234567890123456789".to_owned()),
         auth_token_hash_pepper: Some("test-token-pepper-0123456789012345678901".to_owned()),
@@ -93,13 +94,14 @@ async fn native_login_refresh_rotation_and_reuse_revocation() {
         .await
         .unwrap();
     let refresh = initial.refresh_token.clone().unwrap();
-    let device_id = sqlx::query_scalar::<_, String>(
-        "SELECT external_device_id FROM cloud_devices WHERE id=$1",
-    )
-    .bind(initial.session.device_id.as_str())
-    .fetch_one(&state.pool)
-    .await
-    .unwrap();
+    let device_uuid = Uuid::parse_str(initial.session.device_id.as_str()).unwrap();
+    let session_uuid = Uuid::parse_str(initial.session.id.as_str()).unwrap();
+    let device_id =
+        sqlx::query_scalar::<_, String>("SELECT external_device_id FROM cloud_devices WHERE id=$1")
+            .bind(device_uuid)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
 
     let rotated = state
         .auth_service
@@ -124,7 +126,7 @@ async fn native_login_refresh_rotation_and_reuse_revocation() {
                 device_id: sqlx::query_scalar(
                     "SELECT external_device_id FROM cloud_devices WHERE id=$1",
                 )
-                .bind(initial.session.device_id.as_str())
+                .bind(device_uuid)
                 .fetch_one(&state.pool)
                 .await
                 .unwrap(),
@@ -138,12 +140,11 @@ async fn native_login_refresh_rotation_and_reuse_revocation() {
         "LIFETRACE_AUTH_REFRESH_TOKEN_REUSED"
     );
 
-    let session_status: String =
-        sqlx::query_scalar("SELECT status FROM auth_sessions WHERE id=$1")
-            .bind(initial.session.id.as_str())
-            .fetch_one(&state.pool)
-            .await
-            .unwrap();
+    let session_status: String = sqlx::query_scalar("SELECT status FROM auth_sessions WHERE id=$1")
+        .bind(session_uuid)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
     assert_eq!(session_status, "revoked");
 }
 
@@ -200,7 +201,7 @@ async fn registered_device_can_sync_without_duplicate_key_error() {
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM cloud_devices WHERE user_id=$1 AND app_id='lifetrace-desktop' AND external_device_id=$2",
     )
-    .bind(tokens.user.id.as_str())
+    .bind(Uuid::parse_str(tokens.user.id.as_str()).unwrap())
     .bind(&device_id)
     .fetch_one(&state.pool)
     .await

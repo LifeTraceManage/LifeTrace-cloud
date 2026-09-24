@@ -78,9 +78,10 @@ fn map_error(error: MailServiceError) -> ApiError {
         MailServiceError::ArchiveUnavailable => {
             (StatusCode::CONFLICT, "archive folder is unavailable")
         }
-        MailServiceError::DestinationUnavailable => {
-            (StatusCode::CONFLICT, "destination mail folder is unavailable")
-        }
+        MailServiceError::DestinationUnavailable => (
+            StatusCode::CONFLICT,
+            "destination mail folder is unavailable",
+        ),
         MailServiceError::Credential => (
             StatusCode::SERVICE_UNAVAILABLE,
             "mail credential store is unavailable",
@@ -325,7 +326,9 @@ async fn move_message(
         .move_message(&principal.user_id, id, input.destination_role.trim())
         .await
         .map_err(map_error)?;
-    Ok(Json(json!({ "ok": true, "destinationRole": input.destination_role })))
+    Ok(Json(
+        json!({ "ok": true, "destinationRole": input.destination_role }),
+    ))
 }
 
 async fn send_mail(

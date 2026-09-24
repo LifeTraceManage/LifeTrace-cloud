@@ -42,7 +42,6 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-
 async fn capabilities(State(state): State<AppState>) -> Json<AuthCapabilitiesV1> {
     Json(state.auth_service.capabilities())
 }
@@ -175,7 +174,11 @@ async fn revoke_session(
 ) -> Result<Json<AcceptedResponseV1>, ApiError> {
     state
         .auth_service
-        .revoke_session(&principal, &session_id, &super::context(&state, &headers, peer))
+        .revoke_session(
+            &principal,
+            &session_id,
+            &super::context(&state, &headers, peer),
+        )
         .await
         .map(Json)
 }
@@ -209,7 +212,11 @@ async fn revoke_device(
 ) -> Result<Json<AcceptedResponseV1>, ApiError> {
     state
         .auth_service
-        .revoke_device(&principal, &device_id, &super::context(&state, &headers, peer))
+        .revoke_device(
+            &principal,
+            &device_id,
+            &super::context(&state, &headers, peer),
+        )
         .await
         .map(Json)
 }

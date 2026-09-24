@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use uuid;
+use uuid::Uuid;
 
 use crate::auth::security::cookie_value;
 use crate::auth::{AuthCredential, AuthenticatedPrincipal};
@@ -441,12 +441,12 @@ fn verify_challenge_key(state: &AppState, headers: &HeaderMap) -> Result<(), Api
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
-        ApiError::new(
-            ErrorCode::TemporarilyUnavailable,
-            "摄影挑战尚未配置访问口令",
-            StatusCode::SERVICE_UNAVAILABLE,
-        )
-    })?;
+            ApiError::new(
+                ErrorCode::TemporarilyUnavailable,
+                "摄影挑战尚未配置访问口令",
+                StatusCode::SERVICE_UNAVAILABLE,
+            )
+        })?;
     let provided = headers
         .get("x-photo-challenge-key")
         .and_then(|value| value.to_str().ok())
@@ -504,7 +504,10 @@ async fn web_principal(
         .await
 }
 
-pub(super) async fn load_stats(state: &AppState, owner: &UserId) -> Result<ChallengeStats, ApiError> {
+pub(super) async fn load_stats(
+    state: &AppState,
+    owner: &UserId,
+) -> Result<ChallengeStats, ApiError> {
     let owner_uuid = user_uuid(owner)?;
     let row = sqlx::query(
         "SELECT COUNT(*) AS total,COUNT(*) FILTER (WHERE qualified) AS high_count,COALESCE(AVG(score),0)::float8 AS average_score \
@@ -602,12 +605,12 @@ async fn call_glm_score(state: &AppState, image_data_url: &str) -> Result<ModelS
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
-        ApiError::new(
-            ErrorCode::TemporarilyUnavailable,
-            "缺少 ZHIPU_API_KEY，无法进行照片评分",
-            StatusCode::SERVICE_UNAVAILABLE,
-        )
-    })?;
+            ApiError::new(
+                ErrorCode::TemporarilyUnavailable,
+                "缺少 ZHIPU_API_KEY，无法进行照片评分",
+                StatusCode::SERVICE_UNAVAILABLE,
+            )
+        })?;
     if api_key.contains(['\r', '\n']) {
         return Err(ApiError::new(
             ErrorCode::InvalidRequest,
@@ -635,7 +638,7 @@ async fn call_glm_score(state: &AppState, image_data_url: &str) -> Result<ModelS
 
     let provider = tokio::time::timeout(
         Duration::from_secs(55),
-        call_provider(&endpoint, &api_key, &request),
+        call_provider(&endpoint, api_key, &request),
     )
     .await
     .map_err(|_| {

@@ -18,7 +18,9 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::auth::extract::authenticate_bearer_or_web_session;
-use crate::beecount::compat::{decimal_amount_to_cents, lifetrace_entity_id, BeeCountReadLedgerOut};
+use crate::beecount::compat::{
+    decimal_amount_to_cents, lifetrace_entity_id, BeeCountReadLedgerOut,
+};
 use crate::beecount::sync::BeeCountSyncService;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -265,7 +267,6 @@ fn filter_user_global(
         })
         .collect()
 }
-
 
 fn normalize_ledger(row: &BeeCountReadLedgerOut) -> Value {
     json!({

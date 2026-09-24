@@ -4,8 +4,8 @@ pub mod challenge;
 mod challenge_desktop;
 pub mod staging;
 
-use axum::Router;
 use crate::state::AppState;
+use axum::Router;
 
 pub fn router() -> Router<AppState> {
     Router::<AppState>::new()

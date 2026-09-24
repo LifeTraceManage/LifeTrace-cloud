@@ -15,7 +15,7 @@ use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::{Sqlite, Row, Transaction};
+use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
@@ -195,12 +195,14 @@ async fn patch_profile(
     .await
     .map_err(db_error)?;
     if let Some(display_name) = request.display_name.as_deref() {
-        sqlx::query("UPDATE cloud_users SET display_name=$2,updated_at=CURRENT_TIMESTAMP WHERE id=$1")
-            .bind(user_id)
-            .bind(display_name.trim())
-            .execute(&mut *tx)
-            .await
-            .map_err(db_error)?;
+        sqlx::query(
+            "UPDATE cloud_users SET display_name=$2,updated_at=CURRENT_TIMESTAMP WHERE id=$1",
+        )
+        .bind(user_id)
+        .bind(display_name.trim())
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
     }
     tx.commit().await.map_err(db_error)?;
     let profile = profile_out(&state, user_id).await?;
@@ -666,7 +668,9 @@ async fn create_invite(
     let actor = parse_user_id(principal.user_id.as_str())?;
     let access = resolve_ledger_access(&state.pool, actor, &ledger_id, true).await?;
     if access.role != ROLE_OWNER {
-        return Err(crate::beecount::collaboration::not_found("Ledger not found"));
+        return Err(crate::beecount::collaboration::not_found(
+            "Ledger not found",
+        ));
     }
     ensure_owner_registry(&state.pool, access.storage_user_id, &ledger_id).await?;
     let mut tx = state.pool.begin().await.map_err(db_error)?;
@@ -725,7 +729,9 @@ async fn list_invites(
     let actor = parse_user_id(principal.user_id.as_str())?;
     let access = resolve_ledger_access(&state.pool, actor, &ledger_id, false).await?;
     if access.role != ROLE_OWNER {
-        return Err(crate::beecount::collaboration::not_found("Ledger not found"));
+        return Err(crate::beecount::collaboration::not_found(
+            "Ledger not found",
+        ));
     }
     let rows = sqlx::query(
         "SELECT code,target_role,expires_at,created_at,invited_by \
@@ -762,7 +768,9 @@ async fn revoke_invite(
     let actor = parse_user_id(principal.user_id.as_str())?;
     let access = resolve_ledger_access(&state.pool, actor, &ledger_id, true).await?;
     if access.role != ROLE_OWNER {
-        return Err(crate::beecount::collaboration::not_found("Ledger not found"));
+        return Err(crate::beecount::collaboration::not_found(
+            "Ledger not found",
+        ));
     }
     let code = normalize_code(&code);
     let row = sqlx::query(
@@ -775,7 +783,9 @@ async fn revoke_invite(
     .await
     .map_err(db_error)?;
     if row.is_none() {
-        return Err(crate::beecount::collaboration::not_found("Invite not found"));
+        return Err(crate::beecount::collaboration::not_found(
+            "Invite not found",
+        ));
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -814,25 +824,33 @@ async fn accept_invite(
     let code = normalize_code(&code);
     let now = Utc::now();
     let mut tx = state.pool.begin().await.map_err(db_error)?;
+    // SQLite has no row-level FOR UPDATE. Claim the invite atomically inside
+    // this transaction instead; any later validation failure rolls the claim
+    // back together with the membership changes.
     let invite = sqlx::query(
-        "SELECT i.ledger_id,i.invited_by,i.target_role,s.storage_user_id \
-         FROM beecount_ledger_invites i JOIN beecount_shared_ledgers s USING (ledger_id) \
-         WHERE i.code=$1 AND i.used_at IS NULL AND i.expires_at>$2 OF i",
+        r#"
+        UPDATE beecount_ledger_invites
+        SET used_at=$2, used_by=$3
+        WHERE code=$1 AND used_at IS NULL AND expires_at>$2
+        RETURNING ledger_id, invited_by, target_role
+        "#,
     )
     .bind(&code)
     .bind(now)
+    .bind(actor)
     .fetch_optional(&mut *tx)
     .await
     .map_err(db_error)?
     .ok_or_else(|| crate::beecount::collaboration::not_found("Invalid or expired invite"))?;
     let ledger_id: String = invite.try_get("ledger_id").map_err(internal)?;
     let invited_by: Uuid = invite.try_get("invited_by").map_err(internal)?;
-    let storage_user_id: Uuid = invite.try_get("storage_user_id").map_err(internal)?;
-    sqlx::query("SELECT ledger_id FROM beecount_shared_ledgers WHERE ledger_id=$1")
-        .bind(&ledger_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(db_error)?;
+    let storage_user_id: Uuid = sqlx::query_scalar(
+        "SELECT storage_user_id FROM beecount_shared_ledgers WHERE ledger_id=$1",
+    )
+    .bind(&ledger_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_error)?;
     let exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM beecount_ledger_members WHERE ledger_id=$1 AND user_id=$2)",
     )
@@ -847,13 +865,12 @@ async fn accept_invite(
     if actor == invited_by {
         return Err(conflict("Cannot accept your own invite"));
     }
-    let member_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM beecount_ledger_members WHERE ledger_id=$1",
-    )
-    .bind(&ledger_id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(db_error)?;
+    let member_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM beecount_ledger_members WHERE ledger_id=$1")
+            .bind(&ledger_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(db_error)?;
     if member_count >= MEMBER_LIMIT {
         return Err(conflict("Ledger has reached the 5-member limit"));
     }
@@ -868,13 +885,6 @@ async fn accept_invite(
     .execute(&mut *tx)
     .await
     .map_err(db_error)?;
-    sqlx::query("UPDATE beecount_ledger_invites SET used_at=$2,used_by=$3 WHERE code=$1")
-        .bind(&code)
-        .bind(now)
-        .bind(actor)
-        .execute(&mut *tx)
-        .await
-        .map_err(db_error)?;
     tx.commit().await.map_err(db_error)?;
     let info = ledger_info(&state, storage_user_id, &ledger_id).await?;
     let wire_actor = beecount_user_id(&state.pool, actor).await?;
@@ -922,7 +932,9 @@ async fn update_member_role(
     let actor = parse_user_id(principal.user_id.as_str())?;
     let access = resolve_ledger_access(&state.pool, actor, &ledger_id, true).await?;
     if access.role != ROLE_OWNER {
-        return Err(crate::beecount::collaboration::not_found("Ledger not found"));
+        return Err(crate::beecount::collaboration::not_found(
+            "Ledger not found",
+        ));
     }
     let target = internal_user_id(&state.pool, &wire_user_id).await?;
     if target == actor {
@@ -940,7 +952,9 @@ async fn update_member_role(
     .await
     .map_err(db_error)?;
     if changed.is_none() {
-        return Err(crate::beecount::collaboration::not_found("Member not found"));
+        return Err(crate::beecount::collaboration::not_found(
+            "Member not found",
+        ));
     }
     publish_member_event(
         &state,
@@ -977,7 +991,9 @@ async fn remove_member(
     let target_role: String = target_row.try_get("role").map_err(internal)?;
     let is_self = target == actor;
     if !is_self && access.role != ROLE_OWNER {
-        return Err(crate::beecount::collaboration::not_found("Member not found"));
+        return Err(crate::beecount::collaboration::not_found(
+            "Member not found",
+        ));
     }
     if target_role == ROLE_OWNER {
         return Err(conflict("Cannot remove owner; transfer ownership first"));
@@ -1008,7 +1024,9 @@ async fn transfer_ownership(
     let actor = parse_user_id(principal.user_id.as_str())?;
     let access = resolve_ledger_access(&state.pool, actor, &ledger_id, true).await?;
     if access.role != ROLE_OWNER {
-        return Err(crate::beecount::collaboration::not_found("Ledger not found"));
+        return Err(crate::beecount::collaboration::not_found(
+            "Ledger not found",
+        ));
     }
     let target = internal_user_id(&state.pool, request.new_owner_user_id.trim()).await?;
     if target == actor {
@@ -1106,8 +1124,8 @@ async fn shared_resources(
             continue;
         };
         let sync_id = crate::beecount::compat::beecount_wire_id(&entity_id);
-        let raw =
-            crate::beecount::compat::beecount_payload(kind, &sync_id, &payload).map_err(internal)?;
+        let raw = crate::beecount::compat::beecount_payload(kind, &sync_id, &payload)
+            .map_err(internal)?;
         match kind {
             crate::beecount::compat::BeeCountEntityKind::Category => categories.push(json!({
                 "sync_id": sync_id,

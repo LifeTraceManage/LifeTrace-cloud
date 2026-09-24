@@ -394,8 +394,7 @@ fn validate_prepare(input: &mut PrepareRequest, max_file_bytes: i64) -> Result<(
         clean_text(&input.mime_type, 120, "application/octet-stream").to_ascii_lowercase();
     if input.size_bytes <= 0 || input.size_bytes > max_file_bytes {
         return Err(bad_request(format!(
-            "文件大小必须在 1..={} bytes",
-            max_file_bytes
+            "文件大小必须在 1..={max_file_bytes} bytes"
         )));
     }
     input.sha256 = input.sha256.trim().to_ascii_lowercase();
@@ -492,7 +491,6 @@ fn row_to_metadata(row: &sqlx::sqlite::SqliteRow) -> Result<FileMetadata, ApiErr
         available_at: row.try_get("available_at").map_err(database_error)?,
     })
 }
-
 
 fn user_uuid(user_id: &UserId) -> Result<Uuid, ApiError> {
     Uuid::parse_str(user_id.as_str()).map_err(|_| bad_request("当前账号不能使用文件服务"))

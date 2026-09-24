@@ -1,7 +1,7 @@
 //! Stock BeeCount ledger-statistics surface under the internal cutover prefix.
 //!
 //! Production Caddy rewrites `/api/v1/read/ledgers/{ledger_id}/stats` here.
-//! Statistics are computed from the same PostgreSQL entity and attachment stores
+//! Statistics are computed from the same SQLite entity and attachment stores
 //! used by BeeCount sync, so the stock client never needs a separate backend.
 
 use axum::extract::{Path, State};
@@ -78,12 +78,12 @@ async fn stats(
 
     let (transaction_count, budget_count): (i64, i64) = sqlx::query_as(
         "SELECT \
-           COUNT(*) FILTER (WHERE entity_type='finance.transaction')::BIGINT, \
-           COUNT(*) FILTER (WHERE entity_type='finance.budget')::BIGINT \
+           COALESCE(SUM(CASE WHEN entity_type='finance.transaction' THEN 1 ELSE 0 END),0), \
+           COALESCE(SUM(CASE WHEN entity_type='finance.budget' THEN 1 ELSE 0 END),0) \
          FROM sync_entities \
          WHERE user_id=$1 AND is_deleted=FALSE \
            AND entity_type IN ('finance.transaction','finance.budget') \
-           AND payload->>'beecountLedgerId'=$2",
+           AND json_extract(payload, '$.beecountLedgerId')=$2",
     )
     .bind(access.storage_user_id)
     .bind(&ledger_id)
@@ -97,8 +97,8 @@ async fn stats(
     // only through the membership + storage-owner mapping.
     let (transaction_total, budget_total): (i64, i64) = sqlx::query_as(
         "SELECT \
-           COUNT(*) FILTER (WHERE e.entity_type='finance.transaction')::BIGINT, \
-           COUNT(*) FILTER (WHERE e.entity_type='finance.budget')::BIGINT \
+           COALESCE(SUM(CASE WHEN e.entity_type='finance.transaction' THEN 1 ELSE 0 END),0), \
+           COALESCE(SUM(CASE WHEN e.entity_type='finance.budget' THEN 1 ELSE 0 END),0) \
          FROM sync_entities e \
          WHERE e.is_deleted=FALSE \
            AND e.entity_type IN ('finance.transaction','finance.budget') \
@@ -107,7 +107,7 @@ async fn stats(
              FROM beecount_ledger_members m \
              JOIN beecount_shared_ledgers s ON s.ledger_id=m.ledger_id \
              WHERE m.user_id=$1 AND s.storage_user_id=e.user_id \
-               AND e.payload->>'beecountLedgerId'=m.ledger_id \
+               AND json_extract(e.payload, '$.beecountLedgerId')=m.ledger_id \
            ))",
     )
     .bind(actor_uuid)
@@ -117,9 +117,9 @@ async fn stats(
 
     let (account_total, category_total, tag_total): (i64, i64, i64) = sqlx::query_as(
         "SELECT \
-           COUNT(*) FILTER (WHERE entity_type='finance.account')::BIGINT, \
-           COUNT(*) FILTER (WHERE entity_type='finance.category')::BIGINT, \
-           COUNT(*) FILTER (WHERE entity_type='finance.tag')::BIGINT \
+           COALESCE(SUM(CASE WHEN entity_type='finance.account' THEN 1 ELSE 0 END),0), \
+           COALESCE(SUM(CASE WHEN entity_type='finance.category' THEN 1 ELSE 0 END),0), \
+           COALESCE(SUM(CASE WHEN entity_type='finance.tag' THEN 1 ELSE 0 END),0) \
          FROM sync_entities \
          WHERE user_id=$1 AND is_deleted=FALSE \
            AND entity_type IN ('finance.account','finance.category','finance.tag')",
@@ -130,7 +130,7 @@ async fn stats(
     .map_err(db_error)?;
 
     let transaction_attachment_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM cloud_file_blobs \
+        "SELECT COUNT(*) FROM cloud_file_blobs \
          WHERE user_id=$1 AND ledger_id=$2 \
            AND attachment_kind='transaction_attachment'",
     )
@@ -141,7 +141,7 @@ async fn stats(
     .map_err(db_error)?;
 
     let transaction_attachment_total: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT \
+        "SELECT COUNT(*) \
          FROM cloud_file_blobs b \
          WHERE b.attachment_kind='transaction_attachment' \
            AND (b.user_id=$1 OR EXISTS ( \
@@ -158,7 +158,7 @@ async fn stats(
     .map_err(db_error)?;
 
     let category_attachment_total: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::BIGINT FROM cloud_file_blobs \
+        "SELECT COUNT(*) FROM cloud_file_blobs \
          WHERE user_id=$1 AND attachment_kind='category_icon'",
     )
     .bind(actor_uuid)

@@ -6,7 +6,8 @@ use chrono::Utc;
 use lifetrace_contracts::auth::v1::{AppInstallationId, AuthSessionId};
 use lifetrace_contracts::sync::v1::AppId;
 use lifetrace_contracts::{ErrorCode, UserId};
-use sqlx::{SqlitePool, Row};
+use sqlx::{Row, SqlitePool};
+use uuid::Uuid;
 
 use crate::auth::token::{TokenKind, TokenManager};
 use crate::auth::{AuthCredential, AuthMethod, AuthProvider, AuthenticatedPrincipal};
@@ -185,15 +186,18 @@ impl AuthProvider for DatabaseAuthProvider {
             .map_err(|_| Self::error(ErrorCode::AuthInvalid, "invalid credential"))?;
 
         if kind == TokenKind::Access {
-            let _ = sqlx::query("UPDATE auth_access_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE id = $1")
-                .bind(parsed.id)
-                .execute(&self.pool)
-                .await;
-        }
-        let _ = sqlx::query("UPDATE auth_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1")
-            .bind(session_id)
+            let _ = sqlx::query(
+                "UPDATE auth_access_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE id = $1",
+            )
+            .bind(parsed.id)
             .execute(&self.pool)
             .await;
+        }
+        let _ =
+            sqlx::query("UPDATE auth_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1")
+                .bind(session_id)
+                .execute(&self.pool)
+                .await;
 
         Ok(AuthenticatedPrincipal {
             user_id: UserId::new(user_id.to_string()),

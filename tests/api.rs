@@ -125,6 +125,9 @@ async fn send(
         .await
         .unwrap();
     let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    if status.is_server_error() {
+        eprintln!("sync test server error {uri} status={status}: {body}");
+    }
     (status, body)
 }
 
@@ -134,7 +137,8 @@ async fn test_app() -> Router {
 
 async fn test_app_for(token: &str, user: &str, device: &str) -> Router {
     let config = Config {
-        database_path: ":memory:".to_owned(),        dev_auth_token: token.to_owned(),
+        database_path: ":memory:".to_owned(),
+        dev_auth_token: token.to_owned(),
         dev_auth_user_id: user.to_owned(),
         dev_auth_device_id: device.to_owned(),
         ..Config::default()
@@ -594,11 +598,14 @@ async fn snapshot_is_consistent_and_follow_up_pull_has_no_gaps() {
 #[tokio::test]
 async fn expired_cursor_requires_snapshot() {
     let config = Config {
+        database_path: ":memory:".to_owned(),
         dev_auth_token: TOKEN_A.to_owned(),
         retention_entries: 1,
         ..Config::default()
     };
-    let app = app(AppState::new(config));
+    let state = AppState::new(config);
+    state.initialize().await.unwrap();
+    let app = app(state);
     let (_, first) = send(
         app.clone(),
         Method::POST,

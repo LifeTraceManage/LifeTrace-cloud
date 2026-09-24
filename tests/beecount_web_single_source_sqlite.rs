@@ -11,14 +11,14 @@ use uuid::Uuid;
 
 fn config(database_path: String) -> Config {
     Config {
-        database_path,        dev_auth_enabled: false,
+        database_path,
+        dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
         auth_password_pepper: Some("beecount-web-test-password-pepper-0123456789".to_owned()),
         auth_token_hash_pepper: Some("beecount-web-test-token-pepper-012345678901".to_owned()),
         cursor_signing_key: Some("beecount-web-test-cursor-signing-key".to_owned()),
         page_token_signing_key: Some("beecount-web-test-page-token-key".to_owned()),
         public_web_base_url: Some("http://localhost:3000".to_owned()),
-        // Deliberately leave BEECOUNT_ADAPTER_ENABLED at its default false.
         ..Config::default()
     }
 }
@@ -55,7 +55,7 @@ async fn send(
 
 async fn clone_without_beecount_provenance(
     state: &AppState,
-    user_id: &str,
+    user_id: Uuid,
     entity_type: &str,
     source_entity_id: &str,
     legacy_entity_id: &str,
@@ -88,7 +88,6 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
         return;
     };
     let state = AppState::new(config(database_path));
-    assert!(state.beecount_adapter.is_none());
     state.initialize().await.unwrap();
     let router = app(state.clone());
 
@@ -112,6 +111,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     assert_eq!(status, StatusCode::CREATED, "{registration}");
     let token = registration["access_token"].as_str().unwrap().to_owned();
     let user_id = registration["user"]["id"].as_str().unwrap().to_owned();
+    let user_uuid = Uuid::parse_str(&user_id).unwrap();
 
     let updated_at =
         (Utc::now() - Duration::seconds(10)).to_rfc3339_opts(SecondsFormat::Millis, true);
@@ -197,7 +197,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     let stored: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sync_entities WHERE user_id=$1 AND entity_type LIKE 'finance.%' AND is_deleted=FALSE",
     )
-    .bind(&user_id)
+    .bind(user_uuid)
     .fetch_one(&state.pool)
     .await
     .unwrap();
@@ -208,7 +208,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     // registered BeeCount-mobile external-device origin.
     clone_without_beecount_provenance(
         &state,
-        &user_id,
+        user_uuid,
         "finance.account",
         "beecount:account-web-1",
         "legacy-account-web-1",
@@ -216,7 +216,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     .await;
     clone_without_beecount_provenance(
         &state,
-        &user_id,
+        user_uuid,
         "finance.category",
         "beecount:category-web-1",
         "legacy-category-web-1",
@@ -224,7 +224,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
     .await;
     clone_without_beecount_provenance(
         &state,
-        &user_id,
+        user_uuid,
         "finance.tag",
         "beecount:tag-web-1",
         "legacy-tag-web-1",
@@ -235,7 +235,7 @@ async fn web_finance_reads_stock_beecount_writes_without_external_adapter() {
         "SELECT COUNT(*) FROM beecount_entity_clocks \
          WHERE user_id=$1 AND lifetrace_entity_id LIKE 'legacy-%'",
     )
-    .bind(&user_id)
+    .bind(user_uuid)
     .fetch_one(&state.pool)
     .await
     .unwrap();

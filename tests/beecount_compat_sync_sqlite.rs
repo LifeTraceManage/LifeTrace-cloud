@@ -10,7 +10,8 @@ use uuid::Uuid;
 
 fn config(database_path: String) -> Config {
     Config {
-        database_path,        dev_auth_enabled: false,
+        database_path,
+        dev_auth_enabled: false,
         auth_registration_mode: "open".to_owned(),
         auth_password_pepper: Some("beecount-test-password-pepper-0123456789".to_owned()),
         auth_token_hash_pepper: Some("beecount-test-token-pepper-012345678901".to_owned()),
@@ -155,7 +156,7 @@ async fn stock_client_sync_routes_share_the_lifetrace_entity_log() {
          WHERE entity_type='finance.transaction' AND entity_id='beecount:transaction-1' \
            AND user_id=$1",
     )
-    .bind(registration["user"]["id"].as_str().unwrap())
+    .bind(Uuid::parse_str(registration["user"]["id"].as_str().unwrap()).unwrap())
     .fetch_one(&state.pool)
     .await
     .unwrap();

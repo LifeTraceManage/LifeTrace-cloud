@@ -1,9 +1,9 @@
 //! Shared application state.
 
-use std::sync::Arc;
-use std::time::Duration;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::SqlitePool;
+use std::sync::Arc;
+use std::time::Duration;
 
 use crate::auth::{AuthProvider, AuthService, DatabaseAuthProvider, DevelopmentAuthProvider};
 use crate::beecount::realtime::BeeCountRealtimeHub;

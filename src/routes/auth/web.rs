@@ -12,9 +12,7 @@ use lifetrace_contracts::auth::v1::{
 };
 use serde::Deserialize;
 
-use crate::auth::security::{
-    build_session_cookie, clear_session_cookie, cookie_value, PeerAddr,
-};
+use crate::auth::security::{build_session_cookie, clear_session_cookie, cookie_value, PeerAddr};
 use crate::auth::{AuthCredential, AuthenticatedPrincipal};
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -49,8 +47,6 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/web/sessions", get(list_sessions))
         .route("/api/v1/web/sessions/{session_id}", delete(revoke_session))
 }
-
-
 
 async fn web_principal(
     state: &AppState,
@@ -182,7 +178,11 @@ async fn rotate(
     let principal = verified_web_principal(&state, &headers).await?;
     let (body, next_cookie) = state
         .auth_service
-        .rotate_web_session(&principal, &raw_session, &super::context(&state, &headers, peer))
+        .rotate_web_session(
+            &principal,
+            &raw_session,
+            &super::context(&state, &headers, peer),
+        )
         .await?;
     let max_age = if body.session.public_device {
         state.config.auth_public_device_ttl_seconds
@@ -245,7 +245,11 @@ async fn revoke_device(
     let principal = verified_web_principal(&state, &headers).await?;
     state
         .auth_service
-        .revoke_device(&principal, &device_id, &super::context(&state, &headers, peer))
+        .revoke_device(
+            &principal,
+            &device_id,
+            &super::context(&state, &headers, peer),
+        )
         .await
         .map(Json)
 }
@@ -267,7 +271,11 @@ async fn revoke_session(
     let principal = verified_web_principal(&state, &headers).await?;
     state
         .auth_service
-        .revoke_session(&principal, &session_id, &super::context(&state, &headers, peer))
+        .revoke_session(
+            &principal,
+            &session_id,
+            &super::context(&state, &headers, peer),
+        )
         .await
         .map(Json)
 }
