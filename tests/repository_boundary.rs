@@ -19,25 +19,34 @@ fn cloud_repository_owns_execution_and_auth_server_contracts() {
 }
 
 #[test]
-fn production_is_a_single_sqlite_container() {
-    let dockerfile = include_str!("../Dockerfile");
+fn production_uses_split_web_and_single_sqlite_cloud() {
+    let cloud_dockerfile = include_str!("../Dockerfile");
+    let web_dockerfile = include_str!("../apps/web/Dockerfile");
+    let nginx = include_str!("../apps/web/nginx.conf");
     let production = include_str!("../deploy/cloud/docker-compose.production.yml");
     let main = include_str!("../src/main.rs");
 
-    assert!(dockerfile.contains("ENTRYPOINT [\"/app/lifetrace-cloud\"]"));
-    assert!(dockerfile.contains("LIFETRACE_DATABASE_PATH=/data/lifetrace.db"));
-    assert!(!dockerfile.contains("execution_worker"));
-    assert!(!dockerfile.contains("mail_worker"));
-    assert!(!dockerfile.contains("caddy"));
+    assert!(cloud_dockerfile.contains("ENTRYPOINT [\"/app/lifetrace-cloud\"]"));
+    assert!(cloud_dockerfile.contains("LIFETRACE_DATABASE_PATH=/data/lifetrace.db"));
+    assert!(!cloud_dockerfile.contains("node:22"));
+    assert!(!cloud_dockerfile.contains("/app/web"));
+    assert!(!cloud_dockerfile.contains("execution_worker"));
+    assert!(!cloud_dockerfile.contains("mail_worker"));
 
-    assert!(production.contains("lifetrace:"));
-    assert!(production.contains("\"80:8787\""));
+    assert!(web_dockerfile.contains("FROM node:22-alpine AS web-builder"));
+    assert!(web_dockerfile.contains("FROM nginx:1.27-alpine"));
+    assert!(web_dockerfile.contains("/usr/share/nginx/html/"));
+    assert!(nginx.contains("proxy_pass http://cloud:8787"));
+    assert!(nginx.contains("client_max_body_size 256m"));
+
+    assert!(production.contains("cloud:"));
+    assert!(production.contains("web:"));
+    assert!(production.contains("\"80:80\""));
     assert!(production.contains("\"8869:8869\""));
     assert!(production.contains("lifetrace_data:/data"));
     assert!(!production.contains("postgres:"));
     assert!(!production.contains("mail-worker:"));
     assert!(!production.contains("execution-worker:"));
-    assert!(!production.contains("web:"));
 
     assert!(main.contains("workers::mail::run"));
     assert!(main.contains("workers::execution::run"));
