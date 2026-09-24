@@ -1,6 +1,6 @@
 # LifeTrace Cloud
 
-LifeTrace 的轻量自托管云端服务。当前运行时只使用 Rust、Axum、SQLx 与 SQLite；Web 静态资源、BeeCount 兼容入口、邮件后台同步和 Execution 后台任务都由同一个 Cloud 进程提供。
+LifeTrace 的轻量自托管后端与 Web 单仓库。Cloud 运行时只使用 Rust、Axum、SQLx 与 SQLite；Web 由独立 Nginx 容器提供静态资源并同源反向代理 Cloud API。BeeCount 兼容入口、邮件后台同步和 Execution 后台任务仍由 Cloud 进程提供。
 
 目标不是做通用云平台，而是让个人服务器上的 LifeTrace 具备可靠同步、认证和少量云端能力，同时尽可能降低部署和维护成本。
 
@@ -42,14 +42,15 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 - `migrations/0001_sqlite.sql`：SQLite 基线 schema
 - `migrations/0002_mail_workspace.sql`：Mail Workspace 增量 schema（Identity / Draft attachment）
 - `apps/web/`：LifeTrace Web 正式源码；与 Cloud 在同一仓库、同一镜像中构建
-- `deploy/cloud/`：唯一生产 Compose、部署脚本与环境变量模板
+- `apps/web/Dockerfile` / `apps/web/nginx.conf`：Web 独立镜像与同源 API 代理
+- `deploy/cloud/`：生产双服务 Compose、部署脚本与环境变量模板
 - `crates/lifetrace-contracts/`：共享协议和领域契约
 - `crates/lifetrace-sync-client/`：Rust Sync v1 客户端
 - `contracts/`：生成的跨语言契约
 
 ## HTTP 入口
 
-主服务监听 `8787`，生产 Compose 映射为宿主机 `80`。
+Cloud 主服务监听容器内部 `8787`；生产环境由 Web Nginx 容器监听宿主机 `80` 并反向代理 `/api/*`、`/health/*` 到 Cloud。
 
 | 路径 | 能力 |
 | --- | --- |
@@ -61,7 +62,7 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 | `/api/v1/integrations/beecount/*` | LifeTrace Web 财务接口 |
 | `/api/v1/mail/*` | 邮件 |
 | `/api/v1/photo-*/*` | 照片相关能力 |
-| 其他路径 | Web SPA 静态资源 |
+| 其他路径 | Cloud 不负责 SPA；由 `web` 容器提供 |
 
 BeeCount 兼容监听 `8869`。该监听器只负责把 BeeCount 原始 `/api/v1/*` 和 `/ws` 请求重写到内部兼容路由，不需要 Caddy。
 
