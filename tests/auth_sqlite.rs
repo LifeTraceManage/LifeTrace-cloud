@@ -94,9 +94,11 @@ async fn native_login_refresh_rotation_and_reuse_revocation() {
         .await
         .unwrap();
     let refresh = initial.refresh_token.clone().unwrap();
+    let device_uuid = Uuid::parse_str(initial.session.device_id.as_str()).unwrap();
+    let session_uuid = Uuid::parse_str(initial.session.id.as_str()).unwrap();
     let device_id =
         sqlx::query_scalar::<_, String>("SELECT external_device_id FROM cloud_devices WHERE id=$1")
-            .bind(initial.session.device_id.as_str())
+            .bind(device_uuid)
             .fetch_one(&state.pool)
             .await
             .unwrap();
@@ -124,7 +126,7 @@ async fn native_login_refresh_rotation_and_reuse_revocation() {
                 device_id: sqlx::query_scalar(
                     "SELECT external_device_id FROM cloud_devices WHERE id=$1",
                 )
-                .bind(initial.session.device_id.as_str())
+                .bind(device_uuid)
                 .fetch_one(&state.pool)
                 .await
                 .unwrap(),
@@ -139,7 +141,7 @@ async fn native_login_refresh_rotation_and_reuse_revocation() {
     );
 
     let session_status: String = sqlx::query_scalar("SELECT status FROM auth_sessions WHERE id=$1")
-        .bind(initial.session.id.as_str())
+        .bind(session_uuid)
         .fetch_one(&state.pool)
         .await
         .unwrap();
@@ -199,7 +201,7 @@ async fn registered_device_can_sync_without_duplicate_key_error() {
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM cloud_devices WHERE user_id=$1 AND app_id='lifetrace-desktop' AND external_device_id=$2",
     )
-    .bind(tokens.user.id.as_str())
+    .bind(Uuid::parse_str(tokens.user.id.as_str()).unwrap())
     .bind(&device_id)
     .fetch_one(&state.pool)
     .await
