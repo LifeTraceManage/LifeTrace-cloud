@@ -110,13 +110,13 @@ cargo test --manifest-path crates/lifetrace-sync-client/Cargo.toml
 cargo run --manifest-path tools/contract-exporter/Cargo.toml
 ```
 
-## 双镜像部署
+## 本地构建部署
 
-Web 与 Cloud 源码仍然位于同一个仓库，但 GitHub Actions 独立构建两个镜像：
+Web 与 Cloud 源码位于同一个仓库，生产环境默认直接从当前源码构建两个本地 Docker 镜像：
 
 ```text
-ghcr.io/lifetracemanage/lifetrace-web-app:main
-ghcr.io/lifetracemanage/lifetrace-cloud:main
+lifetrace-web-app:local
+lifetrace-cloud:local
 ```
 
 生产拓扑：
@@ -138,11 +138,11 @@ BeeCount clients ─────────────► host :8869 → cloud
 
 Web Nginx 将附件上传上限设为 256 MiB，并把 API 保持为同源反向代理，因此浏览器认证 Cookie 不需要跨域配置。
 
-服务器只需要 Docker / Docker Compose，不需要 Node、Rust 或源码构建工具。
+服务器需要 Docker Engine、Docker Compose v2 和 Git。构建阶段还需要能够获取 Docker 基础镜像以及 npm / crates.io 依赖；运行阶段不依赖 GHCR。
 
-### 一键部署
+### 一键安装 / 更新
 
-仓库公开后可以直接从 GitHub 下载安装脚本，不需要 clone 源码。首次部署只需要提供对外访问地址：
+安装器会在服务器上 clone 最新源码，然后使用 Docker Compose 本地构建 Web 与 Cloud：
 
 ```bash
 curl -fsSL \
@@ -158,61 +158,100 @@ curl -fsSL \
   | bash -s -- --base-url https://lifetrace.example.com
 ```
 
-安装器会：
-
-- 检查 Docker Engine / Docker Compose v2；
-- 下载生产 Compose、部署脚本和验证脚本；
-- 首次安装自动生成 Cursor、Page Token、Password Pepper、Token Pepper 四个随机密钥；
-- 写入权限受限的 `.env.production`；
-- 拉取 Actions 已构建好的 Web / Cloud 镜像；
-- 启动两个容器并执行 SQLite 持久化、Web 反向代理和健康检查；
-- 再次运行时保留已有 `.env.production` 和密钥。
-
-默认安装到 `~/lifetrace`。也可以固定 Actions 发布的 SHA 镜像：
-
-```bash
-curl -fsSL \
-  https://raw.githubusercontent.com/LifeTraceManage/LifeTrace-cloud/main/deploy/cloud/install.sh \
-  | bash -s -- \
-      --base-url https://lifetrace.example.com \
-      --tag sha-<commit>
-```
-
-如果 GHCR package 仍为 private，先执行 `docker login ghcr.io`。GitHub Container Registry 的 public package 支持匿名 pull；package visibility 可在组织的 Package settings 中设为 Public。一次改成 Public 后不能再改回 private。
-
-### 手动部署
-
-```bash
-cp deploy/cloud/.env.production.example deploy/cloud/.env.production
-# 编辑密钥和 PUBLIC_WEB_BASE_URL / CORS_ALLOWED_ORIGINS
-
-docker login ghcr.io   # 仅当 package 需要认证时
-bash deploy/cloud/deploy-production.sh
-bash deploy/cloud/verify-production.sh
-```
-
-部署脚本只执行两个镜像的 pull 和 Compose 更新：
-
-```bash
-docker compose --env-file .env.production \
-  -f deploy/cloud/docker-compose.production.yml pull cloud web
-
-docker compose --env-file .env.production \
-  -f deploy/cloud/docker-compose.production.yml up -d --remove-orphans --wait
-```
-
-可以分别固定 Web/Cloud 到不同 SHA，独立升级和回滚：
+默认目录：
 
 ```text
-LIFETRACE_WEB_IMAGE=ghcr.io/lifetracemanage/lifetrace-web-app:sha-<commit>
-LIFETRACE_CLOUD_IMAGE=ghcr.io/lifetracemanage/lifetrace-cloud:sha-<commit>
+~/lifetrace/source
 ```
 
-持久化只属于 Cloud：
+安装器会：
+
+- 检查 Git、Docker Engine 和 Docker Compose v2；
+- clone 或更新 `LifeTrace-cloud` 源码；
+- 首次安装自动生成 Cursor、Page Token、Password Pepper、Token Pepper 四个随机密钥；
+- 已存在旧版 `~/lifetrace/.env.production` 时自动迁移并保留原密钥；
+- 将生产镜像固定为 `lifetrace-web-app:local` 和 `lifetrace-cloud:local`；
+- 在服务器本地执行 Docker build；
+- 启动两个容器并验证 SQLite 持久化、Web 反向代理和健康检查。
+
+再次运行同一条安装命令会拉取最新源码并重新构建发生变化的 Docker 层，不会删除 SQLite volume，也不会重新生成已有密钥。
+
+### 日常发布
+
+进入部署目录：
+
+```bash
+cd ~/lifetrace/source/deploy/cloud
+```
+
+全部重新构建并发布：
+
+```bash
+./deploy-production.sh all
+```
+
+只修改 Web 时：
+
+```bash
+./deploy-production.sh web
+```
+
+只修改 Rust Cloud 时：
+
+```bash
+./deploy-production.sh cloud
+```
+
+部署脚本使用：
+
+```bash
+docker compose build <service>
+docker compose up -d --remove-orphans --wait --pull never
+```
+
+因此不会访问 GHCR。Docker layer cache 会复用未发生变化的依赖层。
+
+如果服务器上的源码不是最新版本，先更新：
+
+```bash
+cd ~/lifetrace/source
+git fetch origin main
+git checkout main
+git pull --ff-only
+
+cd deploy/cloud
+./deploy-production.sh all
+```
+
+也可以直接重新运行一键安装命令，让安装器负责更新源码。
+
+### 手动首次部署
+
+```bash
+git clone https://github.com/LifeTraceManage/LifeTrace-cloud.git
+cd LifeTrace-cloud/deploy/cloud
+
+cp .env.production.example .env.production
+# 修改随机密钥、PUBLIC_WEB_BASE_URL 和 CORS_ALLOWED_ORIGINS
+
+./deploy-production.sh all
+./verify-production.sh
+```
+
+生产 Compose 默认配置：
+
+```text
+LIFETRACE_WEB_IMAGE=lifetrace-web-app:local
+LIFETRACE_CLOUD_IMAGE=lifetrace-cloud:local
+```
+
+SQLite 持久化只属于 Cloud：
 
 ```text
 lifetrace_data -> /data/lifetrace.db
 ```
+
+GitHub Actions 仍可继续构建 GHCR 镜像作为可选发布产物，但默认服务器部署流程不再依赖这些远程镜像。
 
 ## 对象存储
 
@@ -259,7 +298,7 @@ Mail 保留：
 
 当前仓库按单实例个人服务器优化。Web 正式源码位于 `apps/web`，但 Web 与 Cloud 以两个独立镜像发布：
 
-1. SQLite 是唯一数据库后端，不维护 PostgreSQL / SQLite 双栈；生产服务器只拉取 Actions 构建好的 Web/Cloud 镜像。
+1. SQLite 是唯一数据库后端，不维护 PostgreSQL / SQLite 双栈；生产服务器默认从仓库源码本地构建 Web/Cloud 镜像，不依赖 GHCR。
 2. 测试同样使用 SQLite，不维护第二套内存数据库实现。
 3. 后台任务运行在 Cloud Tokio runtime 内，不拆独立 worker 服务。
 4. 管理命令与服务端共用 `lifetrace-cloud` 一个二进制，不维护独立 admin/migration/worker 入口。
