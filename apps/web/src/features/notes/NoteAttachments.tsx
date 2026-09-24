@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, FilePlus2, Loader2, Paperclip, Plus, Trash2 } from "lucide-react";
+import { Download, Loader2, Paperclip, Plus, Trash2 } from "lucide-react";
 import { Badge, Button } from "../../components/ui";
 import { useApp } from "../../app/AppContext";
 import { NoteFileApi, attachmentMarkdown, type NoteAttachment } from "./files";
@@ -99,7 +99,7 @@ export function NoteAttachments({
     </div>
     {loading ? <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground"><Loader2 size={13} className="animate-spin" />加载附件…</div> : null}
     {error ? <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">{error}</div> : null}
-    {!loading && !items.length ? <div className="rounded-md border border-dashed p-3 text-xs leading-5 text-muted-foreground"><FilePlus2 size={15} className="mb-1" />上传后会自动向 Markdown 插入 <code>attachment://</code> 引用；文件本体由 LifeTrace File API 管理。</div> : null}
+    {!loading && !items.length ? <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">暂无附件</div> : null}
     <div className="space-y-1">
       {items.map((item) => <div key={item.id} className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-xs">
         <Paperclip size={13} className="shrink-0 text-muted-foreground" />
