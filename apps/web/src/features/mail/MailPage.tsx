@@ -16,6 +16,7 @@ import {
 import { WorkspaceShell } from "../../layouts/WorkspaceShell";
 import { MailAccountSettings } from "./MailAccountSettings";
 import { MailComposer, type ComposeMode } from "./MailComposer";
+import { renderableMailHtml } from "./mailHtml";
 import type { MailAddress, MailDraft, MailMessageDetail } from "./types";
 import { useMailWorkspace } from "./useMailWorkspace";
 
@@ -119,6 +120,7 @@ export function MailPage() {
   const runtimeReady = runtime.status === "ready";
   const account = accounts.find((item) => item.id === accountId) ?? null;
   const messageBody = useMemo(() => plainBody(selectedMessage), [selectedMessage]);
+  const renderedHtml = useMemo(() => selectedMessage ? renderableMailHtml(selectedMessage) : "", [selectedMessage]);
   const unreadCount = messages.filter((message) => !message.isRead).length;
   const visibleDrafts = useMemo(() => {
     const needle = deferredQuery.trim().toLocaleLowerCase("zh-CN");
@@ -402,7 +404,7 @@ export function MailPage() {
           <div className="scrollbar-thin flex-1 overflow-y-auto p-4 sm:p-6">
             {detailLoading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" />加载邮件正文…</div> : selectedMessage.html ? <div
               className="break-words text-sm leading-7 text-foreground [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap"
-              dangerouslySetInnerHTML={{ __html: selectedMessage.html }}
+              dangerouslySetInnerHTML={{ __html: renderedHtml }}
             /> : <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-foreground">{messageBody || "该邮件没有可显示的正文。"}</pre>}
             {selectedMessage.attachments.length ? <div className="mt-8 border-t pt-4">
               <div className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">附件</div>
