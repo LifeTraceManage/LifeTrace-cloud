@@ -308,7 +308,7 @@ export function MailComposer({
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-xs font-medium"><Paperclip size={13} />附件</div>
-            <div className="mt-1 text-[10px] text-muted-foreground">总大小上限 18 MB。添加附件会自动建立服务端草稿。</div>
+            <div className="mt-1 text-[10px] text-muted-foreground">附件上限 18 MB</div>
           </div>
           <input
             ref={fileInputRef}
