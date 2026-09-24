@@ -24,7 +24,7 @@ import { NotesKnowledgePanel } from "./NotesKnowledgePanel";
 import {
   mergeNoteProperties, noteAliases, parseFrontmatter, storedNoteProperties, type NoteProperties,
 } from "./properties";
-import { VditorEditor } from "./VditorEditor";
+import { MarkdownEditor } from "./MarkdownEditor";
 
 type SaveState = "saved" | "saving" | "dirty" | "error";
 type BuiltinScope = "inbox" | "all" | "recent" | "favorites" | "trash";
@@ -56,7 +56,7 @@ function notePayload(
       ...currentJson,
       type: "markdown",
       source: markdown,
-      editor: "vditor",
+      editor: "codemirror",
       properties: {
         status: properties.status.trim(),
         source: properties.source.trim(),
@@ -405,7 +405,7 @@ export function NotesPage() {
         contentJson: {
           type: "markdown",
           source: markdown,
-          editor: "vditor",
+          editor: "codemirror",
           properties: { status: "daily", source: "lifetrace", aliases: [] },
         },
       };
@@ -800,10 +800,10 @@ export function NotesPage() {
 
           <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_260px]">
             <div className={selected.isArchived === true ? "pointer-events-none opacity-80" : undefined}>
-              <VditorEditor
+              <MarkdownEditor
                 key={selected.meta.id}
                 value={content}
-                cacheKey={`lifetrace:vditor:${session?.user.id ?? "anonymous"}:${selected.meta.id}`}
+                cacheKey={`lifetrace:notes:draft:${session?.user.id ?? "anonymous"}:${selected.meta.id}`}
                 cloudSaveRevision={cloudSavedNoteId === selected.meta.id ? cloudSaveRevision : 0}
                 wikiSuggestions={activeNotes
                   .filter((note) => note.meta.id !== selected.meta.id)
