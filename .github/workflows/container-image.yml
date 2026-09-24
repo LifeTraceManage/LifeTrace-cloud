@@ -40,7 +40,8 @@ jobs:
             type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=sha-
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
@@ -50,6 +51,16 @@ jobs:
           cache-from: type=gha,scope=lifetrace-cloud-image
           cache-to: type=gha,mode=max,scope=lifetrace-cloud-image
           provenance: false
+
+      - name: Publish image summary
+        run: |
+          {
+            echo "### LifeTrace Cloud image"
+            echo
+            echo "- Image: ghcr.io/lifetracemanage/lifetrace-cloud:main"
+            echo "- SHA tag: ghcr.io/lifetracemanage/lifetrace-cloud:sha-${GITHUB_SHA::7}"
+            echo "- Digest: ${{ steps.build.outputs.digest }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   web-image:
     name: Web image
@@ -74,7 +85,8 @@ jobs:
             type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=sha-
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/web/Dockerfile
@@ -87,7 +99,10 @@ jobs:
 
       - name: Publish image summary
         run: |
-          echo "### LifeTrace split images" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Web: `ghcr.io/lifetracemanage/lifetrace-web-app:main`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Cloud: `ghcr.io/lifetracemanage/lifetrace-cloud:main`" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### LifeTrace Web image"
+            echo
+            echo "- Image: ghcr.io/lifetracemanage/lifetrace-web-app:main"
+            echo "- SHA tag: ghcr.io/lifetracemanage/lifetrace-web-app:sha-${GITHUB_SHA::7}"
+            echo "- Digest: ${{ steps.build.outputs.digest }}"
+          } >> "$GITHUB_STEP_SUMMARY"
