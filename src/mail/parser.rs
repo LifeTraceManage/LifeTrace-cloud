@@ -68,10 +68,11 @@ fn references_parent(value: &HeaderValue<'_>) -> Option<String> {
 }
 
 pub fn sanitize_html(input: &str) -> String {
-    // Images are removed server-side so opening an email cannot fire remote tracking pixels.
-    // Links remain usable and Ammonia adds noopener/noreferrer to them.
+    // Preserve sanitized email images. http/https images are rendered directly by
+    // the web client, while cid: images are rewritten to authenticated attachment URLs.
+    // Ammonia still strips scripts, event handlers and other unsafe markup.
     Builder::default()
-        .rm_tags(&["img"])
+        .add_url_schemes(&["cid"])
         .clean(input)
         .to_string()
 }
@@ -157,13 +158,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sanitizer_removes_script_handlers_and_remote_images() {
+    fn sanitizer_keeps_images_but_removes_active_content() {
         let cleaned = sanitize_html(
-            r#"<p onclick="alert(1)">hello</p><script>alert(2)</script><img src="https://tracker.invalid/pixel"><a href="https://example.com">open</a>"#,
+            r#"<p onclick="alert(1)">hello</p><script>alert(2)</script><img src="https://images.example/banner.png" onerror="alert(3)"><img src="cid:logo@example"><a href="https://example.com">open</a>"#,
         );
-        assert!(!cleaned.contains("script"));
+        assert!(!cleaned.contains("<script"));
         assert!(!cleaned.contains("onclick"));
-        assert!(!cleaned.contains("tracker.invalid"));
+        assert!(!cleaned.contains("onerror"));
+        assert!(cleaned.contains("https://images.example/banner.png"));
+        assert!(cleaned.contains("cid:logo@example"));
         assert!(cleaned.contains("example.com"));
     }
 
