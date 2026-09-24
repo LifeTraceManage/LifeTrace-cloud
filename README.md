@@ -140,7 +140,47 @@ Web Nginx 将附件上传上限设为 256 MiB，并把 API 保持为同源反向
 
 服务器只需要 Docker / Docker Compose，不需要 Node、Rust 或源码构建工具。
 
-首次部署：
+### 一键部署
+
+仓库公开后可以直接从 GitHub 下载安装脚本，不需要 clone 源码。首次部署只需要提供对外访问地址：
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/LifeTraceManage/LifeTrace-cloud/main/deploy/cloud/install.sh \
+  | bash -s -- --base-url http://YOUR_SERVER_IP
+```
+
+如果已经配置 HTTPS：
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/LifeTraceManage/LifeTrace-cloud/main/deploy/cloud/install.sh \
+  | bash -s -- --base-url https://lifetrace.example.com
+```
+
+安装器会：
+
+- 检查 Docker Engine / Docker Compose v2；
+- 下载生产 Compose、部署脚本和验证脚本；
+- 首次安装自动生成 Cursor、Page Token、Password Pepper、Token Pepper 四个随机密钥；
+- 写入权限受限的 `.env.production`；
+- 拉取 Actions 已构建好的 Web / Cloud 镜像；
+- 启动两个容器并执行 SQLite 持久化、Web 反向代理和健康检查；
+- 再次运行时保留已有 `.env.production` 和密钥。
+
+默认安装到 `~/lifetrace`。也可以固定 Actions 发布的 SHA 镜像：
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/LifeTraceManage/LifeTrace-cloud/main/deploy/cloud/install.sh \
+  | bash -s -- \
+      --base-url https://lifetrace.example.com \
+      --tag sha-<commit>
+```
+
+如果 GHCR package 仍为 private，先执行 `docker login ghcr.io`。GitHub Container Registry 的 public package 支持匿名 pull；package visibility 可在组织的 Package settings 中设为 Public。一次改成 Public 后不能再改回 private。
+
+### 手动部署
 
 ```bash
 cp deploy/cloud/.env.production.example deploy/cloud/.env.production
