@@ -21,6 +21,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --offline --locked --release --bin lifetrace-cloud --jobs "${CARGO_BUILD_JOBS}"
 
 FROM debian:bookworm-slim
+LABEL org.opencontainers.image.source="https://github.com/LifeTraceManage/LifeTrace-cloud" \
+      org.opencontainers.image.description="LifeTrace Cloud SQLite backend"
 RUN sed -i \
         -e 's|deb.debian.org/debian-security|mirrors.aliyun.com/debian-security|g' \
         -e 's|deb.debian.org/debian|mirrors.aliyun.com/debian|g' \
