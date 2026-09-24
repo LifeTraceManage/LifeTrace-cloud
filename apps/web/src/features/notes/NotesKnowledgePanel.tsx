@@ -51,7 +51,7 @@ export function NotesKnowledgePanel({
         <div className="flex items-center gap-2 text-xs font-semibold"><Undo2 size={14} />Backlinks</div>
         <Badge>{backlinks.length}</Badge>
       </div>
-      {backlinks.length ? <div className="space-y-1">{backlinks.map((source) => <button key={source.meta.id} onClick={() => onOpenNote(source.meta.id)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"><Undo2 size={12} className="shrink-0 text-primary" /><span className="truncate">{text(source, "title", "无标题")}</span></button>)}</div> : <EmptyState title="暂无反向链接" description="其他笔记引用当前笔记后，会自动出现在这里。" />}
+      {backlinks.length ? <div className="space-y-1">{backlinks.map((source) => <button key={source.meta.id} onClick={() => onOpenNote(source.meta.id)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"><Undo2 size={12} className="shrink-0 text-primary" /><span className="truncate">{text(source, "title", "无标题")}</span></button>)}</div> : <EmptyState title="暂无反向链接" />}
     </section>
   </aside>;
 }
