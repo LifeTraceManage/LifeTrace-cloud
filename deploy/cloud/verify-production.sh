@@ -24,41 +24,43 @@ compose=(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}")
 "${compose[@]}" config --quiet
 
 service_count="$("${compose[@]}" config --services | wc -l | tr -d ' ')"
-[[ "${service_count}" == "1" ]] || {
-  echo "[LifeTrace verify] expected exactly one service, got ${service_count}" >&2
+[[ "${service_count}" == "2" ]] || {
+  echo "[LifeTrace verify] expected exactly two services, got ${service_count}" >&2
   exit 1
 }
 
 "${compose[@]}" up -d --remove-orphans --wait
 
-"${compose[@]}" exec -T lifetrace sh -ec 'test -s /app/web/index.html'
-"${compose[@]}" exec -T lifetrace sh -ec 'test -d /app/web/assets'
-"${compose[@]}" exec -T lifetrace curl --fail --silent http://127.0.0.1:8787/ >/dev/null
-"${compose[@]}" exec -T lifetrace curl --fail --silent http://127.0.0.1:8787/health/ready >/dev/null
-"${compose[@]}" exec -T lifetrace curl --fail --silent http://127.0.0.1:8869/ready >/dev/null
+# Cloud runtime and embedded SQLite.
+"${compose[@]}" exec -T cloud sh -ec 'test -x /app/lifetrace-cloud'
+"${compose[@]}" exec -T cloud curl --fail --silent http://127.0.0.1:8787/health/ready >/dev/null
+"${compose[@]}" exec -T cloud curl --fail --silent http://127.0.0.1:8869/ready >/dev/null
 
-before="$("${compose[@]}" exec -T lifetrace sh -ec 'test -s /data/lifetrace.db && stat -c "%i:%s" /data/lifetrace.db')"
+# Web static payload and reverse proxy to Cloud.
+"${compose[@]}" exec -T web sh -ec 'test -s /usr/share/nginx/html/index.html'
+"${compose[@]}" exec -T web wget -q -O - http://127.0.0.1/healthz >/dev/null
+"${compose[@]}" exec -T web wget -q -O - http://127.0.0.1/health/ready >/dev/null
 
-"${compose[@]}" restart lifetrace
-"${compose[@]}" up -d --wait
+before="$("${compose[@]}" exec -T cloud sh -ec 'test -s /data/lifetrace.db && stat -c "%i:%s" /data/lifetrace.db')"
 
-"${compose[@]}" exec -T lifetrace sh -ec 'test -s /app/web/index.html'
-"${compose[@]}" exec -T lifetrace curl --fail --silent http://127.0.0.1:8787/ >/dev/null
-"${compose[@]}" exec -T lifetrace curl --fail --silent http://127.0.0.1:8787/health/ready >/dev/null
-"${compose[@]}" exec -T lifetrace curl --fail --silent http://127.0.0.1:8869/ready >/dev/null
+"${compose[@]}" restart cloud
+"${compose[@]}" up -d --wait cloud web
 
-after="$("${compose[@]}" exec -T lifetrace sh -ec 'test -s /data/lifetrace.db && stat -c "%i:%s" /data/lifetrace.db')"
+"${compose[@]}" exec -T cloud curl --fail --silent http://127.0.0.1:8787/health/ready >/dev/null
+"${compose[@]}" exec -T web wget -q -O - http://127.0.0.1/health/ready >/dev/null
+
+after="$("${compose[@]}" exec -T cloud sh -ec 'test -s /data/lifetrace.db && stat -c "%i:%s" /data/lifetrace.db')"
 
 before_inode="${before%%:*}"
 after_inode="${after%%:*}"
 [[ "${before_inode}" == "${after_inode}" ]] || {
-  echo "[LifeTrace verify] SQLite file was not preserved across restart" >&2
+  echo "[LifeTrace verify] SQLite file was not preserved across Cloud restart" >&2
   exit 1
 }
 
 echo "[LifeTrace verify] OK"
-echo "  service: lifetrace"
-echo "  web:     embedded in image at /app/web"
-echo "  storage: /data/lifetrace.db"
-echo "  api:     http://127.0.0.1:8787/health/ready"
-echo "  beecount:http://127.0.0.1:8869/ready"
+echo "  web:      ghcr.io/lifetracemanage/lifetrace-web"
+echo "  cloud:    ghcr.io/lifetracemanage/lifetrace-cloud"
+echo "  storage:  /data/lifetrace.db"
+echo "  public:   http://127.0.0.1/"
+echo "  beecount: http://127.0.0.1:8869/ready"
