@@ -4,7 +4,7 @@ use chrono::{DateTime, FixedOffset, Utc};
 use imap::{ConnectionMode, TlsKind};
 use lettre::{
     message::{header::ContentType, Attachment, Mailbox, MultiPart, SinglePart},
-    transport::smtp::authentication::Credentials,
+    transport::smtp::authentication::{Credentials, Mechanism},
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 use thiserror::Error;
@@ -378,12 +378,21 @@ fn smtp_transport(
     secret: &str,
 ) -> Result<AsyncSmtpTransport<Tokio1Executor>, MailProtocolError> {
     let credentials = Credentials::new(account.username.clone(), secret.to_owned());
-    let builder = if account.smtp_security == "starttls" {
+    let mut builder = if account.smtp_security == "starttls" {
         AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&account.smtp_host)
     } else {
         AsyncSmtpTransport::<Tokio1Executor>::relay(&account.smtp_host)
     }
     .map_err(|_| MailProtocolError::Connect)?;
+
+    // NetEase's public client configuration and long-standing SMTP behavior
+    // use AUTH LOGIN. Pin the mechanism for 126/163/yeah instead of relying on
+    // generic mechanism negotiation, which can select a provider-incompatible
+    // mechanism even when the same credentials work with AUTH LOGIN manually.
+    if matches!(account.provider.as_str(), "126" | "163" | "yeah") {
+        builder = builder.authentication(vec![Mechanism::Login]);
+    }
+
     Ok(builder
         .port(account.smtp_port as u16)
         .credentials(credentials)
