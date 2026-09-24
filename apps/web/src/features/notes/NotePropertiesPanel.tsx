@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Braces, CalendarClock, Star, Tag } from "lucide-react";
+import { Braces, CalendarClock, Star } from "lucide-react";
 import { Badge, Input } from "../../components/ui";
 import type { JsonEntity } from "../../services/core";
 import type { NoteProperties } from "./properties";
@@ -100,7 +100,6 @@ export function NotePropertiesPanel({
       <div className="border-t pt-2 text-[10px] leading-5 text-muted-foreground">
         <div className="flex items-center gap-1.5"><CalendarClock size={11} />created · {new Date(note.meta.createdAt).toLocaleString("zh-CN")}</div>
         <div className="flex items-center gap-1.5"><CalendarClock size={11} />updated · {new Date(note.meta.updatedAt).toLocaleString("zh-CN")}</div>
-        <div className="mt-1 flex items-center gap-1.5"><Tag size={11} />YAML frontmatter 导入时会映射到这些结构化属性；保存后正文只保留 Markdown 内容。</div>
       </div>
     </div>
   </section>;
