@@ -353,10 +353,7 @@ async fn find_existing(
 
 fn upload_from_row(row: sqlx::sqlite::SqliteRow) -> Result<AttachmentUploadOut, ApiError> {
     Ok(AttachmentUploadOut {
-        file_id: row
-            .try_get::<Uuid, _>("id")
-            .map_err(internal)?
-            .to_string(),
+        file_id: row.try_get::<Uuid, _>("id").map_err(internal)?.to_string(),
         ledger_id: row
             .try_get::<Option<String>, _>("ledger_id")
             .map_err(internal)?
