@@ -93,8 +93,9 @@ fn identify_imap_session(
         return Ok(());
     }
     let command = format!(
-        "ID (\"name\" \"LifeTrace\" \"version\" \"{}\" \"vendor\" \"LifeTrace\")",
-        env!("CARGO_PKG_VERSION")
+        "ID (\"name\" \"LifeTrace\" \"version\" \"{}\" \"vendor\" \"LifeTrace\" \"support-email\" \"{}\")",
+        env!("CARGO_PKG_VERSION"),
+        account.email_address.replace('\\', "\\\\").replace('"', "\\\"")
     );
     session
         .run_command_and_check_ok(command)
@@ -560,6 +561,8 @@ mod tests {
     #[test]
     fn netease_accounts_require_imap_client_identity() {
         assert!(requires_imap_client_id(&account("126", "imap.126.com")));
+        assert!(requires_imap_client_id(&account("163", "imap.163.com")));
+        assert!(requires_imap_client_id(&account("yeah", "imap.yeah.net")));
         assert!(requires_imap_client_id(&account("generic", "imap.163.com")));
         assert!(!requires_imap_client_id(&account("qq", "imap.qq.com")));
     }
