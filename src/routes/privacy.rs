@@ -179,7 +179,7 @@ async fn database_section(
             json_array(
                 state,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',id,'appId',app_id,'platform',platform,'clientVersion',client_version,
+                    'id',CASE WHEN typeof(id)='blob' THEN lower(hex(id)) ELSE id END,'appId',app_id,'platform',platform,'clientVersion',client_version,
                     'status',status,'deviceName',device_name,'firstSeenAt',first_seen_at,
                     'lastSeenAt',last_seen_at,'lastSyncAt',last_sync_at,'revokedAt',revoked_at
                 )), '[]') FROM cloud_devices WHERE user_id=$1 ORDER BY first_seen_at",
@@ -191,7 +191,7 @@ async fn database_section(
             json_array(
                 state,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',id,'deviceId',device_id,'appId',app_id,'scopes',json(scopes),
+                    'id',CASE WHEN typeof(id)='blob' THEN lower(hex(id)) ELSE id END,'deviceId',CASE WHEN typeof(device_id)='blob' THEN lower(hex(device_id)) ELSE device_id END,'appId',app_id,'scopes',json(scopes),
                     'sessionType',session_type,'status',status,'createdAt',created_at,
                     'lastSeenAt',last_seen_at,'idleExpiresAt',idle_expires_at,
                     'absoluteExpiresAt',absolute_expires_at,'revokedAt',revoked_at
@@ -204,7 +204,7 @@ async fn database_section(
             let accounts = json_array(
                 state,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',id,'provider',provider,'emailAddress',email_address,'displayName',display_name,
+                    'id',CASE WHEN typeof(id)='blob' THEN lower(hex(id)) ELSE id END,'provider',provider,'emailAddress',email_address,'displayName',display_name,
                     'imapHost',imap_host,'imapPort',imap_port,'smtpHost',smtp_host,'smtpPort',smtp_port,
                     'status',status,'lastSyncAt',last_sync_at,'createdAt',created_at
                 )), '[]') FROM mail_accounts WHERE user_id=$1",
@@ -214,7 +214,7 @@ async fn database_section(
             let identities = json_array(
                 state,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',id,'accountId',account_id,'emailAddress',email_address,
+                    'id',CASE WHEN typeof(id)='blob' THEN lower(hex(id)) ELSE id END,'accountId',CASE WHEN typeof(account_id)='blob' THEN lower(hex(account_id)) ELSE account_id END,'emailAddress',email_address,
                     'displayName',display_name,'replyTo',reply_to,'signature',signature_html,
                     'isDefault',is_default,'createdAt',created_at,'updatedAt',updated_at,
                     'deletedAt',deleted_at
@@ -225,7 +225,7 @@ async fn database_section(
             let messages = json_array(
                 state,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',id,'accountId',account_id,'threadId',thread_id,'subject',subject,
+                    'id',CASE WHEN typeof(id)='blob' THEN lower(hex(id)) ELSE id END,'accountId',CASE WHEN typeof(account_id)='blob' THEN lower(hex(account_id)) ELSE account_id END,'threadId',CASE WHEN typeof(thread_id)='blob' THEN lower(hex(thread_id)) ELSE thread_id END,'subject',subject,
                     'from',json(from_json),'to',json(to_json),'receivedAt',received_at,
                     'isRead',is_read,'snippet',snippet,'hasAttachments',has_attachments
                 )), '[]') FROM mail_messages WHERE user_id=$1 ORDER BY received_at",
@@ -235,7 +235,7 @@ async fn database_section(
             let attachments = json_array(
                 state,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',id,'messageId',message_id,'filename',filename,'mimeType',mime_type,
+                    'id',CASE WHEN typeof(id)='blob' THEN lower(hex(id)) ELSE id END,'messageId',CASE WHEN typeof(message_id)='blob' THEN lower(hex(message_id)) ELSE message_id END,'filename',filename,'mimeType',mime_type,
                     'sizeBytes',size_bytes,'downloadState',download_state,'createdAt',created_at
                 )), '[]') FROM mail_attachments WHERE user_id=$1 ORDER BY created_at",
                 user_id,
@@ -244,7 +244,7 @@ async fn database_section(
             let drafts = json_array(
                 state,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',id,'accountId',account_id,'identityId',identity_id,'subject',subject,
+                    'id',CASE WHEN typeof(id)='blob' THEN lower(hex(id)) ELSE id END,'accountId',CASE WHEN typeof(account_id)='blob' THEN lower(hex(account_id)) ELSE account_id END,'identityId',CASE WHEN identity_id IS NULL THEN NULL WHEN typeof(identity_id)='blob' THEN lower(hex(identity_id)) ELSE identity_id END,'subject',subject,
                     'bodyText',body_text,'state',state,'createdAt',created_at,'updatedAt',updated_at
                 )), '[]') FROM mail_drafts WHERE user_id=$1 ORDER BY created_at",
                 user_id,
@@ -253,7 +253,7 @@ async fn database_section(
             let draft_attachments = json_array(
                 state,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',id,'draftId',draft_id,'filename',filename,'mimeType',mime_type,
+                    'id',CASE WHEN typeof(id)='blob' THEN lower(hex(id)) ELSE id END,'draftId',CASE WHEN typeof(draft_id)='blob' THEN lower(hex(draft_id)) ELSE draft_id END,'filename',filename,'mimeType',mime_type,
                     'sizeBytes',size_bytes,'createdAt',created_at
                 )), '[]') FROM mail_draft_attachments WHERE user_id=$1 ORDER BY created_at",
                 user_id,
