@@ -83,7 +83,7 @@ async fn stats(
          FROM sync_entities \
          WHERE user_id=$1 AND is_deleted=FALSE \
            AND entity_type IN ('finance.transaction','finance.budget') \
-           AND payload->>'beecountLedgerId'=$2",
+           AND json_extract(payload, '$.beecountLedgerId')=$2",
     )
     .bind(access.storage_user_id)
     .bind(&ledger_id)
@@ -107,7 +107,7 @@ async fn stats(
              FROM beecount_ledger_members m \
              JOIN beecount_shared_ledgers s ON s.ledger_id=m.ledger_id \
              WHERE m.user_id=$1 AND s.storage_user_id=e.user_id \
-               AND e.payload->>'beecountLedgerId'=m.ledger_id \
+               AND e.json_extract(payload, '$.beecountLedgerId')=m.ledger_id \
            ))",
     )
     .bind(actor_uuid)
