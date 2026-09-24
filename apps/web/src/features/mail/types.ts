@@ -71,6 +71,8 @@ export interface MailAttachment {
   filename: string;
   contentType?: string | null;
   sizeBytes?: number | null;
+  contentId?: string | null;
+  disposition?: string | null;
   downloadUrl?: string | null;
 }
 
