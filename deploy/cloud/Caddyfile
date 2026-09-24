@@ -1,7 +1,3 @@
-{
-    auto_https on
-}
-
 {$LIFETRACE_DOMAIN} {
     encode zstd gzip
 
