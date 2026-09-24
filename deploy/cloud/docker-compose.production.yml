@@ -1,7 +1,7 @@
 name: lifetrace
 
 services:
-  lifetrace:
+  cloud:
     image: ${LIFETRACE_CLOUD_IMAGE:-ghcr.io/lifetracemanage/lifetrace-cloud:main}
     restart: unless-stopped
     env_file: .env.production
@@ -11,16 +11,15 @@ services:
       LIFETRACE_BIND_ADDRESS: "0.0.0.0:8787"
       BEECOUNT_BIND_ADDRESS: "0.0.0.0:8869"
       LIFETRACE_DATABASE_PATH: "/data/lifetrace.db"
-      LIFETRACE_WEB_ROOT: "/app/web"
-      LIFETRACE_PHOTO_WEB_ROOT: "/app/photo-challenge"
       PHOTO_STAGING_DIR: "/data/photo-staging"
       PUBLIC_WEB_BASE_URL: "${PUBLIC_WEB_BASE_URL:-http://127.0.0.1}"
       CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://127.0.0.1}"
-      AUTH_COOKIE_SECURE: "false"
-      AUTH_COOKIE_NAME: "lifetrace_session"
+      AUTH_COOKIE_SECURE: "${AUTH_COOKIE_SECURE:-false}"
+      AUTH_COOKIE_NAME: "${AUTH_COOKIE_NAME:-lifetrace_session}"
     ports:
-      - "80:8787"
       - "8869:8869"
+    expose:
+      - "8787"
     volumes:
       - lifetrace_data:/data
     healthcheck:
@@ -29,6 +28,21 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+
+  web:
+    image: ${LIFETRACE_WEB_IMAGE:-ghcr.io/lifetracemanage/lifetrace-web:main}
+    restart: unless-stopped
+    depends_on:
+      cloud:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 3s
 
 volumes:
   lifetrace_data:

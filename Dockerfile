@@ -1,15 +1,5 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-alpine AS web-builder
-WORKDIR /web
-COPY apps/web/package.json ./
-RUN --mount=type=cache,target=/root/.npm npm install --no-audit --no-fund
-COPY apps/web/ ./
-RUN npm run typecheck \
-    && npm test \
-    && npm run build \
-    && test -s dist/index.html
-
 FROM rust:1.88-slim AS rust-builder
 ARG CARGO_BUILD_JOBS=2
 WORKDIR /build
@@ -39,17 +29,13 @@ RUN sed -i \
     && apt-get install -y --no-install-recommends ca-certificates curl libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 lifetrace \
-    && mkdir -p /data/photo-staging /app/web /app/photo-challenge \
-    && chown -R lifetrace:lifetrace /data /app
+    && mkdir -p /data/photo-staging \
+    && chown -R lifetrace:lifetrace /data
 
 WORKDIR /app
 COPY --from=rust-builder /build/target/release/lifetrace-cloud /app/lifetrace-cloud
-COPY --from=web-builder /web/dist/ /app/web/
-COPY --from=web-builder /web/photo-challenge-pwa/ /app/photo-challenge/
 
 ENV LIFETRACE_DATABASE_PATH=/data/lifetrace.db \
-    LIFETRACE_WEB_ROOT=/app/web \
-    LIFETRACE_PHOTO_WEB_ROOT=/app/photo-challenge \
     PHOTO_STAGING_DIR=/data/photo-staging
 
 USER lifetrace

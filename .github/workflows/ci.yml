@@ -1,18 +1,49 @@
-name: Cloud CI
+name: LifeTrace CI
 
 on:
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: cloud-ci-${{ github.ref }}
+  group: lifetrace-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test:
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        working-directory: apps/web
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        working-directory: apps/web
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: apps/web
+        run: npm test
+
+      - name: Build
+        working-directory: apps/web
+        run: npm run build
+
+      - name: Verify dist
+        run: test -s apps/web/dist/index.html
+
+  cloud:
+    name: Cloud
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
@@ -21,30 +52,6 @@ jobs:
       AUTH_TOKEN_HASH_PEPPER: cloud-ci-token-pepper
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install Web dependencies
-        working-directory: apps/web
-        run: npm install --no-audit --no-fund
-
-      - name: Typecheck Web
-        working-directory: apps/web
-        run: npm run typecheck
-
-      - name: Test Web
-        working-directory: apps/web
-        run: npm test
-
-      - name: Build Web
-        working-directory: apps/web
-        run: npm run build
-
-      - name: Verify Web dist
-        run: test -s apps/web/dist/index.html
 
       - name: Validate OpenSpec repository
         run: npx --yes @fission-ai/openspec@1.13.0 validate --all --strict --no-interactive
@@ -66,26 +73,6 @@ jobs:
 
       - name: Regenerate contracts
         run: cargo run --manifest-path tools/contract-exporter/Cargo.toml
-
-      - name: Upload generated contracts
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-contracts
-          path: contracts/
-          if-no-files-found: error
-
-      - name: Commit generated contracts on this PR branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          if [ -n "$(git status --porcelain -- contracts/)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add contracts/
-            git commit -m "contracts: regenerate generated artifacts"
-            git fetch origin "${{ github.head_ref }}"
-            git rebase "origin/${{ github.head_ref }}"
-            git push origin HEAD:"${{ github.head_ref }}"
-          fi
 
       - name: Require committed generated contracts
         run: |

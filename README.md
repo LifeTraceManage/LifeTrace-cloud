@@ -1,30 +1,32 @@
 # LifeTrace Cloud
 
-LifeTrace 的轻量自托管云端服务。当前运行时只使用 Rust、Axum、SQLx 与 SQLite；Web 静态资源、BeeCount 兼容入口、邮件后台同步和 Execution 后台任务都由同一个 Cloud 进程提供。
+LifeTrace 的轻量自托管后端与 Web 单仓库。Cloud 运行时只使用 Rust、Axum、SQLx 与 SQLite；Web 由独立 Nginx 容器提供静态资源并同源反向代理 Cloud API。BeeCount 兼容入口、邮件后台同步和 Execution 后台任务仍由 Cloud 进程提供。
 
 目标不是做通用云平台，而是让个人服务器上的 LifeTrace 具备可靠同步、认证和少量云端能力，同时尽可能降低部署和维护成本。
 
 ## 当前架构
 
 ```text
-Browser / Mobile / Desktop / BeeCount
-               │
-        ┌──────┴──────┐
-        │ LifeTrace   │
-        │ Cloud       │
-        │             │
-        │ Axum API    │ :8787
-        │ BeeCount    │ :8869
-        │ Web static  │
-        │ Mail jobs   │
-        │ Exec jobs   │
-        │ SQLite      │
-        └──────┬──────┘
-               │
-         /data/lifetrace.db
+Browser
+   │
+   ▼
+LifeTrace Web :80
+├── React/Vite static assets
+└── Nginx /api + /health proxy
+   │
+   ▼
+LifeTrace Cloud :8787
+├── Axum API
+├── Mail jobs
+├── Exec jobs
+├── SQLite
+└── BeeCount :8869
+   │
+   ▼
+/data/lifetrace.db
 ```
 
-自托管环境只有一个常驻应用进程和一个持久化数据目录。没有 PostgreSQL、Caddy、migration container、mail worker container 或 execution worker container。
+自托管环境使用两个职责单一的容器：`web` 和 `cloud`，外加一个 Cloud SQLite 数据卷。没有 PostgreSQL、独立 migration container、mail worker container 或 execution worker container。
 
 SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行。
 
@@ -40,14 +42,15 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 - `migrations/0001_sqlite.sql`：SQLite 基线 schema
 - `migrations/0002_mail_workspace.sql`：Mail Workspace 增量 schema（Identity / Draft attachment）
 - `apps/web/`：LifeTrace Web 正式源码；与 Cloud 在同一仓库、同一镜像中构建
-- `deploy/cloud/`：唯一生产 Compose、部署脚本与环境变量模板
+- `apps/web/Dockerfile` / `apps/web/nginx.conf`：Web 独立镜像与同源 API 代理
+- `deploy/cloud/`：生产双服务 Compose、部署脚本与环境变量模板
 - `crates/lifetrace-contracts/`：共享协议和领域契约
 - `crates/lifetrace-sync-client/`：Rust Sync v1 客户端
 - `contracts/`：生成的跨语言契约
 
 ## HTTP 入口
 
-主服务监听 `8787`，生产 Compose 映射为宿主机 `80`。
+Cloud 主服务监听容器内部 `8787`；生产环境由 Web Nginx 容器监听宿主机 `80` 并反向代理 `/api/*`、`/health/*` 到 Cloud。
 
 | 路径 | 能力 |
 | --- | --- |
@@ -59,7 +62,7 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 | `/api/v1/integrations/beecount/*` | LifeTrace Web 财务接口 |
 | `/api/v1/mail/*` | 邮件 |
 | `/api/v1/photo-*/*` | 照片相关能力 |
-| 其他路径 | Web SPA 静态资源 |
+| 其他路径 | Cloud 不负责 SPA；由 `web` 容器提供 |
 
 BeeCount 兼容监听 `8869`。该监听器只负责把 BeeCount 原始 `/api/v1/*` 和 `/ws` 请求重写到内部兼容路由，不需要 Caddy。
 
@@ -107,69 +110,69 @@ cargo test --manifest-path crates/lifetrace-sync-client/Cargo.toml
 cargo run --manifest-path tools/contract-exporter/Cargo.toml
 ```
 
-## 单容器部署
+## 双镜像部署
 
-生产部署只有一个完整镜像和一个 service：
+Web 与 Cloud 源码仍然位于同一个仓库，但 GitHub Actions 独立构建两个镜像：
 
 ```text
+ghcr.io/lifetracemanage/lifetrace-web:main
 ghcr.io/lifetracemanage/lifetrace-cloud:main
-├── /app/lifetrace-cloud
-├── /app/web
-│   ├── index.html
-│   └── assets/
-├── /app/photo-challenge
-└── /data
-    ├── lifetrace.db
-    └── photo-staging/
 ```
 
-Web 正式源码现在位于本仓库 `apps/web/`。GitHub Actions 在同一个 Docker build 中先执行 Web 的 `npm ci / typecheck / test / build`，再编译 Rust Cloud，并把 Web `dist` 与 Photo Challenge 静态资源复制进最终镜像。
+生产拓扑：
 
-服务器不再需要 Node、Rust、LifeTrace-web 独立 checkout 或本地构建环境，只需要 Docker / Docker Compose。
+```text
+Internet
+   │
+   ▼
+web container :80
+├── React/Vite
+├── /photo-challenge-upload
+└── /api/* + /health/* ─────► cloud container :8787
+                                  ├── Axum API
+                                  ├── Mail / Execution jobs
+                                  └── SQLite /data/lifetrace.db
+
+BeeCount clients ─────────────► host :8869 → cloud :8869
+```
+
+Web Nginx 将附件上传上限设为 256 MiB，并把 API 保持为同源反向代理，因此浏览器认证 Cookie 不需要跨域配置。
+
+服务器只需要 Docker / Docker Compose，不需要 Node、Rust 或源码构建工具。
 
 首次部署：
 
 ```bash
 cp deploy/cloud/.env.production.example deploy/cloud/.env.production
-# 编辑密钥和服务器地址
+# 编辑密钥和 PUBLIC_WEB_BASE_URL / CORS_ALLOWED_ORIGINS
 
-# 如果 GHCR package 是 private，先登录：
-echo <GITHUB_TOKEN> | docker login ghcr.io -u <GITHUB_USER> --password-stdin
-
+docker login ghcr.io   # 仅当 package 需要认证时
 bash deploy/cloud/deploy-production.sh
 bash deploy/cloud/verify-production.sh
 ```
 
-部署脚本等价于：
+部署脚本只执行两个镜像的 pull 和 Compose 更新：
 
 ```bash
-cd deploy/cloud
-docker compose --env-file .env.production -f docker-compose.production.yml pull lifetrace
-docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans --wait
+docker compose --env-file .env.production \
+  -f deploy/cloud/docker-compose.production.yml pull cloud web
+
+docker compose --env-file .env.production \
+  -f deploy/cloud/docker-compose.production.yml up -d --remove-orphans --wait
 ```
 
-默认镜像：
+可以分别固定 Web/Cloud 到不同 SHA，独立升级和回滚：
 
 ```text
-ghcr.io/lifetracemanage/lifetrace-cloud:main
-```
-
-也可以在 `.env.production` 固定到某个 Actions 生成的 SHA 镜像：
-
-```text
+LIFETRACE_WEB_IMAGE=ghcr.io/lifetracemanage/lifetrace-web:sha-<commit>
 LIFETRACE_CLOUD_IMAGE=ghcr.io/lifetracemanage/lifetrace-cloud:sha-<commit>
 ```
 
-固定 SHA 更适合稳定生产部署和回滚；`:main` 适合持续跟踪主分支。
-
-服务端口：
+持久化只属于 Cloud：
 
 ```text
-80   -> container:8787   LifeTrace Web + API
-8869 -> container:8869   BeeCount compatibility
+lifetrace_data -> /data/lifetrace.db
 ```
-
-持久化只需要备份 Docker volume 中的 `/data`。数据库主体是 `lifetrace.db`；使用 WAL 时，在线备份应通过 SQLite backup/checkpoint 语义完成，而不是在高写入期间只复制主数据库文件。
 
 ## 对象存储
 
@@ -214,12 +217,12 @@ Mail 保留：
 
 ## 设计原则
 
-当前 Cloud 明确按单实例个人服务器优化。Web 正式源码已合并到 `apps/web`，Actions 直接发布包含 Web + Cloud 的完整镜像：
+当前仓库按单实例个人服务器优化。Web 正式源码位于 `apps/web`，但 Web 与 Cloud 以两个独立镜像发布：
 
-1. SQLite 是唯一数据库后端，不维护 PostgreSQL / SQLite 双栈；生产服务器默认只拉取 GitHub Actions 构建好的完整镜像。
+1. SQLite 是唯一数据库后端，不维护 PostgreSQL / SQLite 双栈；生产服务器只拉取 Actions 构建好的 Web/Cloud 镜像。
 2. 测试同样使用 SQLite，不维护第二套内存数据库实现。
 3. 后台任务运行在 Cloud Tokio runtime 内，不拆独立 worker 服务。
 4. 管理命令与服务端共用 `lifetrace-cloud` 一个二进制，不维护独立 admin/migration/worker 入口。
-5. Web 静态资源由 Axum 提供，不增加 Caddy/Nginx 依赖.
+5. Web 使用独立 Nginx 容器提供 SPA，并同源反代 Cloud API；Cloud 不再承担前端静态资源。
 6. 数据库 schema 使用精简的 SQLite migration 链：一个当前基线 + 必要的向前兼容增量；不保留 PostgreSQL 历史 migration 链。
 7. Sync v1 wire contract 保持兼容，数据库实现细节不暴露给客户端。
