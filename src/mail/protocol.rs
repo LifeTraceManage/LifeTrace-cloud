@@ -4,7 +4,11 @@ use chrono::{DateTime, FixedOffset, Utc};
 use imap::{ConnectionMode, TlsKind};
 use lettre::{
     message::{header::ContentType, Attachment, Mailbox, MultiPart, SinglePart},
-    transport::smtp::authentication::{Credentials, Mechanism},
+    transport::smtp::{
+        authentication::{Credentials, Mechanism},
+        client::{AsyncSmtpConnection, TlsParameters},
+        extension::ClientId,
+    },
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 use thiserror::Error;
@@ -404,10 +408,47 @@ pub async fn probe_smtp(
     account: &MailAccountSecret,
     secret: &str,
 ) -> Result<(), MailProtocolError> {
+    // NetEase (126/163/yeah) is validated with the exact operation we need:
+    // establish SMTPS and perform AUTH LOGIN. AsyncSmtpTransport::test_connection()
+    // ultimately probes with NOOP, so a provider-specific NOOP quirk must not be
+    // reported as an authentication failure when AUTH LOGIN itself succeeds.
+    if matches!(account.provider.as_str(), "126" | "163" | "yeah")
+        && account.smtp_security == "tls"
+    {
+        let tls = TlsParameters::new(account.smtp_host.clone())
+            .map_err(|_| MailProtocolError::Connect)?;
+        let credentials = Credentials::new(account.username.clone(), secret.to_owned());
+        let mut connection = tokio::time::timeout(
+            Duration::from_secs(35),
+            AsyncSmtpConnection::connect_tokio1(
+                (account.smtp_host.as_str(), account.smtp_port as u16),
+                Some(Duration::from_secs(30)),
+                &ClientId::Domain("lifetrace".to_owned()),
+                Some(tls),
+                None,
+            ),
+        )
+        .await
+        .map_err(|_| MailProtocolError::Connect)?
+        .map_err(|_| MailProtocolError::Connect)?;
+
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            connection.auth(&[Mechanism::Login], &credentials),
+        )
+        .await
+        .map_err(|_| MailProtocolError::Connect)?
+        .map_err(|_| MailProtocolError::Authentication)?;
+
+        let _ = connection.quit().await;
+        return Ok(());
+    }
+
     let transport = smtp_transport(account, secret)?;
     match tokio::time::timeout(Duration::from_secs(35), transport.test_connection()).await {
         Ok(Ok(true)) => Ok(()),
         Ok(Ok(false)) => Err(MailProtocolError::Connect),
+        Ok(Err(error)) if error.is_tls() || error.is_timeout() => Err(MailProtocolError::Connect),
         Ok(Err(_)) => Err(MailProtocolError::Authentication),
         Err(_) => Err(MailProtocolError::Connect),
     }
