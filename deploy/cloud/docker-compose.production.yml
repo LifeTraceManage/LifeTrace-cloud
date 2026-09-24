@@ -30,7 +30,7 @@ services:
       start_period: 5s
 
   web:
-    image: ${LIFETRACE_WEB_IMAGE:-ghcr.io/lifetracemanage/lifetrace-web:main}
+    image: ${LIFETRACE_WEB_IMAGE:-ghcr.io/lifetracemanage/lifetrace-web-app:main}
     restart: unless-stopped
     depends_on:
       cloud:

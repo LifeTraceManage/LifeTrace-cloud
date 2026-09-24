@@ -89,5 +89,5 @@ jobs:
         run: |
           echo "### LifeTrace split images" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Web: `ghcr.io/lifetracemanage/lifetrace-web:main`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Web: `ghcr.io/lifetracemanage/lifetrace-web-app:main`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Cloud: `ghcr.io/lifetracemanage/lifetrace-cloud:main`" >> "$GITHUB_STEP_SUMMARY"

@@ -59,7 +59,7 @@ after_inode="${after%%:*}"
 }
 
 echo "[LifeTrace verify] OK"
-echo "  web:      ghcr.io/lifetracemanage/lifetrace-web"
+echo "  web:      ghcr.io/lifetracemanage/lifetrace-web-app"
 echo "  cloud:    ghcr.io/lifetracemanage/lifetrace-cloud"
 echo "  storage:  /data/lifetrace.db"
 echo "  public:   http://127.0.0.1/"

@@ -23,8 +23,8 @@ npm run build
 Web 使用独立镜像：
 
 ```text
-ghcr.io/lifetracemanage/lifetrace-web:main
-ghcr.io/lifetracemanage/lifetrace-web:sha-<commit>
+ghcr.io/lifetracemanage/lifetrace-web-app:main
+ghcr.io/lifetracemanage/lifetrace-web-app:sha-<commit>
 ```
 
 `apps/web/Dockerfile` 使用 Node 22 构建 Vite SPA，再复制到 Nginx Alpine。Nginx：
