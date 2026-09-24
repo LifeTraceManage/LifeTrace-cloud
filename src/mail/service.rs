@@ -451,7 +451,7 @@ impl MailService {
         user_id: &UserId,
         account_id: Uuid,
     ) -> Result<usize, MailServiceError> {
-        self.sync_account_uuid(Self::user_uuid(user_id)?, account_id)
+        self.sync_account_uuid(Self::user_uuid(user_id)?, account_id, true)
             .await
     }
 
@@ -469,7 +469,7 @@ impl MailService {
         .await?;
         let mut synced = 0;
         for (user_id, account_id) in accounts {
-            if self.sync_account_uuid(user_id, account_id).await.is_ok() {
+            if self.sync_account_uuid(user_id, account_id, false).await.is_ok() {
                 synced += 1;
             }
         }
@@ -480,6 +480,7 @@ impl MailService {
         &self,
         user_id: Uuid,
         account_id: Uuid,
+        refresh_recent: bool,
     ) -> Result<usize, MailServiceError> {
         let account = self.account_secret(user_id, account_id).await?;
         let secret = self.decrypt_secret(&account)?;
@@ -497,7 +498,7 @@ impl MailService {
             let probe = protocol::probe_imap(account.clone(), secret.clone()).await?;
             self.upsert_folders(user_id, account_id, &probe.folders)
                 .await?;
-            return Box::pin(self.sync_account_uuid(user_id, account_id)).await;
+            return Box::pin(self.sync_account_uuid(user_id, account_id, refresh_recent)).await;
         }
 
         let mut total = 0;
@@ -513,13 +514,24 @@ impl MailService {
             .bind(if folder.last_sync_at.is_none() { "initial" } else { "incremental" })
             .execute(&self.pool)
             .await?;
+            let (previous_uidvalidity, last_seen_uid, initial_window) = if refresh_recent {
+                // Manual sync reparses the recent window so parser/display upgrades
+                // (such as image handling) are applied to already-synced messages.
+                (None, 0, Some(initial_since))
+            } else {
+                (
+                    folder.uidvalidity,
+                    folder.last_seen_uid,
+                    folder.last_sync_at.is_none().then_some(initial_since),
+                )
+            };
             let snapshot = protocol::fetch_folder(
                 account.clone(),
                 secret.clone(),
                 folder.remote_name.clone(),
-                folder.uidvalidity,
-                folder.last_seen_uid,
-                folder.last_sync_at.is_none().then_some(initial_since),
+                previous_uidvalidity,
+                last_seen_uid,
+                initial_window,
             )
             .await;
             match snapshot {
@@ -1638,13 +1650,51 @@ async fn persist_message(
         .any(|flag| flag.eq_ignore_ascii_case("\\Seen") || flag.eq_ignore_ascii_case("Seen"));
     if let Some(message_id) = existing {
         sqlx::query(
-            "UPDATE mail_messages SET flags_json=$2,is_read=$3,updated_at=CURRENT_TIMESTAMP WHERE id=$1",
+            r#"
+            UPDATE mail_messages
+            SET flags_json=$2,is_read=$3,size_bytes=$4,snippet=$5,body_text=$6,
+                body_html_sanitized=$7,has_attachments=$8,content_hash=$9,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=$1
+            "#,
         )
         .bind(message_id)
         .bind(serde_json::to_value(&remote.flags).unwrap_or_default())
         .bind(seen)
+        .bind(remote.size.map(i64::from))
+        .bind(&parsed.snippet)
+        .bind(&parsed.body_text)
+        .bind(&parsed.body_html_sanitized)
+        .bind(!parsed.attachments.is_empty())
+        .bind(&parsed.content_hash)
         .execute(&mut **transaction)
         .await?;
+
+        sqlx::query("DELETE FROM mail_attachments WHERE message_id=$1")
+            .bind(message_id)
+            .execute(&mut **transaction)
+            .await?;
+        for attachment in &parsed.attachments {
+            sqlx::query(
+                r#"
+                INSERT INTO mail_attachments (id,user_id,message_id,part_id,filename,mime_type,size_bytes,content_id,disposition,checksum)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                "#,
+            )
+            .bind(Uuid::new_v4())
+            .bind(user_id)
+            .bind(message_id)
+            .bind(&attachment.part_id)
+            .bind(&attachment.filename)
+            .bind(&attachment.mime_type)
+            .bind(attachment.size_bytes)
+            .bind(&attachment.content_id)
+            .bind(&attachment.disposition)
+            .bind(&attachment.checksum)
+            .execute(&mut **transaction)
+            .await?;
+        }
+
         let thread_id: Uuid = sqlx::query_scalar("SELECT thread_id FROM mail_messages WHERE id=$1")
             .bind(message_id)
             .fetch_one(&mut **transaction)
