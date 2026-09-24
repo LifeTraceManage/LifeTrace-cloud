@@ -122,7 +122,7 @@ export function MailAccountSettings({
         } : {}),
       });
       setAuthorizationCode("");
-      setNotice("邮箱账号已保存，连接测试会由 LifeTrace Cloud 执行。");
+      setNotice("邮箱账号已保存。");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "邮箱连接失败");
     } finally {
@@ -170,7 +170,7 @@ export function MailAccountSettings({
     try {
       if (editingIdentityId) {
         await onUpdateIdentity(editingIdentityId, input);
-        setNotice("发件 Identity 已更新。签名会在服务端发送前自动附加。");
+        setNotice("发件 Identity 已更新。");
       } else {
         await onCreateIdentity(input);
         setNotice("发件 Identity 已添加。");
@@ -190,7 +190,7 @@ export function MailAccountSettings({
     try {
       await onDeleteIdentity(identity.id);
       if (editingIdentityId === identity.id) resetIdentityForm(identity.accountId);
-      setNotice("Identity 已删除；若删除的是默认 Identity，服务端会自动选择同账号下的下一个 Identity。");
+      setNotice("Identity 已删除。");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "删除 Identity 失败");
     } finally {
@@ -297,7 +297,7 @@ export function MailAccountSettings({
           </div>
           <label className="block space-y-1 text-xs font-medium">Reply-To<Input type="email" value={identityReplyTo} onChange={(event) => setIdentityReplyTo(event.target.value)} /></label>
           <label className="block space-y-1 text-xs font-medium">签名（纯文本）
-            <Textarea className="min-h-20" value={identitySignature} onChange={(event) => setIdentitySignature(event.target.value)} placeholder="发送前由 LifeTrace Cloud 自动附加到正文末尾" />
+            <Textarea className="min-h-20" value={identitySignature} onChange={(event) => setIdentitySignature(event.target.value)} placeholder="自动添加到邮件末尾" />
           </label>
           <label className="flex items-center gap-2 text-xs">
             <input type="checkbox" checked={identityDefault} onChange={(event) => setIdentityDefault(event.target.checked)} />
