@@ -824,25 +824,33 @@ async fn accept_invite(
     let code = normalize_code(&code);
     let now = Utc::now();
     let mut tx = state.pool.begin().await.map_err(db_error)?;
+    // SQLite has no row-level FOR UPDATE. Claim the invite atomically inside
+    // this transaction instead; any later validation failure rolls the claim
+    // back together with the membership changes.
     let invite = sqlx::query(
-        "SELECT i.ledger_id,i.invited_by,i.target_role,s.storage_user_id \
-         FROM beecount_ledger_invites i JOIN beecount_shared_ledgers s USING (ledger_id) \
-         WHERE i.code=$1 AND i.used_at IS NULL AND i.expires_at>$2 OF i",
+        r#"
+        UPDATE beecount_ledger_invites
+        SET used_at=$2, used_by=$3
+        WHERE code=$1 AND used_at IS NULL AND expires_at>$2
+        RETURNING ledger_id, invited_by, target_role
+        "#,
     )
     .bind(&code)
     .bind(now)
+    .bind(actor)
     .fetch_optional(&mut *tx)
     .await
     .map_err(db_error)?
     .ok_or_else(|| crate::beecount::collaboration::not_found("Invalid or expired invite"))?;
     let ledger_id: String = invite.try_get("ledger_id").map_err(internal)?;
     let invited_by: Uuid = invite.try_get("invited_by").map_err(internal)?;
-    let storage_user_id: Uuid = invite.try_get("storage_user_id").map_err(internal)?;
-    sqlx::query("SELECT ledger_id FROM beecount_shared_ledgers WHERE ledger_id=$1")
-        .bind(&ledger_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(db_error)?;
+    let storage_user_id: Uuid = sqlx::query_scalar(
+        "SELECT storage_user_id FROM beecount_shared_ledgers WHERE ledger_id=$1",
+    )
+    .bind(&ledger_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_error)?;
     let exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM beecount_ledger_members WHERE ledger_id=$1 AND user_id=$2)",
     )
@@ -877,13 +885,6 @@ async fn accept_invite(
     .execute(&mut *tx)
     .await
     .map_err(db_error)?;
-    sqlx::query("UPDATE beecount_ledger_invites SET used_at=$2,used_by=$3 WHERE code=$1")
-        .bind(&code)
-        .bind(now)
-        .bind(actor)
-        .execute(&mut *tx)
-        .await
-        .map_err(db_error)?;
     tx.commit().await.map_err(db_error)?;
     let info = ledger_info(&state, storage_user_id, &ledger_id).await?;
     let wire_actor = beecount_user_id(&state.pool, actor).await?;
