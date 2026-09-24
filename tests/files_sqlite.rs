@@ -25,6 +25,12 @@ fn config(url: String) -> Config {
         page_token_signing_key: Some("file-test-page-token-key".to_owned()),
         public_web_base_url: Some("http://localhost:3000".to_owned()),
         cors_allowed_origins: vec!["http://localhost:3000".to_owned()],
+        file_object_storage_endpoint: Some("https://storage.example.com".to_owned()),
+        file_object_storage_bucket: Some("lifetrace-files".to_owned()),
+        file_object_storage_region: "us-east-1".to_owned(),
+        file_object_storage_access_key_id: Some("AKIDFILETEST".to_owned()),
+        file_object_storage_secret_access_key: Some("file-test-secret-key".to_owned()),
+        file_object_storage_presign_ttl_seconds: 300,
         ..Config::default()
     }
 }
@@ -59,20 +65,6 @@ fn registration() -> RegisterRequestV1 {
     }
 }
 
-fn configure_object_storage() {
-    std::env::set_var(
-        "FILE_OBJECT_STORAGE_ENDPOINT",
-        "https://storage.example.com",
-    );
-    std::env::set_var("FILE_OBJECT_STORAGE_BUCKET", "lifetrace-files");
-    std::env::set_var("FILE_OBJECT_STORAGE_REGION", "us-east-1");
-    std::env::set_var("FILE_OBJECT_STORAGE_ACCESS_KEY_ID", "AKIDFILETEST");
-    std::env::set_var(
-        "FILE_OBJECT_STORAGE_SECRET_ACCESS_KEY",
-        "file-test-secret-key",
-    );
-    std::env::set_var("FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS", "300");
-}
 
 async fn json_body(response: axum::response::Response) -> Value {
     let bytes = to_bytes(response.into_body(), 128 * 1024).await.unwrap();
@@ -81,7 +73,6 @@ async fn json_body(response: axum::response::Response) -> Value {
 
 #[tokio::test]
 async fn prepare_deduplicates_and_signed_headers_are_browser_safe() {
-    configure_object_storage();
     let Some(state) = state().await else {
         return;
     };
@@ -150,7 +141,6 @@ async fn prepare_deduplicates_and_signed_headers_are_browser_safe() {
 
 #[tokio::test]
 async fn file_id_cannot_cross_user_boundary() {
-    configure_object_storage();
     let Some(state) = state().await else {
         return;
     };
