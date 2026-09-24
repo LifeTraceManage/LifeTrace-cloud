@@ -56,6 +56,19 @@ jobs:
       - name: Validate OpenSpec repository
         run: npx --yes @fission-ai/openspec@1.13.0 validate --all --strict --no-interactive
 
+      - name: Validate deployment shell scripts
+        run: |
+          bash -n deploy/cloud/install.sh
+          bash -n deploy/cloud/deploy-production.sh
+          bash -n deploy/cloud/verify-production.sh
+
+      - name: Validate production Compose
+        run: |
+          cp deploy/cloud/.env.production.example deploy/cloud/.env.production
+          docker compose --env-file deploy/cloud/.env.production \
+            -f deploy/cloud/docker-compose.production.yml config --quiet
+          rm -f deploy/cloud/.env.production
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0

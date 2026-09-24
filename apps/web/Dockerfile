@@ -11,6 +11,8 @@ RUN npm run typecheck \
     && test -s dist/index.html
 
 FROM nginx:1.27-alpine
+LABEL org.opencontainers.image.source="https://github.com/LifeTraceManage/LifeTrace-cloud" \
+      org.opencontainers.image.description="LifeTrace Web frontend and Cloud reverse proxy"
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=web-builder /web/dist/ /usr/share/nginx/html/
 COPY --from=web-builder /web/photo-challenge-pwa/ /usr/share/nginx/html/photo-challenge-upload/
