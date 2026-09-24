@@ -65,7 +65,6 @@ fn registration() -> RegisterRequestV1 {
     }
 }
 
-
 async fn json_body(response: axum::response::Response) -> Value {
     let bytes = to_bytes(response.into_body(), 128 * 1024).await.unwrap();
     serde_json::from_slice(&bytes).unwrap()
