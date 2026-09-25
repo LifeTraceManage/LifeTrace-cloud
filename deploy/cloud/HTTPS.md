@@ -1,53 +1,66 @@
-# LifeTrace production HTTPS
+# LifeTrace HTTPS and ICP transition access
 
-Production traffic is terminated by Caddy:
+The production gateway keeps two entry points during the domain/ICP transition:
 
 ```text
-Internet :80/:443
-    -> Caddy (automatic TLS + HTTP->HTTPS)
+http://43.142.88.57
+    -> Caddy :80
+    -> Web/Nginx :80
+    -> LifeTrace Cloud :8787
+
+https://lifetrace.store
+    -> Caddy :443 (automatic TLS once DNS is reachable)
     -> Web/Nginx :80
     -> LifeTrace Cloud :8787
 ```
 
-## Required DNS
+The IP route allows LifeTrace to remain usable while the domain is waiting for DNS/ICP availability.
 
-The value of `LIFETRACE_DOMAIN` must resolve to the server public IP. For the current deployment:
+## Environment
 
-```text
-lifetrace.store  A  43.142.88.57
+Keep the existing secrets in `.env.production` and add/update:
+
+```env
+LIFETRACE_DOMAIN=lifetrace.store
+LIFETRACE_PUBLIC_IP=43.142.88.57
+PUBLIC_WEB_BASE_URL=https://lifetrace.store
+CORS_ALLOWED_ORIGINS=https://lifetrace.store,http://43.142.88.57
+AUTH_COOKIE_SECURE=false
 ```
 
-Do not expose the Web container's port 80 directly. Caddy owns host ports 80 and 443.
+`AUTH_COOKIE_SECURE=false` is intentionally temporary. A browser will not send a Secure session cookie over the plain HTTP IP endpoint. Once `https://lifetrace.store` is fully available, switch it to:
 
-## First deployment
+```env
+CORS_ALLOWED_ORIGINS=https://lifetrace.store
+AUTH_COOKIE_SECURE=true
+```
+
+and stop using the HTTP IP endpoint for authenticated access.
+
+## Deploy
 
 ```bash
 cd ~/LifeTrace-cloud
 git pull
 cd deploy/cloud
-
-cp .env.production.example .env.production   # only on first setup
-nano .env.production
 ./deploy-production.sh all
 ```
 
-Set at least:
+The security group must allow TCP 80. TCP 443 is required for domain HTTPS once DNS is available. UDP 443 is optional for HTTP/3.
 
-```env
-LIFETRACE_DOMAIN=lifetrace.store
-```
-
-Keep the existing production secrets in `.env.production`; never overwrite a configured production file just to adopt the example.
-
-The server/security group must allow inbound TCP 80 and TCP/UDP 443. Caddy stores ACME account and certificates in the persistent `caddy_data` volume and renews certificates automatically.
-
-## Verify
+## Verify during the transition
 
 ```bash
+curl -I http://43.142.88.57
 docker compose --env-file .env.production -f docker-compose.production.yml ps
 docker compose --env-file .env.production -f docker-compose.production.yml logs --tail=100 caddy
+```
+
+After DNS is available:
+
+```bash
 curl -I http://lifetrace.store
 curl -I https://lifetrace.store
 ```
 
-The HTTP request should redirect to HTTPS and the HTTPS request should return the Web response.
+Caddy will keep retrying certificate acquisition if the domain is not yet publicly reachable. That does not prevent the explicit HTTP IP site from serving traffic.

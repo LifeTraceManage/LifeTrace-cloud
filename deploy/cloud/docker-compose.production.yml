@@ -15,9 +15,9 @@ services:
       BEECOUNT_BIND_ADDRESS: "0.0.0.0:8869"
       LIFETRACE_DATABASE_PATH: "/data/lifetrace.db"
       PHOTO_STAGING_DIR: "/data/photo-staging"
-      PUBLIC_WEB_BASE_URL: "https://${LIFETRACE_DOMAIN:?set LIFETRACE_DOMAIN in .env.production}"
-      CORS_ALLOWED_ORIGINS: "https://${LIFETRACE_DOMAIN:?set LIFETRACE_DOMAIN in .env.production}"
-      AUTH_COOKIE_SECURE: "true"
+      PUBLIC_WEB_BASE_URL: "${PUBLIC_WEB_BASE_URL:?set PUBLIC_WEB_BASE_URL in .env.production}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:?set CORS_ALLOWED_ORIGINS in .env.production}"
+      AUTH_COOKIE_SECURE: "${AUTH_COOKIE_SECURE:-false}"
       AUTH_COOKIE_NAME: "${AUTH_COOKIE_NAME:-lifetrace_session}"
     ports:
       - "8869:8869"
@@ -58,6 +58,7 @@ services:
         condition: service_healthy
     environment:
       LIFETRACE_DOMAIN: "${LIFETRACE_DOMAIN:?set LIFETRACE_DOMAIN in .env.production}"
+      LIFETRACE_PUBLIC_IP: "${LIFETRACE_PUBLIC_IP:?set LIFETRACE_PUBLIC_IP in .env.production}"
     ports:
       - "80:80"
       - "443:443"

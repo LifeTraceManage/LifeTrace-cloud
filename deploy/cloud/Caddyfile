@@ -14,3 +14,19 @@
         format console
     }
 }
+
+http://{$LIFETRACE_PUBLIC_IP} {
+    encode zstd gzip
+
+    reverse_proxy web:80
+
+    header {
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}

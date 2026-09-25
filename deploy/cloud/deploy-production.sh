@@ -25,8 +25,13 @@ read_env_value() {
 }
 
 domain="$(read_env_value LIFETRACE_DOMAIN)"
+public_ip="$(read_env_value LIFETRACE_PUBLIC_IP)"
 if [[ -z "${domain}" ]]; then
   echo "[LifeTrace deploy] LIFETRACE_DOMAIN is required in ${ENV_FILE}" >&2
+  exit 1
+fi
+if [[ -z "${public_ip}" ]]; then
+  echo "[LifeTrace deploy] LIFETRACE_PUBLIC_IP is required in ${ENV_FILE}" >&2
   exit 1
 fi
 
@@ -46,19 +51,20 @@ compose=(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}")
 caddy_image="$(read_env_value LIFETRACE_CADDY_IMAGE)"
 caddy_image="${caddy_image:-caddy:2-alpine}"
 if ! docker image inspect "${caddy_image}" >/dev/null 2>&1; then
-  echo "[LifeTrace deploy] pulling HTTPS gateway image: ${caddy_image}"
+  echo "[LifeTrace deploy] pulling gateway image: ${caddy_image}"
   docker pull "${caddy_image}"
 fi
 
-echo "[LifeTrace deploy] validating production compose for https://${domain}"
+echo "[LifeTrace deploy] validating deployment"
 "${compose[@]}" config >/dev/null
 
 echo "[LifeTrace deploy] building local image(s): ${build_services[*]}"
 "${compose[@]}" build "${build_services[@]}"
 
-echo "[LifeTrace deploy] starting LifeTrace with automatic HTTPS"
+echo "[LifeTrace deploy] starting LifeTrace"
 "${compose[@]}" up -d --remove-orphans --wait --pull never
 "${compose[@]}" ps
 
-echo "[LifeTrace deploy] HTTPS endpoint: https://${domain}"
-echo "[LifeTrace deploy] certificate status/logs: docker compose --env-file .env.production -f docker-compose.production.yml logs caddy"
+echo "[LifeTrace deploy] IP fallback: http://${public_ip}"
+echo "[LifeTrace deploy] HTTPS endpoint (after DNS/ICP is available): https://${domain}"
+echo "[LifeTrace deploy] gateway logs: docker compose --env-file .env.production -f docker-compose.production.yml logs caddy"
