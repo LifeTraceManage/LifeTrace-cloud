@@ -63,7 +63,8 @@ export const router = createBrowserRouter([
   { path: "/", element: <RequireAuth>{withSuspense(<PortalPage />)}</RequireAuth> },
   { path: "/login", element: withSuspense(<LoginPage />) },
   { path: "/notes/*", element: <RequireAuth>{withSuspense(<NotesPage />)}</RequireAuth> },
-  { path: "/mail/*", element: <RequireAuth>{withSuspense(<MailPage />)}</RequireAuth> },\n  { path: "/execute/*", element: <RequireAuth>{withSuspense(<ExecutionWorkspace />)}</RequireAuth> },
+  { path: "/mail/*", element: <RequireAuth>{withSuspense(<MailPage />)}</RequireAuth> },
+  { path: "/execute/*", element: <RequireAuth>{withSuspense(<ExecutionWorkspace />)}</RequireAuth> },
   {
     path: "/app",
     element: <ProtectedShell />,
