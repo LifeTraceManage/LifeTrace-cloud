@@ -2,6 +2,7 @@
 
 mod api;
 mod attachment;
+mod events;
 mod list;
 mod workspace;
 
@@ -11,6 +12,7 @@ use axum::Router;
 pub fn router() -> Router<AppState> {
     Router::<AppState>::new()
         .merge(api::router())
+        .merge(events::router())
         .merge(list::router())
         .merge(attachment::router())
         .merge(workspace::router())
