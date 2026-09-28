@@ -2,9 +2,8 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 const TodayPage = lazy(() => import("../features/dashboard/TodayPage").then((module) => ({ default: module.TodayPage })));
-const ExecutionPage = lazy(() => import("../features/execution/ExecutionPage").then((module) => ({ default: module.ExecutionPage })));
+const ExecutionWorkspace = lazy(() => import("../features/execution/ExecutionWorkspace").then((module) => ({ default: module.ExecutionWorkspace })));
 const CalendarPage = lazy(() => import("../features/calendar/CalendarPage").then((module) => ({ default: module.CalendarPage })));
-const HabitsPage = lazy(() => import("../features/habits/HabitsPage").then((module) => ({ default: module.HabitsPage })));
 const FitnessPage = lazy(() => import("../features/fitness/FitnessPage").then((module) => ({ default: module.FitnessPage })));
 const HealthPage = lazy(() => import("../features/health/HealthPage").then((module) => ({ default: module.HealthPage })));
 const NotesPage = lazy(() => import("../features/notes/NotesPage").then((module) => ({ default: module.NotesPage })));
@@ -50,9 +49,11 @@ function FeatureRoutes() {
       <Route path="/" element={<Navigate to="/app/today" replace />} />
       <Route path="/app" element={<Navigate to="/app/today" replace />} />
       <Route path="/app/today" element={withSuspense(<TodayPage />)} />
-      <Route path="/app/execution" element={withSuspense(<ExecutionPage />)} />
+      <Route path="/app/execution" element={<Navigate to="/execute/today" replace />} />
       <Route path="/app/calendar" element={withSuspense(<CalendarPage />)} />
-      <Route path="/app/habits" element={withSuspense(<HabitsPage />)} />
+      <Route path="/execute" element={<Navigate to="/execute/today" replace />} />
+      <Route path="/execute/:view" element={withSuspense(<ExecutionWorkspace />)} />
+      <Route path="/app/habits" element={<Navigate to="/execute/habits" replace />} />
       <Route path="/app/fitness" element={withSuspense(<FitnessPage />)} />
       <Route path="/app/health" element={withSuspense(<HealthPage />)} />
       <Route path="/app/notes" element={withSuspense(<NotesPage />)} />
