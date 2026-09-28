@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { Check, Flame, Plus } from "lucide-react";
+import { Check, Flame, Plus, Trash2 } from "lucide-react";
 import { useApp } from "../../app/AppContext";
 import {
-  Badge, Button, Card, CardContent, EmptyState, Input, PageHeader, Progress, Select, Textarea, cn,
+  AlertDialog, Badge, Button, Card, CardContent, Dialog, EmptyState, Input, PageHeader, Progress, Select, Textarea, cn,
 } from "../../components/ui";
 import { entities, recentDays, text, todayKey } from "../../lib/entities";
 import { createHabitActivity, createHabitLog, type JsonEntity } from "../../services/core";
@@ -73,6 +73,7 @@ function scheduleLabel(activity: JsonEntity): string {
 export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
   const { state, session, upsert, remove } = useApp();
   const [showNew, setShowNew] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<JsonEntity | null>(null);
   const [name, setName] = useState("");
   const [activityType, setActivityType] = useState("completion");
   const [normalTarget, setNormalTarget] = useState("1");
@@ -145,6 +146,13 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
     setShowNew(false);
   }
 
+  async function deleteHabit(activity: JsonEntity) {
+    const relatedLogs = logs.filter((item) => item.activityId === activity.meta.id);
+    await Promise.all(relatedLogs.map((item) => remove("habit.log", item.meta.id)));
+    await remove("habit.activity", activity.meta.id);
+    setDeleteTarget(null);
+  }
+
   async function toggle(activity: JsonEntity) {
     const existing = logs.find((item) =>
       item.activityId === activity.meta.id
@@ -177,9 +185,16 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
       action={<Button onClick={() => setShowNew(true)}><Plus size={16} />新建习惯</Button>}
     />
 
-    {showNew ? <Card className="mb-5">
-      <CardContent className="pt-5">
-        <form className="space-y-5" onSubmit={(event) => void add(event)}>
+    <Dialog
+      open={showNew}
+      onOpenChange={(open) => {
+        setShowNew(open);
+        if (!open) resetForm();
+      }}
+      title="新建习惯"
+      description="配置目标、频率和执行日；这些设置会直接影响 Execute Today 与 Review。"
+    >
+      <form className="space-y-5" onSubmit={(event) => void add(event)}>
           <div className="grid gap-4 lg:grid-cols-2">
             <label className="space-y-1.5 text-sm">
               <span className="font-medium">习惯名称</span>
@@ -254,13 +269,12 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
             <Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="为什么要做、完成标准或其他备注…" className="min-h-20" />
           </label>
 
-          <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-            <Button variant="ghost" onClick={() => { resetForm(); setShowNew(false); }}>取消</Button>
-            <Button type="submit" disabled={!name.trim() || (scheduleType === "custom" && targetDays.length === 0)}>创建习惯</Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card> : null}
+        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+          <Button variant="ghost" onClick={() => { resetForm(); setShowNew(false); }}>取消</Button>
+          <Button type="submit" disabled={!name.trim() || (scheduleType === "custom" && targetDays.length === 0)}>创建习惯</Button>
+        </div>
+      </form>
+    </Dialog>
 
     {activities.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{activities.map((activity) => {
       const completedDates = completedDatesFor(activity.meta.id, logs);
@@ -284,16 +298,26 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
             <div className="mt-1 text-xs text-muted-foreground">{scheduleLabel(activity)} · 目标 {targetLabel(activity)}</div>
             {text(activity, "description") ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">{text(activity, "description")}</p> : null}
           </div>
-          <button
-            onClick={() => void toggle(activity)}
-            disabled={!dueToday}
-            className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border",
-              completedToday && "border-primary bg-primary text-primary-foreground",
-              !dueToday && "cursor-not-allowed opacity-35",
-            )}
-            aria-label={!dueToday ? "今天无需执行" : completedToday ? "取消今日打卡" : "今日打卡"}
-          >{completedToday ? <Check size={18} /> : <Flame size={17} />}</button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => setDeleteTarget(activity)}
+              aria-label={`删除习惯 ${text(activity, "name", "习惯")}`}
+              title="删除习惯"
+            ><Trash2 size={16} /></Button>
+            <button
+              onClick={() => void toggle(activity)}
+              disabled={!dueToday}
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border",
+                completedToday && "border-primary bg-primary text-primary-foreground",
+                !dueToday && "cursor-not-allowed opacity-35",
+              )}
+              aria-label={!dueToday ? "今天无需执行" : completedToday ? "取消今日打卡" : "今日打卡"}
+            >{completedToday ? <Check size={18} /> : <Flame size={17} />}</button>
+          </div>
         </div>
 
         <div className="mt-5 space-y-3">
@@ -314,6 +338,22 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
         </div>
       </CardContent></Card>;
     })}</div> : <EmptyState title="还没有习惯" action={<Button variant="outline" onClick={() => setShowNew(true)}>创建第一个习惯</Button>} />}
+
+    <AlertDialog
+      open={Boolean(deleteTarget)}
+      onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+      title="删除习惯"
+      description={deleteTarget
+        ? `确定删除“${text(deleteTarget, "name", "习惯")}”吗？该习惯的历史打卡记录也会一并删除，此操作会同步到云端。`
+        : undefined}
+    >
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={() => setDeleteTarget(null)}>取消</Button>
+        <Button variant="destructive" onClick={() => { if (deleteTarget) void deleteHabit(deleteTarget); }}>
+          <Trash2 size={15} />删除习惯
+        </Button>
+      </div>
+    </AlertDialog>
   </>;
 
   return embedded ? <div>{content}</div> : <div className="page-shell">{content}</div>;
