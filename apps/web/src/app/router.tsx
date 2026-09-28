@@ -6,7 +6,6 @@ import { AppShell } from "../layouts/AppShell";
 const LoginPage = lazy(() => import("../features/auth/LoginPage").then((module) => ({ default: module.LoginPage })));
 const PortalPage = lazy(() => import("../features/portal/PortalPage").then((module) => ({ default: module.PortalPage })));
 const ExecutionWorkspace = lazy(() => import("../features/execution/ExecutionWorkspace").then((module) => ({ default: module.ExecutionWorkspace })));
-const HabitsPage = lazy(() => import("../features/habits/HabitsPage").then((module) => ({ default: module.HabitsPage })));
 const FitnessPage = lazy(() => import("../features/fitness/FitnessPage").then((module) => ({ default: module.FitnessPage })));
 const HealthPage = lazy(() => import("../features/health/HealthPage").then((module) => ({ default: module.HealthPage })));
 const NotesPage = lazy(() => import("../features/notes/NotesPage").then((module) => ({ default: module.NotesPage })));
@@ -72,7 +71,7 @@ export const router = createBrowserRouter([
       { path: "today", element: <Navigate to="/execute/today" replace /> },
       { path: "execution", element: <Navigate to="/execute/today" replace /> },
       { path: "calendar", element: <Navigate to="/execute/planner" replace /> },
-      { path: "habits", element: withSuspense(<HabitsPage />) },
+      { path: "habits", element: <Navigate to="/execute/habits" replace /> },
       { path: "fitness", element: withSuspense(<FitnessPage />) },
       { path: "health", element: withSuspense(<HealthPage />) },
       { path: "notes", element: <Navigate to="/notes" replace /> },
