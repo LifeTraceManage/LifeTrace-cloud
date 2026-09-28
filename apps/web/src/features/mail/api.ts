@@ -1,4 +1,4 @@
-import { API_BASE, browserFetch } from "../../services/core";
+import { API_BASE, browserFetch, uuid } from "../../services/core";
 import type {
   ComposeMailInput,
   MailAccount,
@@ -423,7 +423,7 @@ export class MailApi {
         subject: input.subject,
         bodyText: input.text ?? "",
         inReplyToMessageId: input.inReplyToMessageId ?? null,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: uuid(),
       }),
     });
   }
