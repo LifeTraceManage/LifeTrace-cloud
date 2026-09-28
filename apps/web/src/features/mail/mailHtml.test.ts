@@ -46,4 +46,26 @@ describe("renderableMailHtml", () => {
     const html = renderableMailHtml(message('<img src="cid:missing@example">'));
     expect(html).not.toContain("cid:missing@example");
   });
+
+  it("keeps email layout styles inside the isolated document", () => {
+    const html = renderableMailHtml(message(
+      '<style>.hero{color:red}</style><table class="hero" style="width:600px"><tbody><tr><td>Styled mail</td></tr></tbody></table>'
+    ));
+
+    expect(html).toContain("<!doctype html>");
+    expect(html).toContain("<style>");
+    expect(html).toContain(".hero");
+    expect(html).toContain('class="hero"');
+    expect(html).toContain('style="width:600px"');
+  });
+
+  it("removes active content before iframe rendering", () => {
+    const html = renderableMailHtml(message(
+      '<script>alert(1)</script><img src="https://images.example/a.png" onerror="alert(2)">'
+    ));
+
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("onerror");
+    expect(html).toContain("https://images.example/a.png");
+  });
 });
