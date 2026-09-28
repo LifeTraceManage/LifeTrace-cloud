@@ -455,6 +455,15 @@ impl MailService {
             .await
     }
 
+    pub async fn sync_account_incremental(
+        &self,
+        user_id: &UserId,
+        account_id: Uuid,
+    ) -> Result<usize, MailServiceError> {
+        self.sync_account_uuid(Self::user_uuid(user_id)?, account_id, false)
+            .await
+    }
+
     pub async fn sync_due_accounts(&self, limit: i64) -> Result<usize, MailServiceError> {
         let accounts = sqlx::query_as::<_, (Uuid, Uuid)>(
             r#"
