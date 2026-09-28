@@ -4,9 +4,9 @@ import { CalendarDays, Check, Circle, Clock3, Flame, Focus, FolderKanban, Inbox,
 import { useApp, type AppContextValue } from "../../app/AppContext";
 import { WorkspaceShell } from "../../layouts/WorkspaceShell";
 import { HabitsPanel, habitScheduledOnDate } from "../habits/HabitsPage";
-import { Badge, Button, Card, CardContent, EmptyState, Input, Progress, Section, Select, Tabs, cn } from "../../components/ui";
+import { Badge, Button, Card, CardContent, Dialog, EmptyState, Input, Progress, Section, Select, Tabs, cn } from "../../components/ui";
 import { entities, formatDateTime, recentDays, text, todayKey } from "../../lib/entities";
-import { createExecutionProject, createExecutionRecurrenceRule, createExecutionReminder, createExecutionSubtask, createExecutionTask, createExecutionTaskDependency, createExecutionWaitingItem, createHabitLog, dependencyCreatesCycle, isOpenExecutionTask, resolveExecutionWaitingItem, taskMatchesToday, type JsonEntity } from "../../services/core";
+import { createExecutionProject, createExecutionRecurrenceRule, createExecutionReminder, createExecutionSubtask, createExecutionTask, createExecutionTaskDependency, createExecutionWaitingItem, createHabitLog, dependencyCreatesCycle, isOpenExecutionTask, resolveExecutionWaitingItem, taskIsInbox, taskMatchesToday, type JsonEntity } from "../../services/core";
 
 type View = "today" | "planner" | "inbox" | "projects" | "habits" | "waiting" | "focus" | "review";
 type Status = "todo" | "in_progress" | "waiting" | "done";
@@ -76,7 +76,7 @@ export function ExecutionWorkspace() {
         <Section title="今日习惯" description={todayHabits.length?doneHabitIdsToday.size+" / "+todayHabits.length+" 已完成":habits.length?"今天没有安排习惯":"还没有习惯"} action={<Button size="sm" variant="outline" onClick={()=>switchView("habits")}><Flame size={14}/>Habits</Button>}>{todayHabits.length?<Card><div className="divide-y">{todayHabits.map(habit=>{const done=doneHabitIdsToday.has(habit.meta.id);const target=Number(habit.normalTarget??1);return <button key={habit.meta.id} onClick={()=>void toggleHabit(habit.meta.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50"><span className={cn("flex h-6 w-6 items-center justify-center rounded-full border",done&&"border-primary bg-primary text-primary-foreground")}>{done?<Check size={13}/>:<Flame size={13}/>}</span><span className={cn("min-w-0 flex-1 truncate text-sm font-medium",done&&"text-muted-foreground line-through")}>{text(habit,"name","习惯")}</span><span className="text-xs text-muted-foreground">{Number.isFinite(target)?target:1} {text(habit,"unit","次")}</span><Badge>{done?"已完成":"待完成"}</Badge></button>})}</div></Card>:<EmptyState title={habits.length?"今天没有需要执行的习惯":"还没有习惯"} description={habits.length?"根据习惯频率，今天是休息日。":"把需要长期坚持的重复行为和计划任务放在同一个执行系统里。"} action={<Button variant="outline" onClick={()=>switchView("habits")}>{habits.length?"查看习惯":"创建习惯"}</Button>}/>}</Section>
       </div><div className="space-y-4"><Card><CardContent className="pt-5"><div className="eyebrow">今日执行进度</div><div className="mt-3 flex items-end justify-between"><strong className="text-3xl">{progress}%</strong><span className="text-xs text-muted-foreground">{completedTodayActions} / {totalTodayActions} 已完成</span></div><Progress value={progress} className="mt-4"/></CardContent></Card><Card><CardContent className="pt-5"><div className="eyebrow">执行闭环</div><div className="mt-3 space-y-3 text-sm text-muted-foreground"><p>1. Inbox 快速收集</p><p>2. Planner 安排任务</p><p>3. Habits 管理长期重复行为</p><p>4. Focus 执行并记录投入</p><p>5. Review 完成复盘</p></div></CardContent></Card></div></div>}
       {view==="planner"&&<div className="mt-6 grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]"><Card className="h-fit"><CardContent className="pt-5"><div className="flex items-center gap-2 font-semibold"><Inbox size={16}/>待安排任务</div><div className="mt-4 space-y-2">{unscheduled.slice(0,30).map(t=><button key={t.meta.id} onClick={()=>setPlanTask(t.meta.id)} className={cn("w-full rounded-md border px-3 py-2 text-left text-sm hover:bg-muted",planTask===t.meta.id&&"border-primary bg-accent")}><div className="font-medium">{text(t,"title","任务")}</div><div className="mt-1 text-xs text-muted-foreground">{text(projects.find(p=>p.meta.id===t.projectId),"name","Inbox")} · {Number(t.estimatedMinutes??60)} min</div></button>)}</div></CardContent></Card><div className="space-y-5"><Card><CardContent className="pt-5"><form className="grid gap-3 md:grid-cols-[minmax(0,1fr)_190px_130px_auto]" onSubmit={schedule}><Select required value={planTask} onChange={e=>setPlanTask(e.target.value)}><option value="">选择任务</option>{unscheduled.map(t=><option key={t.meta.id} value={t.meta.id}>{text(t,"title","任务")}</option>)}</Select><Input required type="datetime-local" value={planStart} onChange={e=>setPlanStart(e.target.value)}/><Select value={duration} onChange={e=>setDuration(e.target.value)}><option value="30">30 分钟</option><option value="60">1 小时</option><option value="90">1.5 小时</option><option value="120">2 小时</option></Select><Button>安排</Button></form></CardContent></Card><PlannerTimeline tasks={scheduled} events={calendarEvents.filter(e=>text(e,"startAt").slice(0,10)===today||text(e,"startLocalDate")===today)} projects={projects} onMove={(t,d)=>void moveBlock(t,d)} onResize={(t,d)=>void resizeBlock(t,d)} onFocus={begin} onOpen={setDetailTaskId}/></div></div>}
-      {view==="inbox"&&<InboxView tasks={open.filter(t=>t.context==="inbox"||(!t.projectId&&!t.dueAt&&!t.scheduledStartAt))} projects={projects} toggle={toggle} begin={begin} openTask={setDetailTaskId} removeTask={id=>void remove("execution.task",id)}/>}
+      {view==="inbox"&&<InboxView tasks={open.filter(taskIsInbox)} projects={projects} session={session} upsert={upsert} remove={remove} toggle={toggle} begin={begin}/>}
       {view==="projects"&&<Projects projects={projects} tasks={tasks} name={projectName} setName={setProjectName} add={addProject} setStatus={status} begin={begin}/>}
       {view==="habits"&&<div className="mt-6"><HabitsPanel embedded /></div>}
       {view==="waiting"&&<WaitingView items={waitingItems} title={waitingTitle} waitingFor={waitingFor} setTitle={setWaitingTitle} setWaitingFor={setWaitingFor} add={addWaiting} resolve={item=>void upsert("execution.waiting_item",resolveExecutionWaitingItem(item))} removeItem={id=>void remove("execution.waiting_item",id)}/>}
@@ -93,7 +93,150 @@ function Projects({projects,tasks,name,setName,add,setStatus,begin}:{projects:Js
 function FocusView({tasks,taskId,elapsed,running,setTask,start,pause,resume,finish}:{tasks:JsonEntity[];taskId:string;elapsed:number;running:boolean;setTask(v:string):void;start():void;pause():void;resume():void;finish(done:boolean):void}){const task=tasks.find(t=>t.meta.id===taskId);const hh=String(Math.floor(elapsed/3600)).padStart(2,"0"),mm=String(Math.floor(elapsed%3600/60)).padStart(2,"0"),ss=String(elapsed%60).padStart(2,"0");return <div className="mx-auto mt-10 max-w-2xl"><Card><CardContent className="py-10 text-center"><div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-primary"><Focus size={22}/></div>{!task?<><h2 className="text-xl font-semibold">选择当前要专注的任务</h2><Select className="mx-auto mt-5 max-w-md" value={taskId} onChange={e=>setTask(e.target.value)}><option value="">选择任务</option>{tasks.map(t=><option key={t.meta.id} value={t.meta.id}>{text(t,"title","任务")}</option>)}</Select><Button className="mt-4" disabled={!taskId} onClick={start}><Play size={15}/>开始专注</Button></>:<><div className="text-sm text-muted-foreground">{text(task,"title","任务")}</div><div className="my-7 font-mono text-6xl font-semibold tracking-tight">{hh}:{mm}:{ss}</div><div className="flex flex-wrap justify-center gap-2">{running?<Button variant="outline" onClick={pause}>暂停</Button>:<Button onClick={resume}><Play size={14}/>继续</Button>}<Button variant="outline" onClick={()=>finish(false)}>结束并记录</Button><Button onClick={()=>finish(true)}><Check size={14}/>完成任务</Button></div></>}</CardContent></Card></div>}
 
 
-function InboxView({tasks,projects,toggle,begin,openTask,removeTask}:{tasks:JsonEntity[];projects:JsonEntity[];toggle(t:JsonEntity):void;begin(id:string):void;openTask(id:string):void;removeTask(id:string):void}){return <div className="mt-6"><Section title="Inbox" description={tasks.length+" 个尚未整理的任务"}>{tasks.length?<Card><div className="divide-y">{tasks.map(t=><div key={t.meta.id} className="group flex items-center gap-2"><div className="min-w-0 flex-1"><TaskRow task={t} projects={projects} onToggle={toggle} onFocus={begin} onOpen={openTask}/></div><Button size="icon" variant="ghost" className="mr-2 opacity-60 sm:opacity-0 sm:group-hover:opacity-100" onClick={()=>removeTask(t.meta.id)} aria-label="删除任务"><Trash2 size={14}/></Button></div>)}</div></Card>:<EmptyState icon={<Inbox size={24}/>} title="Inbox 已清空" description="新的想法先快速收集到这里，再在 Planner 中决定什么时候执行。"/>}</Section></div>}
+function InboxView({tasks,projects,session,upsert,remove,toggle,begin}:{tasks:JsonEntity[];projects:JsonEntity[];session:AppContextValue["session"];upsert:AppContextValue["upsert"];remove:AppContextValue["remove"];toggle(t:JsonEntity):void;begin(id:string):void}) {
+  const [processing,setProcessing]=useState<JsonEntity|null>(null);
+  const [projectId,setProjectId]=useState("");
+  const [priority,setPriority]=useState("normal");
+  const [dueDate,setDueDate]=useState("");
+  const [scheduledAt,setScheduledAt]=useState("");
+  const [duration,setDuration]=useState("60");
+  const [waitingFor,setWaitingFor]=useState("");
+  const [saving,setSaving]=useState(false);
+
+  function openProcessing(task:JsonEntity){
+    setProcessing(task);
+    setProjectId(typeof task.projectId==="string"?task.projectId:"");
+    setPriority(text(task,"priority","normal"));
+    setDueDate(text(task,"dueAt").slice(0,10));
+    setScheduledAt(task.scheduledStartAt?toLocalInput(String(task.scheduledStartAt)):"");
+    setDuration(String(Number(task.estimatedMinutes??60)||60));
+    setWaitingFor("");
+  }
+
+  function closeProcessing(){
+    setProcessing(null);
+    setProjectId("");
+    setPriority("normal");
+    setDueDate("");
+    setScheduledAt("");
+    setDuration("60");
+    setWaitingFor("");
+  }
+
+  async function moveToday(task:JsonEntity){
+    const end=new Date(`${todayKey()}T23:59:00`);
+    await upsert("execution.task",{...task,dueAt:end.toISOString(),context:"planned"});
+  }
+
+  async function organize(){
+    if(!processing)return;
+    if(!projectId&&!dueDate&&!scheduledAt)return;
+    setSaving(true);
+    try{
+      let scheduledStartAt:string|null=null;
+      let scheduledEndAt:string|null=null;
+      const estimatedMinutes=Math.max(15,Number(duration)||60);
+      if(scheduledAt){
+        const start=new Date(scheduledAt);
+        if(!Number.isNaN(start.getTime())){
+          scheduledStartAt=start.toISOString();
+          scheduledEndAt=new Date(start.getTime()+estimatedMinutes*60_000).toISOString();
+        }
+      }
+      const dueAt=dueDate?new Date(`${dueDate}T23:59:00`).toISOString():null;
+      await upsert("execution.task",{
+        ...processing,
+        projectId:projectId||null,
+        priority,
+        dueAt,
+        scheduledStartAt,
+        scheduledEndAt,
+        estimatedMinutes:scheduledStartAt?estimatedMinutes:processing.estimatedMinutes??null,
+        context:"planned",
+      });
+      closeProcessing();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function convertToWaiting(){
+    if(!processing||!session||!waitingFor.trim())return;
+    setSaving(true);
+    try{
+      const waiting=createExecutionWaitingItem(session.user.id,session.session.deviceId,{
+        title:text(processing,"title","等待事项"),
+        description:text(processing,"description")||undefined,
+        waitingFor,
+        sourceTaskId:processing.meta.id,
+      });
+      await upsert("execution.waiting_item",waiting);
+      await upsert("execution.task",{...processing,status:"waiting",context:"waiting"});
+      closeProcessing();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className="mt-6 space-y-4">
+    <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+      Inbox 只负责收集。整理时把任务放到今天、具体时间、Project 或 Waiting；归位后会自动离开 Inbox。
+    </div>
+    <Section title="Inbox" description={tasks.length+" 个尚未整理的任务"}>
+      {tasks.length?<Card><div className="divide-y">{tasks.map(task=><div key={task.meta.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <button onClick={()=>toggle(task)} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border" aria-label="完成任务"><Circle size={11} className="opacity-0"/></button>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{text(task,"title","任务")}</div>
+            <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge>{priorityLabel(task)}</Badge>{text(task,"description")?<span className="truncate">{text(task,"description")}</span>:null}</div>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-1.5 pl-8 sm:pl-0">
+          <Button size="sm" variant="outline" onClick={()=>void moveToday(task)}>今天</Button>
+          <Button size="sm" variant="outline" onClick={()=>openProcessing(task)}>整理</Button>
+          <Button size="sm" variant="ghost" onClick={()=>begin(task.meta.id)}><Play size={13}/>开始</Button>
+          <Button size="icon" variant="ghost" onClick={()=>void remove("execution.task",task.meta.id)} aria-label="删除任务"><Trash2 size={14}/></Button>
+        </div>
+      </div>)}</div></Card>:<EmptyState icon={<Inbox size={24}/>} title="Inbox 已清空" description="收集箱为空，说明所有任务都已经归位。"/>}
+    </Section>
+
+    <Dialog
+      open={Boolean(processing)}
+      onOpenChange={open=>{if(!open)closeProcessing()}}
+      title={processing?`整理：${text(processing,"title","任务")}`:"整理任务"}
+      description="选择至少一种归位方式：加入 Project、设置截止日期或安排具体执行时间。"
+      className="max-w-2xl"
+    >
+      <div className="space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="space-y-1.5 text-sm"><span className="font-medium">Project</span><Select value={projectId} onChange={e=>setProjectId(e.target.value)}><option value="">不加入 Project</option>{projects.map(project=><option key={project.meta.id} value={project.meta.id}>{text(project,"name","Project")}</option>)}</Select></label>
+          <label className="space-y-1.5 text-sm"><span className="font-medium">优先级</span><Select value={priority} onChange={e=>setPriority(e.target.value)}><option value="low">低</option><option value="normal">普通</option><option value="high">高</option><option value="urgent">紧急</option></Select></label>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="space-y-1.5 text-sm"><span className="font-medium">截止日期</span><Input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></label>
+          <label className="space-y-1.5 text-sm"><span className="font-medium">具体执行时间</span><Input type="datetime-local" value={scheduledAt} onChange={e=>setScheduledAt(e.target.value)}/></label>
+        </div>
+        {scheduledAt?<label className="block space-y-1.5 text-sm"><span className="font-medium">预计时长</span><Select className="max-w-48" value={duration} onChange={e=>setDuration(e.target.value)}><option value="15">15 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="90">1.5 小时</option><option value="120">2 小时</option></Select></label>:null}
+
+        <div className="rounded-lg border bg-muted/20 p-4">
+          <div className="text-sm font-medium">或者转成 Waiting</div>
+          <p className="mt-1 text-xs text-muted-foreground">例如等待导师回复、等待快递、等待审批。转 Waiting 后原任务保留关联，但不再留在 Inbox。</p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input value={waitingFor} onChange={e=>setWaitingFor(e.target.value)} placeholder="等待谁 / 什么，例如：导师回复"/><Button variant="outline" disabled={saving||!waitingFor.trim()} onClick={()=>void convertToWaiting()}><UserRoundCheck size={14}/>转 Waiting</Button></div>
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+          <Button variant="ghost" onClick={closeProcessing}>取消</Button>
+          <Button disabled={saving||(!projectId&&!dueDate&&!scheduledAt)} onClick={()=>void organize()}>{saving?"保存中…":"完成整理"}</Button>
+        </div>
+      </div>
+    </Dialog>
+  </div>
+}
+
+function priorityLabel(task:JsonEntity):string{return ({low:"低",normal:"普通",high:"高",urgent:"紧急"} as Record<string,string>)[text(task,"priority","normal")]??"普通"}
+
+function toLocalInput(value:string):string{const date=new Date(value);if(Number.isNaN(date.getTime()))return "";const offset=date.getTimezoneOffset()*60_000;return new Date(date.getTime()-offset).toISOString().slice(0,16)}
+
 
 function WaitingView({items,title,waitingFor,setTitle,setWaitingFor,add,resolve,removeItem}:{items:JsonEntity[];title:string;waitingFor:string;setTitle(v:string):void;setWaitingFor(v:string):void;add(e:FormEvent):void;resolve(item:JsonEntity):void;removeItem(id:string):void}){const openItems=items.filter(i=>text(i,"status","open")==="open");const resolved=items.filter(i=>text(i,"status")==="resolved");return <div className="mt-6 space-y-5"><Card><CardContent className="pt-5"><form className="grid gap-2 md:grid-cols-[minmax(0,1fr)_220px_auto]" onSubmit={add}><Input value={title} onChange={e=>setTitle(e.target.value)} placeholder="正在等待什么？"/><Input value={waitingFor} onChange={e=>setWaitingFor(e.target.value)} placeholder="等待对象 / 人 / 组织"/><Button disabled={!title.trim()||!waitingFor.trim()}><Plus size={14}/>添加</Button></form></CardContent></Card><Section title="等待中" description={openItems.length+" 项"}>{openItems.length?<Card><div className="divide-y">{openItems.map(i=><div key={i.meta.id} className="flex items-center gap-3 px-4 py-3"><UserRoundCheck size={16} className="text-muted-foreground"/><div className="min-w-0 flex-1"><div className="text-sm font-medium">{text(i,"title","等待事项")}</div><div className="mt-1 text-xs text-muted-foreground">等待：{text(i,"waitingFor","—")}{i.followUpAt?" · 跟进 "+formatDateTime(i.followUpAt):""}</div></div><Button size="sm" variant="outline" onClick={()=>resolve(i)}><Check size={13}/>已解决</Button><Button size="icon" variant="ghost" onClick={()=>removeItem(i.meta.id)}><Trash2 size={14}/></Button></div>)}</div></Card>:<EmptyState title="当前没有等待事项"/>}</Section>{resolved.length?<Section title="最近已解决"><Card><div className="divide-y">{resolved.slice(0,10).map(i=><div key={i.meta.id} className="px-4 py-3 text-sm text-muted-foreground line-through">{text(i,"title","等待事项")}</div>)}</div></Card></Section>:null}</div>}
 
