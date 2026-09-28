@@ -1,13 +1,22 @@
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { LayoutDashboard, Leaf, LogOut, Mail, Moon, NotebookPen, Sun } from "lucide-react";
+import { Activity, Bot, ChevronDown, Dumbbell, HeartPulse, LayoutDashboard, Leaf, LogOut, Mail, Moon, NotebookPen, Settings, Sun, WalletCards } from "lucide-react";
 import { useApp } from "../app/AppContext";
 import { Badge, Button, cn } from "../components/ui";
 
 const workspaceLinks = [
   { to: "/notes", label: "Notes", icon: NotebookPen },
   { to: "/mail", label: "Mail", icon: Mail },
-  { to: "/execute", label: "Execute", icon: LayoutDashboard },
+  { to: "/execute/today", label: "Execute", icon: LayoutDashboard },
+] as const;
+
+const coreLinks = [
+  { to: "/app/health", label: "Health", icon: HeartPulse },
+  { to: "/app/fitness", label: "Fitness", icon: Dumbbell },
+  { to: "/app/habits", label: "Habits", icon: Activity },
+  { to: "/app/finance", label: "Finance", icon: WalletCards },
+  { to: "/app/assistant", label: "Assistant", icon: Bot },
+  { to: "/app/settings", label: "Settings", icon: Settings },
 ] as const;
 
 export function WorkspaceShell({
@@ -47,6 +56,8 @@ export function WorkspaceShell({
           {workspaceLinks.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} className={({ isActive }) => cn("flex h-9 items-center gap-2 rounded-md px-3 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", isActive && "bg-accent font-medium text-accent-foreground")}><Icon size={15} />{label}</NavLink>)}
         </nav>
 
+        <details className="relative hidden lg:block"><summary className="flex h-9 cursor-pointer list-none items-center gap-1 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">More<ChevronDown size={13}/></summary><div className="absolute right-0 top-11 z-50 w-48 rounded-lg border bg-popover p-1.5 shadow-lg">{coreLinks.map(({to,label,icon:Icon})=><Link key={to} to={to} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted"><Icon size={14}/>{label}</Link>)}</div></details>
+
         <div className="ml-auto flex items-center gap-1 lg:ml-2">
           {!online ? <Badge className="border-warning/30 bg-warning/10 text-warning">离线</Badge> : null}
           {loading ? <Badge>同步中</Badge> : null}
@@ -65,6 +76,7 @@ export function WorkspaceShell({
 
       <nav className="flex h-10 items-center gap-1 overflow-x-auto border-t px-3 lg:hidden" aria-label="LifeTrace 工作区">
         {workspaceLinks.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} className={({ isActive }) => cn("flex h-8 shrink-0 items-center gap-2 rounded-md px-2.5 text-xs text-muted-foreground", isActive && "bg-accent font-medium text-accent-foreground")}><Icon size={14} />{label}</NavLink>)}
+        <Link to="/app" className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2.5 text-xs text-muted-foreground"><ChevronDown size={14}/>More</Link>
       </nav>
     </header>
 

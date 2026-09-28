@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Home, ArrowRight, Leaf, Mail, NotebookPen } from "lucide-react";
+import { Activity, ArrowRight, Bot, Dumbbell, HeartPulse, LayoutDashboard, Leaf, Mail, NotebookPen, Settings, WalletCards } from "lucide-react";
 import { useApp } from "../../app/AppContext";
 import { Card, CardContent, cn } from "../../components/ui";
 
@@ -19,12 +19,21 @@ const modules = [
     accent: "text-info",
   },
   {
-    to: "/app/today",
+    to: "/execute/today",
     name: "Execute",
     description: "任务、日历与日常执行。",
-    icon: Home,
+    icon: LayoutDashboard,
     accent: "text-warning",
   },
+] as const;
+
+const coreModules = [
+  { to: "/app/health", name: "Health", icon: HeartPulse },
+  { to: "/app/fitness", name: "Fitness", icon: Dumbbell },
+  { to: "/app/habits", name: "Habits", icon: Activity },
+  { to: "/app/finance", name: "Finance", icon: WalletCards },
+  { to: "/app/assistant", name: "Assistant", icon: Bot },
+  { to: "/app/settings", name: "Settings", icon: Settings },
 ] as const;
 
 export function PortalPage() {
@@ -66,6 +75,13 @@ export function PortalPage() {
             </CardContent>
           </Card>
         </Link>)}
+      </section>
+
+      <section className="mt-10 border-t pt-7">
+        <div className="eyebrow">LifeTrace Core</div>
+        <h2 className="mt-1 text-lg font-semibold">其他功能</h2>
+        <p className="mt-1 text-sm text-muted-foreground">这些功能继续由 LifeTrace Core 承载，功能成熟后再独立为工作区。</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{coreModules.map(({to,name,icon:Icon})=><Link key={to} to={to} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-muted"><Icon size={16} className="text-muted-foreground"/><span className="flex-1">{name}</span><ArrowRight size={14} className="text-muted-foreground"/></Link>)}</div>
       </section>
     </div>
   </main>;

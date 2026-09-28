@@ -1,35 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Activity, Bot, CalendarDays, CheckSquare2, ChevronLeft, ChevronRight, Command,
-  Dumbbell, FileText, HeartPulse, Home, Leaf, Mail, Menu, Moon, NotebookPen,
+  Activity, Bot, ChevronLeft, ChevronRight, Command,
+  Dumbbell, HeartPulse, Leaf, Menu, Moon,
   RefreshCw, Search, Settings, Sun, WalletCards, X,
 } from "lucide-react";
 import { useApp } from "../app/AppContext";
 import { Badge, Button, Input, cn } from "../components/ui";
 
 const nav = [
-  { group: "工作台", items: [
-    ["/app/today", "今日", Home], ["/app/execution", "计划与待办", CheckSquare2], ["/app/calendar", "日历", CalendarDays], ["/app/assistant", "AI 助手", Bot],
-  ] },
-  { group: "成长健康", items: [
-    ["/app/habits", "坚持", Activity], ["/app/fitness", "健身", Dumbbell], ["/app/health", "健康", HeartPulse], ["/app/review", "复盘", FileText],
-  ] },
-  { group: "知识与资产", items: [
-    ["/notes", "笔记", NotebookPen], ["/mail", "邮件", Mail], ["/app/finance", "财务", WalletCards],
+  { group: "LifeTrace Core", items: [
+    ["/app/health", "健康", HeartPulse], ["/app/fitness", "健身", Dumbbell], ["/app/habits", "坚持", Activity], ["/app/finance", "财务", WalletCards], ["/app/assistant", "AI 助手", Bot],
   ] },
 ] as const;
 
 const mobile = [
-  ["/app/today", "今日", Home], ["/app/execution", "计划", CheckSquare2], ["/app/finance", "财务", WalletCards], ["/notes", "笔记", NotebookPen], ["/mail", "邮件", Mail],
+  ["/app/health", "健康", HeartPulse], ["/app/fitness", "健身", Dumbbell], ["/app/habits", "坚持", Activity], ["/app/finance", "财务", WalletCards], ["/app/assistant", "助手", Bot],
 ] as const;
 
 const commands = [
-  ["打开今日", "/app/today"], ["新建任务", "/app/execution?new=task"], ["记录支出", "/app/finance/transactions?new=expense"], ["开始训练", "/app/fitness?new=workout"], ["新建笔记", "/notes?new=note"], ["打开设置", "/app/settings"],
+  ["打开 Execute", "/execute/today"], ["新建任务", "/execute/inbox"], ["记录支出", "/app/finance/transactions?new=expense"], ["开始训练", "/app/fitness?new=workout"], ["新建笔记", "/notes?new=note"], ["打开设置", "/app/settings"],
 ] as const;
 
 function routeActive(current: string, target: string) {
-  return current === target || (target !== "/app/today" && current.startsWith(`${target}/`));
+  return current === target || current.startsWith(`${target}/`);
 }
 
 export function AppShell() {
@@ -58,7 +52,7 @@ export function AppShell() {
   return <div className="min-h-screen bg-background lg:grid lg:grid-cols-[auto_1fr]">
     <aside className={cn("sticky top-0 hidden h-screen border-r bg-card lg:flex lg:flex-col", collapsed ? "w-[76px]" : "w-[236px]") }>
       <div className="flex h-16 items-center gap-3 border-b px-4">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Leaf size={18} /></div>
+        <Link to="/" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground" aria-label="返回 LifeTrace 首页"><Leaf size={18} /></Link>
         {!collapsed ? <div className="min-w-0"><div className="font-semibold tracking-[-0.02em]">LifeTrace</div></div> : null}
       </div>
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 py-4" aria-label="主导航">

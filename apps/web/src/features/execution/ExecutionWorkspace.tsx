@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { CalendarDays, Check, Circle, Clock3, Focus, FolderKanban, Inbox, LayoutDashboard, Play, Plus, RotateCcw, Trash2, UserRoundCheck } from "lucide-react";
 import { useApp, type AppContextValue } from "../../app/AppContext";
 import { WorkspaceShell } from "../../layouts/WorkspaceShell";
@@ -13,10 +13,10 @@ const tabs = [{value:"today",label:"Today"},{value:"planner",label:"Planner"},{v
 
 export function ExecutionWorkspace() {
   const { state, session, upsert, remove, loading } = useApp();
-  const [params,setParams]=useSearchParams();
   const navigate=useNavigate();
-  const requested=params.get("view") as View | null;
-  const [view,setView]=useState<View>(tabs.some(x=>x.value===requested)?requested!:"today");
+  const location=useLocation();
+  const segment=location.pathname.split("/")[2] as View | undefined;
+  const view:View=tabs.some(x=>x.value===segment)?segment!:"today";
   const [title,setTitle]=useState("");
   const [projectId,setProjectId]=useState("");
   const [projectName,setProjectName]=useState("");
@@ -45,7 +45,7 @@ export function ExecutionWorkspace() {
   const progress=todayOpen.length+doneToday.length?Math.round(doneToday.length/(todayOpen.length+doneToday.length)*100):0;
 
   useEffect(()=>{if(!startedAt)return; const tick=()=>setElapsed(Math.floor((Date.now()-startedAt)/1000));tick();const id=window.setInterval(tick,1000);return()=>window.clearInterval(id)},[startedAt]);
-  function switchView(next:View){setView(next);setParams({view:next},{replace:true})}
+  function switchView(next:View){navigate(`/execute/${next}`)}
   async function addTask(e:FormEvent){e.preventDefault();if(!session||!title.trim())return;await upsert("execution.task",createExecutionTask(session.user.id,session.session.deviceId,{title,projectId:projectId||null,context:"inbox"}));setTitle("")}
   async function addProject(e:FormEvent){e.preventDefault();if(!session||!projectName.trim())return;await upsert("execution.project",createExecutionProject(session.user.id,session.session.deviceId,{name:projectName}));setProjectName("")}
   async function addWaiting(e:FormEvent){e.preventDefault();if(!session||!waitingTitle.trim()||!waitingFor.trim())return;await upsert("execution.waiting_item",createExecutionWaitingItem(session.user.id,session.session.deviceId,{title:waitingTitle,waitingFor}));setWaitingTitle("");setWaitingFor("")}
@@ -70,7 +70,7 @@ export function ExecutionWorkspace() {
       {view==="projects"&&<Projects projects={projects} tasks={tasks} name={projectName} setName={setProjectName} add={addProject} setStatus={status} begin={begin}/>}
       {view==="waiting"&&<WaitingView items={waitingItems} title={waitingTitle} waitingFor={waitingFor} setTitle={setWaitingTitle} setWaitingFor={setWaitingFor} add={addWaiting} resolve={item=>void upsert("execution.waiting_item",resolveExecutionWaitingItem(item))} removeItem={id=>void remove("execution.waiting_item",id)}/>}
       {view==="focus"&&<FocusView tasks={open} taskId={focusTask} elapsed={elapsed} running={startedAt!==null} setTask={setFocusTask} start={()=>focusTask&&begin(focusTask)} pause={()=>setStartedAt(null)} resume={()=>setStartedAt(Date.now()-elapsed*1000)} finish={finish}/>}
-      {view==="review"&&<ExecutionReview tasks={tasks} today={today} onDailyReview={()=>navigate("/app/review")}/>}
+      {view==="review"&&<ExecutionReview tasks={tasks} today={today} onDailyReview={()=>navigate("/execute/review")}/>}
     </div>
   </WorkspaceShell>
 }

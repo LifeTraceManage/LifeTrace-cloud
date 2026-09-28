@@ -5,15 +5,12 @@ import { AppShell } from "../layouts/AppShell";
 
 const LoginPage = lazy(() => import("../features/auth/LoginPage").then((module) => ({ default: module.LoginPage })));
 const PortalPage = lazy(() => import("../features/portal/PortalPage").then((module) => ({ default: module.PortalPage })));
-const TodayPage = lazy(() => import("../features/dashboard/TodayPage").then((module) => ({ default: module.TodayPage })));
 const ExecutionWorkspace = lazy(() => import("../features/execution/ExecutionWorkspace").then((module) => ({ default: module.ExecutionWorkspace })));
-const CalendarPage = lazy(() => import("../features/calendar/CalendarPage").then((module) => ({ default: module.CalendarPage })));
 const HabitsPage = lazy(() => import("../features/habits/HabitsPage").then((module) => ({ default: module.HabitsPage })));
 const FitnessPage = lazy(() => import("../features/fitness/FitnessPage").then((module) => ({ default: module.FitnessPage })));
 const HealthPage = lazy(() => import("../features/health/HealthPage").then((module) => ({ default: module.HealthPage })));
 const NotesPage = lazy(() => import("../features/notes/NotesPage").then((module) => ({ default: module.NotesPage })));
 const MailPage = lazy(() => import("../features/mail/MailPage").then((module) => ({ default: module.MailPage })));
-const ReviewPage = lazy(() => import("../features/review/ReviewPage").then((module) => ({ default: module.ReviewPage })));
 const FinanceWorkspace = lazy(() => import("../features/finance/FinanceWorkspace").then((module) => ({ default: module.FinanceWorkspace })));
 const FinanceTransactionsPage = lazy(() => import("../features/finance/FinanceTransactionsPage").then((module) => ({ default: module.FinanceTransactionsPage })));
 const AssistantPage = lazy(() => import("../features/assistant/AssistantPage").then((module) => ({ default: module.AssistantPage })));
@@ -64,27 +61,29 @@ export const router = createBrowserRouter([
   { path: "/login", element: withSuspense(<LoginPage />) },
   { path: "/notes/*", element: <RequireAuth>{withSuspense(<NotesPage />)}</RequireAuth> },
   { path: "/mail/*", element: <RequireAuth>{withSuspense(<MailPage />)}</RequireAuth> },
-  { path: "/execute/*", element: <RequireAuth>{withSuspense(<ExecutionWorkspace />)}</RequireAuth> },
+  { path: "/execute", element: <Navigate to="/execute/today" replace /> },
+  { path: "/execute/:view", element: <RequireAuth>{withSuspense(<ExecutionWorkspace />)}</RequireAuth> },
+  { path: "/execute/*", element: <Navigate to="/execute/today" replace /> },
   {
     path: "/app",
     element: <ProtectedShell />,
     children: [
-      { index: true, element: <Navigate to="today" replace /> },
-      { path: "today", element: withSuspense(<TodayPage />) },
-      { path: "execution", element: <Navigate to="/execute" replace /> },
-      { path: "calendar", element: withSuspense(<CalendarPage />) },
+      { index: true, element: <Navigate to="health" replace /> },
+      { path: "today", element: <Navigate to="/execute/today" replace /> },
+      { path: "execution", element: <Navigate to="/execute/today" replace /> },
+      { path: "calendar", element: <Navigate to="/execute/planner" replace /> },
       { path: "habits", element: withSuspense(<HabitsPage />) },
       { path: "fitness", element: withSuspense(<FitnessPage />) },
       { path: "health", element: withSuspense(<HealthPage />) },
       { path: "notes", element: <Navigate to="/notes" replace /> },
-      { path: "review", element: withSuspense(<ReviewPage />) },
+      { path: "review", element: <Navigate to="/execute/review" replace /> },
       { path: "finance/transactions", element: withSuspense(<FinanceTransactionsPage />) },
       { path: "finance/*", element: withSuspense(<FinanceWorkspace />) },
       { path: "assistant", element: withSuspense(<AssistantPage />) },
       { path: "search", element: withSuspense(<SearchPage />) },
       { path: "settings/*", element: withSuspense(<SettingsPage />) },
       { path: "system/ui", element: withSuspense(<UiShowcasePage />) },
-      { path: "*", element: <Navigate to="today" replace /> },
+      { path: "*", element: <Navigate to="health" replace /> },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },
