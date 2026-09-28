@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Activity, Bot, ChevronLeft, ChevronRight, Command,
+  Bot, ChevronLeft, ChevronRight, Command,
   Dumbbell, HeartPulse, Leaf, Menu, Moon,
   RefreshCw, Search, Settings, Sun, WalletCards, X,
 } from "lucide-react";
@@ -10,12 +10,12 @@ import { Badge, Button, Input, cn } from "../components/ui";
 
 const nav = [
   { group: "LifeTrace Core", items: [
-    ["/app/health", "健康", HeartPulse], ["/app/fitness", "健身", Dumbbell], ["/app/habits", "坚持", Activity], ["/app/finance", "财务", WalletCards], ["/app/assistant", "AI 助手", Bot],
+    ["/app/health", "健康", HeartPulse], ["/app/fitness", "健身", Dumbbell], ["/app/finance", "财务", WalletCards], ["/app/assistant", "AI 助手", Bot],
   ] },
 ] as const;
 
 const mobile = [
-  ["/app/health", "健康", HeartPulse], ["/app/fitness", "健身", Dumbbell], ["/app/habits", "坚持", Activity], ["/app/finance", "财务", WalletCards], ["/app/assistant", "助手", Bot],
+  ["/app/health", "健康", HeartPulse], ["/app/fitness", "健身", Dumbbell], ["/app/finance", "财务", WalletCards], ["/app/assistant", "助手", Bot],
 ] as const;
 
 const commands = [
