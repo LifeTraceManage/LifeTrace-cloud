@@ -128,6 +128,11 @@ function InboxView({tasks,projects,session,upsert,remove,toggle,begin}:{tasks:Js
     await upsert("execution.task",{...task,dueAt:end.toISOString(),context:"planned"});
   }
 
+  async function startNow(task:JsonEntity){
+    await upsert("execution.task",{...task,status:"in_progress",context:"planned"});
+    begin(task.meta.id);
+  }
+
   async function organize(){
     if(!processing)return;
     if(!projectId&&!dueDate&&!scheduledAt)return;
@@ -194,7 +199,7 @@ function InboxView({tasks,projects,session,upsert,remove,toggle,begin}:{tasks:Js
         <div className="flex shrink-0 flex-wrap gap-1.5 pl-8 sm:pl-0">
           <Button size="sm" variant="outline" onClick={()=>void moveToday(task)}>今天</Button>
           <Button size="sm" variant="outline" onClick={()=>openProcessing(task)}>整理</Button>
-          <Button size="sm" variant="ghost" onClick={()=>begin(task.meta.id)}><Play size={13}/>开始</Button>
+          <Button size="sm" variant="ghost" onClick={()=>void startNow(task)}><Play size={13}/>开始</Button>
           <Button size="icon" variant="ghost" onClick={()=>void remove("execution.task",task.meta.id)} aria-label="删除任务"><Trash2 size={14}/></Button>
         </div>
       </div>)}</div></Card>:<EmptyState icon={<Inbox size={24}/>} title="Inbox 已清空" description="收集箱为空，说明所有任务都已经归位。"/>}
