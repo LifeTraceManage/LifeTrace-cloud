@@ -184,6 +184,12 @@ curl -fsSL \
 cd ~/lifetrace/source/deploy/cloud
 ```
 
+代码更新后先同步生产环境变量模板。该命令可重复执行：已有 `.env.production` 时只追加模板中新出现的变量，不覆盖现有密钥或自定义值；首次部署时则从 `.env.production.example` 创建配置文件。
+
+```bash
+./deploy-production.sh init-env
+```
+
 全部重新构建并发布：
 
 ```bash
@@ -231,8 +237,8 @@ cd deploy/cloud
 git clone https://github.com/LifeTraceManage/LifeTrace-cloud.git
 cd LifeTrace-cloud/deploy/cloud
 
-cp .env.production.example .env.production
-# 修改随机密钥、PUBLIC_WEB_BASE_URL 和 CORS_ALLOWED_ORIGINS
+./deploy-production.sh init-env
+# 首次创建后检查随机密钥、域名/IP、PUBLIC_WEB_BASE_URL 和 CORS_ALLOWED_ORIGINS
 
 ./deploy-production.sh all
 ./verify-production.sh
