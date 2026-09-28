@@ -130,10 +130,10 @@ function trapKeyDown(event: React.KeyboardEvent<HTMLDivElement>, onClose?: () =>
   }
 }
 
-export function Dialog({ open, onOpenChange, title, description, children }: PropsWithChildren<{ open: boolean; onOpenChange(open: boolean): void; title: string; description?: string }>) {
+export function Dialog({ open, onOpenChange, title, description, children, className }: PropsWithChildren<{ open: boolean; onOpenChange(open: boolean): void; title: string; description?: string; className?: string }>) {
   const ref = useFocusTrap(open);
   if (!open) return null;
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onOpenChange(false); }}><div ref={ref} tabIndex={-1} onKeyDown={(event) => trapKeyDown(event, () => onOpenChange(false))} className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border bg-popover shadow-2xl" role="dialog" aria-modal="true" aria-label={title}><div className="border-b px-5 py-4"><div className="font-semibold">{title}</div>{description ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p> : null}</div><div className="p-5">{children}</div></div></div>;
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onOpenChange(false); }}><div ref={ref} tabIndex={-1} onKeyDown={(event) => trapKeyDown(event, () => onOpenChange(false))} className={cn("max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border bg-popover shadow-2xl", className)} role="dialog" aria-modal="true" aria-label={title}><div className="border-b px-5 py-4"><div className="font-semibold">{title}</div>{description ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p> : null}</div><div className="p-5">{children}</div></div></div>;
 }
 
 export function AlertDialog(props: PropsWithChildren<{ open: boolean; onOpenChange(open: boolean): void; title: string; description?: string }>) {
