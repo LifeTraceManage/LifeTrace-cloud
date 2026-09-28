@@ -253,7 +253,11 @@ export class MailApi {
   constructor(private readonly csrfToken?: string) {}
 
   eventsUrl(): string {
-    return apiUrl("/api/v1/mail/events");
+    const value = apiUrl("/api/v1/mail/events");
+    if (typeof window === "undefined") return value;
+    const url = new URL(value, window.location.origin);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    return url.toString();
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
