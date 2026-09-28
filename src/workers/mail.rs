@@ -45,10 +45,22 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send
         while let Some(result) = idle_tasks.join_next().await {
             if let Ok(Some((user_id, account_id))) = result {
                 let user = UserId::new(user_id.to_string());
-                if let Err(error) = service.sync_account(&user, account_id).await {
-                    eprintln!(
-                        "[lifetrace-mail-worker] idle-triggered sync failed account_id={account_id} error={error}"
-                    );
+                match service.sync_account(&user, account_id).await {
+                    Ok(synced_messages) => {
+                        if synced_messages > 0 {
+                            state.mail_realtime.publish_account_updated(
+                                user.as_str(),
+                                account_id,
+                                synced_messages,
+                                "idle",
+                            );
+                        }
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "[lifetrace-mail-worker] idle-triggered sync failed account_id={account_id} error={error}"
+                        );
+                    }
                 }
             }
         }
@@ -56,6 +68,7 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send
         match service.sync_due_accounts(MAX_POLL_ACCOUNTS).await {
             Ok(count) if count > 0 => {
                 println!("[lifetrace-mail-worker] polling sync completed accounts={count}");
+                state.mail_realtime.publish_global_updated("poll");
             }
             Ok(_) => {}
             Err(error) => {
