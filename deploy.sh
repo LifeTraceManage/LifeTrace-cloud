@@ -93,11 +93,8 @@ else
   echo "[LifeTrace] source update skipped"
 fi
 
-chmod +x "${DEPLOY_SCRIPT}"
-[[ -f "${VERIFY_SCRIPT}" ]] && chmod +x "${VERIFY_SCRIPT}"
-
 echo "[LifeTrace] synchronizing production environment"
-"${DEPLOY_SCRIPT}" init-env
+bash "${DEPLOY_SCRIPT}" init-env
 
 [[ -f "${ENV_FILE}" ]] || {
   echo "[LifeTrace] missing ${ENV_FILE} after init-env" >&2
@@ -120,11 +117,11 @@ if (( ${#placeholder_keys[@]} > 0 )); then
 fi
 
 echo "[LifeTrace] deploying ${TARGET}"
-"${DEPLOY_SCRIPT}" "${TARGET}"
+bash "${DEPLOY_SCRIPT}" "${TARGET}"
 
 if [[ "${SKIP_VERIFY}" != "true" ]]; then
   echo "[LifeTrace] verifying production services"
-  "${VERIFY_SCRIPT}"
+  bash "${VERIFY_SCRIPT}"
 else
   echo "[LifeTrace] verification skipped"
 fi
