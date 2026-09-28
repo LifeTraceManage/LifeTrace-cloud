@@ -74,6 +74,7 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
   const { state, session, upsert, remove } = useApp();
   const [showNew, setShowNew] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<JsonEntity | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState("");
   const [activityType, setActivityType] = useState("completion");
   const [normalTarget, setNormalTarget] = useState("1");
@@ -147,10 +148,18 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
   }
 
   async function deleteHabit(activity: JsonEntity) {
-    const relatedLogs = logs.filter((item) => item.activityId === activity.meta.id);
-    await Promise.all(relatedLogs.map((item) => remove("habit.log", item.meta.id)));
-    await remove("habit.activity", activity.meta.id);
-    setDeleteTarget(null);
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const relatedLogs = logs.filter((item) => item.activityId === activity.meta.id);
+      for (const item of relatedLogs) {
+        await remove("habit.log", item.meta.id);
+      }
+      await remove("habit.activity", activity.meta.id);
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function toggle(activity: JsonEntity) {
@@ -349,8 +358,8 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
     >
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={() => setDeleteTarget(null)}>取消</Button>
-        <Button variant="destructive" onClick={() => { if (deleteTarget) void deleteHabit(deleteTarget); }}>
-          <Trash2 size={15} />删除习惯
+        <Button variant="destructive" disabled={deleting} onClick={() => { if (deleteTarget) void deleteHabit(deleteTarget); }}>
+          <Trash2 size={15} />{deleting ? "删除中…" : "删除习惯"}
         </Button>
       </div>
     </AlertDialog>
