@@ -87,7 +87,7 @@ export function AppShell() {
       <Outlet />
     </div>
 
-    <nav className="fixed inset-x-0 bottom-0 z-40 grid h-[68px] grid-cols-6 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="移动端导航">
+    <nav className="fixed inset-x-0 bottom-0 z-40 grid h-[68px] grid-cols-5 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="移动端导航">
       {mobile.map(([path, label, Icon]) => <NavLink key={path} to={path} className={({ isActive }) => cn("flex min-h-11 flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground", isActive || routeActive(location.pathname, path) ? "text-primary" : "")}><Icon size={19} /><span>{label}</span></NavLink>)}
       <button className="flex min-h-11 flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground" onClick={() => setMoreOpen(true)}><Menu size={19} /><span>更多</span></button>
     </nav>
