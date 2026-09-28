@@ -82,6 +82,13 @@ if [[ "${SKIP_UPDATE}" != "true" ]]; then
   else
     git -C "${ROOT_DIR}" checkout -B "${REF}" FETCH_HEAD >/dev/null
   fi
+
+  echo "[LifeTrace] source updated; reloading deployment script"
+  exec env \
+    LIFETRACE_SKIP_UPDATE=true \
+    LIFETRACE_SKIP_VERIFY="${SKIP_VERIFY}" \
+    LIFETRACE_DEPLOY_REF="${REF}" \
+    bash "${ROOT_DIR}/deploy.sh" "${TARGET}"
 else
   echo "[LifeTrace] source update skipped"
 fi
