@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Activity, ArrowRight, Bot, Dumbbell, HeartPulse, LayoutDashboard, Leaf, Mail, NotebookPen, Settings, WalletCards } from "lucide-react";
+import { ArrowRight, Bot, Dumbbell, HeartPulse, LayoutDashboard, Leaf, Mail, NotebookPen, Settings, WalletCards } from "lucide-react";
 import { useApp } from "../../app/AppContext";
 import { Card, CardContent, cn } from "../../components/ui";
 
@@ -21,7 +21,7 @@ const modules = [
   {
     to: "/execute/today",
     name: "Execute",
-    description: "任务、日历与日常执行。",
+    description: "计划、任务、习惯、日历与复盘。",
     icon: LayoutDashboard,
     accent: "text-warning",
   },
@@ -30,7 +30,6 @@ const modules = [
 const coreModules = [
   { to: "/app/health", name: "Health", icon: HeartPulse },
   { to: "/app/fitness", name: "Fitness", icon: Dumbbell },
-  { to: "/app/habits", name: "Habits", icon: Activity },
   { to: "/app/finance", name: "Finance", icon: WalletCards },
   { to: "/app/assistant", name: "Assistant", icon: Bot },
   { to: "/app/settings", name: "Settings", icon: Settings },
