@@ -184,6 +184,12 @@ async fn sync_account(
         .sync_account(&principal.user_id, id)
         .await
         .map_err(map_error)?;
+    state.mail_realtime.publish_account_updated(
+        principal.user_id.as_str(),
+        id,
+        persisted,
+        "manual",
+    );
     Ok(Json(json!({
         "ok": true,
         "persisted": persisted,
