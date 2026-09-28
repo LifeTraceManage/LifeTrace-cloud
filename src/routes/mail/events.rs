@@ -31,20 +31,14 @@ async fn mail_events(
                     let visible = event
                         .user_id
                         .as_deref()
-                        .map(|event_user_id| event_user_id == user_id)
+                        .map(|event_user_id| event_user_id == user_id.as_str())
                         .unwrap_or(true);
                     if !visible {
                         continue;
                     }
 
-                    let event_type = event
-                        .payload
-                        .get("type")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or("mail.updated");
-
                     let item = Event::default()
-                        .event(event_type)
+                        .event("mail.updated")
                         .data(event.payload.to_string());
                     return Some((Ok(item), (receiver, user_id)));
                 }
