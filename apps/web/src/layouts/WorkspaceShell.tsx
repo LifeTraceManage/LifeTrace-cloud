@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { Home, Leaf, LogOut, Mail, Moon, NotebookPen, Sun } from "lucide-react";
+import { LayoutDashboard, Leaf, LogOut, Mail, Moon, NotebookPen, Sun } from "lucide-react";
 import { useApp } from "../app/AppContext";
 import { Badge, Button, cn } from "../components/ui";
 
 const workspaceLinks = [
   { to: "/notes", label: "Notes", icon: NotebookPen },
   { to: "/mail", label: "Mail", icon: Mail },
-  { to: "/app/today", label: "Execute", icon: Home },
+  { to: "/execute", label: "Execute", icon: LayoutDashboard },
 ] as const;
 
 export function WorkspaceShell({
