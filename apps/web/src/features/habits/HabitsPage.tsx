@@ -202,9 +202,10 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
       }}
       title="新建习惯"
       description="配置目标、频率和执行日；这些设置会直接影响 Execute Today 与 Review。"
+      className="max-w-3xl"
     >
       <form className="space-y-5" onSubmit={(event) => void add(event)}>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-1.5 text-sm">
               <span className="font-medium">习惯名称</span>
               <Input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：阅读" required />
@@ -219,7 +220,7 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
             </label>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-3">
             <label className="space-y-1.5 text-sm">
               <span className="font-medium">正常目标</span>
               <Input type="number" min="0.01" step="0.01" value={normalTarget} onChange={(event) => setNormalTarget(event.target.value)} required />
@@ -234,7 +235,7 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
             </label>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_180px]">
+          <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)_170px]">
             <label className="space-y-1.5 text-sm">
               <span className="font-medium">执行频率</span>
               <Select value={scheduleType} onChange={(event) => {
@@ -249,7 +250,7 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
 
             <div className="space-y-1.5 text-sm">
               <span className="font-medium">执行日</span>
-              <div className="flex min-h-10 flex-wrap items-center gap-1.5">
+              <div className="flex min-h-10 flex-wrap items-center gap-2">
                 {scheduleType === "daily"
                   ? <span className="text-sm text-muted-foreground">每天执行</span>
                   : WEEKDAYS.map((day) => <button
@@ -257,7 +258,7 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
                     type="button"
                     onClick={() => toggleTargetDay(day.value)}
                     className={cn(
-                      "flex h-9 w-9 items-center justify-center rounded-md border text-xs",
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-xs",
                       targetDays.includes(day.value) ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
                     )}
                   >{day.label}</button>)}
