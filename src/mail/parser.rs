@@ -68,11 +68,31 @@ fn references_parent(value: &HeaderValue<'_>) -> Option<String> {
 }
 
 pub fn sanitize_html(input: &str) -> String {
-    // Preserve sanitized email images. http/https images are rendered directly by
-    // the web client, while cid: images are rewritten to authenticated attachment URLs.
-    // Ammonia still strips scripts, event handlers and other unsafe markup.
-    Builder::default()
+    // Email layout depends heavily on inline CSS, <style> blocks and legacy table
+    // attributes. Preserve those presentation primitives while Ammonia continues
+    // to remove active content such as scripts, event handlers and unsafe URLs.
+    let mut builder = Builder::default();
+    builder
         .add_url_schemes(&["cid"])
+        .rm_clean_content_tags(&["style"])
+        .add_tags(&["style", "font"])
+        .add_generic_attributes(&[
+            "class",
+            "id",
+            "style",
+            "width",
+            "height",
+            "align",
+            "valign",
+            "bgcolor",
+            "background",
+            "border",
+            "cellpadding",
+            "cellspacing",
+            "dir",
+            "role",
+            "srcset",
+        ])
         .clean(input)
         .to_string()
 }
@@ -158,13 +178,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sanitizer_keeps_images_but_removes_active_content() {
+    fn sanitizer_preserves_email_layout_but_removes_active_content() {
         let cleaned = sanitize_html(
-            r#"<p onclick="alert(1)">hello</p><script>alert(2)</script><img src="https://images.example/banner.png" onerror="alert(3)"><img src="cid:logo@example"><a href="https://example.com">open</a>"#,
+            r#"<style>.hero{color:red}</style><table class="hero" style="width:600px" cellpadding="12"><tr><td bgcolor="#fff"><p onclick="alert(1)">hello</p><script>alert(2)</script><img src="https://images.example/banner.png" onerror="alert(3)"><img src="cid:logo@example"><a href="https://example.com">open</a></td></tr></table>"#,
         );
         assert!(!cleaned.contains("<script"));
         assert!(!cleaned.contains("onclick"));
         assert!(!cleaned.contains("onerror"));
+        assert!(cleaned.contains("<style>"));
+        assert!(cleaned.contains(".hero"));
+        assert!(cleaned.contains("class="hero""));
+        assert!(cleaned.contains("style="width:600px""));
+        assert!(cleaned.contains("cellpadding="12""));
+        assert!(cleaned.contains("bgcolor="#fff""));
         assert!(cleaned.contains("https://images.example/banner.png"));
         assert!(cleaned.contains("cid:logo@example"));
         assert!(cleaned.contains("example.com"));
