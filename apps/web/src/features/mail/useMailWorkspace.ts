@@ -73,9 +73,9 @@ export function useMailWorkspace(mailboxRole: string, query: string, accountId: 
     }
   }, [api]);
 
-  const loadMessages = useCallback(async () => {
+  const loadMessages = useCallback(async (silent = false) => {
     if (runtime.status !== "ready") return;
-    setListLoading(true);
+    if (!silent) setListLoading(true);
     setError("");
     try {
       const page = await api.messages({
@@ -96,7 +96,7 @@ export function useMailWorkspace(mailboxRole: string, query: string, accountId: 
       setSelectedId(null);
       setError(cause instanceof Error ? cause.message : "无法读取邮件列表");
     } finally {
-      setListLoading(false);
+      if (!silent) setListLoading(false);
     }
   }, [accountId, api, mailboxRole, query, runtime.status]);
 
@@ -107,6 +107,35 @@ export function useMailWorkspace(mailboxRole: string, query: string, accountId: 
   useEffect(() => {
     void loadMessages();
   }, [loadMessages]);
+
+  useEffect(() => {
+    if (runtime.status !== "ready" || typeof EventSource === "undefined") return;
+
+    const source = new EventSource(api.eventsUrl(), { withCredentials: true });
+    let refreshTimer: number | undefined;
+
+    const scheduleRefresh = () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        void loadMessages(true);
+      }, 200);
+    };
+    const refreshOnFocus = () => {
+      if (document.visibilityState === "visible") void loadMessages(true);
+    };
+
+    source.addEventListener("mail.updated", scheduleRefresh);
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
+
+    return () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      source.removeEventListener("mail.updated", scheduleRefresh);
+      source.close();
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
+    };
+  }, [api, loadMessages, runtime.status]);
 
   useEffect(() => {
     let active = true;
