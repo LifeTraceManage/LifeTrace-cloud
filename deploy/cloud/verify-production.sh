@@ -23,11 +23,13 @@ compose=(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}")
 
 "${compose[@]}" config --quiet
 
-service_count="$("${compose[@]}" config --services | wc -l | tr -d ' ')"
-[[ "${service_count}" == "2" ]] || {
-  echo "[LifeTrace verify] expected exactly two services, got ${service_count}" >&2
-  exit 1
-}
+services="$("${compose[@]}" config --services)"
+for required in cloud web caddy; do
+  grep -qx "${required}" <<<"${services}" || {
+    echo "[LifeTrace verify] required service is missing: ${required}" >&2
+    exit 1
+  }
+done
 
 "${compose[@]}" up -d --remove-orphans --wait --pull never
 
@@ -41,10 +43,13 @@ service_count="$("${compose[@]}" config --services | wc -l | tr -d ' ')"
 "${compose[@]}" exec -T web wget -q -O - http://127.0.0.1/healthz >/dev/null
 "${compose[@]}" exec -T web wget -q -O - http://127.0.0.1/health/ready >/dev/null
 
+# Caddy gateway is present and running. External HTTPS may still depend on DNS/ICP.
+"${compose[@]}" ps --status running caddy | grep -q caddy
+
 before="$("${compose[@]}" exec -T cloud sh -ec 'test -s /data/lifetrace.db && stat -c "%i:%s" /data/lifetrace.db')"
 
 "${compose[@]}" restart cloud
-"${compose[@]}" up -d --wait --pull never cloud web
+"${compose[@]}" up -d --wait --pull never cloud web caddy
 
 "${compose[@]}" exec -T cloud curl --fail --silent http://127.0.0.1:8787/health/ready >/dev/null
 "${compose[@]}" exec -T web wget -q -O - http://127.0.0.1/health/ready >/dev/null
@@ -61,6 +66,7 @@ after_inode="${after%%:*}"
 echo "[LifeTrace verify] OK"
 echo "  web:      lifetrace-web-app:local"
 echo "  cloud:    lifetrace-cloud:local"
+echo "  gateway:  caddy"
 echo "  storage:  /data/lifetrace.db"
 echo "  public:   $(grep '^PUBLIC_WEB_BASE_URL=' "$ENV_FILE" | cut -d= -f2-)"
 echo "  beecount: http://127.0.0.1:8869/ready"
