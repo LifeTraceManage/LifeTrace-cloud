@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { Activity, Bot, ChevronDown, Dumbbell, HeartPulse, LayoutDashboard, Leaf, LogOut, Mail, Moon, NotebookPen, Settings, Sun, WalletCards } from "lucide-react";
+import { Bot, ChevronDown, Dumbbell, HeartPulse, LayoutDashboard, Leaf, LogOut, Mail, Moon, NotebookPen, Settings, Sun, WalletCards } from "lucide-react";
 import { useApp } from "../app/AppContext";
 import { Badge, Button, cn } from "../components/ui";
 
@@ -13,7 +13,6 @@ const workspaceLinks = [
 const coreLinks = [
   { to: "/app/health", label: "Health", icon: HeartPulse },
   { to: "/app/fitness", label: "Fitness", icon: Dumbbell },
-  { to: "/app/habits", label: "Habits", icon: Activity },
   { to: "/app/finance", label: "Finance", icon: WalletCards },
   { to: "/app/assistant", label: "Assistant", icon: Bot },
   { to: "/app/settings", label: "Settings", icon: Settings },
