@@ -180,17 +180,17 @@ mod tests {
     #[test]
     fn sanitizer_preserves_email_layout_but_removes_active_content() {
         let cleaned = sanitize_html(
-            r#"<style>.hero{color:red}</style><table class="hero" style="width:600px" cellpadding="12"><tr><td bgcolor="#fff"><p onclick="alert(1)">hello</p><script>alert(2)</script><img src="https://images.example/banner.png" onerror="alert(3)"><img src="cid:logo@example"><a href="https://example.com">open</a></td></tr></table>"#,
+            r##"<style>.hero{color:red}</style><table class="hero" style="width:600px" cellpadding="12"><tr><td bgcolor="#fff"><p onclick="alert(1)">hello</p><script>alert(2)</script><img src="https://images.example/banner.png" onerror="alert(3)"><img src="cid:logo@example"><a href="https://example.com">open</a></td></tr></table>"##,
         );
         assert!(!cleaned.contains("<script"));
         assert!(!cleaned.contains("onclick"));
         assert!(!cleaned.contains("onerror"));
         assert!(cleaned.contains("<style>"));
         assert!(cleaned.contains(".hero"));
-        assert!(cleaned.contains("class="hero""));
-        assert!(cleaned.contains("style="width:600px""));
-        assert!(cleaned.contains("cellpadding="12""));
-        assert!(cleaned.contains("bgcolor="#fff""));
+        assert!(cleaned.contains(r#"class="hero""#));
+        assert!(cleaned.contains(r#"style="width:600px""#));
+        assert!(cleaned.contains(r#"cellpadding="12""#));
+        assert!(cleaned.contains(r##"bgcolor="#fff""##));
         assert!(cleaned.contains("https://images.example/banner.png"));
         assert!(cleaned.contains("cid:logo@example"));
         assert!(cleaned.contains("example.com"));
