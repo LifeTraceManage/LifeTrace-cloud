@@ -196,7 +196,9 @@ export function taskMatchesToday(task: JsonEntity, today = localDate()): boolean
 
 export function taskIsInbox(task: JsonEntity): boolean {
   if (!isOpenExecutionTask(task)) return false;
-  return task.context === "inbox" || (!task.projectId && !task.dueAt && !task.scheduledStartAt);
+  if (task.context === "inbox") return true;
+  if (typeof task.context === "string" && task.context.trim()) return false;
+  return !task.projectId && !task.dueAt && !task.scheduledStartAt;
 }
 
 export function taskPriorityLabel(task: JsonEntity): string {
