@@ -109,10 +109,12 @@ export function useMailWorkspace(mailboxRole: string, query: string, accountId: 
   }, [loadMessages]);
 
   useEffect(() => {
-    if (runtime.status !== "ready" || typeof EventSource === "undefined") return;
+    if (runtime.status !== "ready" || typeof WebSocket === "undefined") return;
 
-    const source = new EventSource(api.eventsUrl(), { withCredentials: true });
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | undefined;
     let refreshTimer: number | undefined;
+    let disposed = false;
 
     const scheduleRefresh = () => {
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
@@ -120,18 +122,36 @@ export function useMailWorkspace(mailboxRole: string, query: string, accountId: 
         void loadMessages(true);
       }, 200);
     };
+
+    const connect = () => {
+      if (disposed) return;
+      socket = new WebSocket(api.eventsUrl());
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { type?: string };
+          if (payload.type === "mail.updated") scheduleRefresh();
+        } catch {
+          scheduleRefresh();
+        }
+      };
+      socket.onclose = () => {
+        if (!disposed) reconnectTimer = window.setTimeout(connect, 1500);
+      };
+    };
+
     const refreshOnFocus = () => {
       if (document.visibilityState === "visible") void loadMessages(true);
     };
 
-    source.addEventListener("mail.updated", scheduleRefresh);
+    connect();
     window.addEventListener("focus", refreshOnFocus);
     document.addEventListener("visibilitychange", refreshOnFocus);
 
     return () => {
+      disposed = true;
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
-      source.removeEventListener("mail.updated", scheduleRefresh);
-      source.close();
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      socket?.close();
       window.removeEventListener("focus", refreshOnFocus);
       document.removeEventListener("visibilitychange", refreshOnFocus);
     };
