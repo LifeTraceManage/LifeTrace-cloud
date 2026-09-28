@@ -112,6 +112,43 @@ cargo run --manifest-path tools/contract-exporter/Cargo.toml
 
 ## 本地构建部署
 
+### 项目根目录一键部署
+
+服务器已经 clone 本仓库并配置过生产环境后，进入项目根目录直接执行：
+
+```bash
+./deploy.sh
+```
+
+它会依次完成：
+
+1. 检查 Git、Docker Engine 与 Docker Compose v2；
+2. 检查 tracked 文件是否存在未提交修改，避免部署时误覆盖；
+3. 从 `origin/main` 拉取最新代码，并重新载入最新版部署脚本；
+4. 运行 `deploy/cloud/deploy-production.sh init-env`，只补充新增环境变量，不覆盖现有生产密钥；
+5. 本地构建并启动 Cloud、Web 与 Caddy；
+6. 执行生产健康检查并验证 SQLite 在 Cloud 重启后仍保持持久化；
+7. 输出当前 commit、HTTPS 地址和 IP fallback 地址。
+
+也可以只部署单个应用镜像：
+
+```bash
+./deploy.sh web
+./deploy.sh cloud
+```
+
+如果服务器上 intentionally 保留了 tracked 本地修改，可明确跳过源码更新，仅部署当前 checkout：
+
+```bash
+LIFETRACE_SKIP_UPDATE=true ./deploy.sh
+```
+
+如需跳过部署后的验证：
+
+```bash
+LIFETRACE_SKIP_VERIFY=true ./deploy.sh
+```
+
 Web 与 Cloud 源码位于同一个仓库，生产环境默认直接从当前源码构建两个本地 Docker 镜像：
 
 ```text
