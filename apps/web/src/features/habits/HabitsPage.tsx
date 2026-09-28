@@ -19,7 +19,7 @@ function currentStreak(completedDates: Set<string>): number {
   return streak;
 }
 
-export function HabitsPage() {
+export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
   const { state, session, upsert, remove } = useApp();
   const [name, setName] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -43,14 +43,15 @@ export function HabitsPage() {
     else if (session) await upsert("habit.log", createHabitLog(session.user.id, session.session.deviceId, activityId, 1, "", today));
   }
 
-  return <div className="page-shell">
+  const content = <>
     <PageHeader
-      title="坚持"
-      action={<Button onClick={() => setShowNew(true)}><Plus size={16} />新建项目</Button>}
+      title={embedded ? "习惯" : "坚持"}
+      description={embedded ? "把需要长期重复的行为和计划任务放在同一个执行系统里管理。" : undefined}
+      action={<Button onClick={() => setShowNew(true)}><Plus size={16} />新建习惯</Button>}
     />
 
     {showNew ? <Card className="mb-4"><CardContent className="pt-5"><form className="flex gap-2" onSubmit={(event) => void add(event)}>
-      <Input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：阅读 30 分钟" required />
+      <Input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：每天阅读 30 分钟" required />
       <Button type="submit">保存</Button><Button variant="ghost" onClick={() => setShowNew(false)}>取消</Button>
     </form></CardContent></Card> : null}
 
@@ -67,7 +68,7 @@ export function HabitsPage() {
       return <Card key={activity.meta.id}><CardContent className="pt-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="flex flex-wrap items-center gap-2"><div className="text-base font-semibold">{text(activity, "name", "坚持项目")}</div>{streak > 0 ? <Badge className="border-warning/25 bg-warning/10 text-warning"><Flame size={12} className="mr-1" />{streak} 天 streak</Badge> : null}</div>
+            <div className="flex flex-wrap items-center gap-2"><div className="text-base font-semibold">{text(activity, "name", "习惯")}</div>{streak > 0 ? <Badge className="border-warning/25 bg-warning/10 text-warning"><Flame size={12} className="mr-1" />{streak} 天 streak</Badge> : null}</div>
             <div className="mt-1 text-xs text-muted-foreground">7 天 {weekCount}/7 · 30 天 {monthCount}/30</div>
           </div>
           <button onClick={() => void toggle(activity.meta.id)} className={`flex h-10 w-10 items-center justify-center rounded-full border ${completedToday ? "border-primary bg-primary text-primary-foreground" : "bg-background"}`} aria-label={completedToday ? "取消今日打卡" : "今日打卡"}>{completedToday ? <Check size={18} /> : <Flame size={17} />}</button>
@@ -83,6 +84,12 @@ export function HabitsPage() {
           <div className="grid grid-cols-10 gap-1">{days30.map((day) => <div key={day} title={`${day}${completedDates.has(day) ? " · 已完成" : ""}`} className={`aspect-square min-h-3 rounded-sm ${completedDates.has(day) ? "bg-primary" : "bg-muted"}`} />)}</div>
         </div>
       </CardContent></Card>;
-    })}</div> : <EmptyState title="还没有坚持项目" action={<Button variant="outline" onClick={() => setShowNew(true)}>创建第一个项目</Button>} />}
-  </div>;
+    })}</div> : <EmptyState title="还没有习惯" action={<Button variant="outline" onClick={() => setShowNew(true)}>创建第一个习惯</Button>} />}
+  </>;
+
+  return embedded ? <div>{content}</div> : <div className="page-shell">{content}</div>;
+}
+
+export function HabitsPage() {
+  return <HabitsPanel />;
 }
