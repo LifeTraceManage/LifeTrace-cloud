@@ -288,10 +288,10 @@ export function MailPage() {
       <Button size="sm" disabled={!runtimeReady || !identities.length} onClick={() => openComposer("new")}><PenLine size={15} /><span className="hidden sm:inline">写邮件</span></Button>
     </>}
   >
-    {notice ? <div className="mx-3 mt-3 flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2 text-xs sm:mx-5 lg:mx-6"><span>{notice}</span><button className="text-muted-foreground" onClick={() => setNotice("")}>关闭</button></div> : null}
+    {notice ? <div className="fixed right-4 top-[6.75rem] z-50 flex max-w-[min(28rem,calc(100vw-2rem))] items-center justify-between gap-3 rounded-md border bg-card px-3 py-2 text-xs shadow-lg sm:right-5 lg:right-6 lg:top-20"><span>{notice}</span><button className="shrink-0 text-muted-foreground" onClick={() => setNotice("")}>关闭</button></div> : null}
 
-    <div className="grid min-h-[calc(100vh-6rem)] lg:min-h-[calc(100vh-4rem)] lg:grid-cols-[228px_360px_minmax(0,1fr)]">
-      <aside className="border-b bg-card/45 p-3 lg:border-b-0 lg:border-r">
+    <div className="grid min-h-[calc(100dvh-6rem)] lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:grid-cols-[228px_360px_minmax(0,1fr)] lg:overflow-hidden">
+      <aside className="border-b bg-card/45 p-3 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r">
         <div className="mb-4 flex items-center justify-between px-2 pt-1">
           <div>
             <div className="text-xs font-semibold">邮箱</div>
@@ -308,8 +308,9 @@ export function MailPage() {
           ><Icon size={16} /><span>{label}</span></button>)}
         </nav>
 
-        <div className="mt-5 hidden border-t pt-4 lg:block">
-          <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Accounts</div>
+        <div className="mt-5 hidden min-h-0 flex-1 border-t pt-4 lg:flex lg:flex-col">
+          <div className="mb-2 shrink-0 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Accounts</div>
+          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pr-1">
           <button onClick={() => setAccountId(null)} className={cn("mb-1 flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs text-muted-foreground hover:bg-muted", accountId === null && "bg-accent font-medium text-accent-foreground")}><Inbox size={14} /><span className="flex-1">所有邮箱</span></button>
           {accounts.map((item) => <button key={item.id} onClick={() => setAccountId(item.id)} className={cn("mb-1 flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-muted-foreground hover:bg-muted", accountId === item.id && "bg-accent font-medium text-accent-foreground")}>
             <span className={cn("h-2 w-2 shrink-0 rounded-full", item.status === "active" ? "bg-success" : item.status === "degraded" || item.status === "validating" ? "bg-warning" : "bg-muted-foreground")} />
@@ -317,11 +318,12 @@ export function MailPage() {
           </button>)}
           {!accounts.length ? <div className="rounded-md border border-dashed px-3 py-3 text-xs leading-5 text-muted-foreground">尚未连接邮箱账号。</div> : null}
           <Button className="mt-2 w-full justify-start" variant="ghost" size="sm" onClick={() => setSettingsOpen(true)}><Settings size={15} />账号设置</Button>
+          </div>
         </div>
       </aside>
 
-      <section className={cn("min-w-0 border-b lg:block lg:border-b-0 lg:border-r", mobileDetail && "hidden lg:block")}>
-        <div className="border-b p-3">
+      <section className={cn("min-w-0 border-b lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r", mobileDetail && "hidden lg:flex")}>
+        <div className="shrink-0 border-b p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h1 className="text-sm font-semibold">{account ? `${account.email} · ${current.label}` : `所有邮箱 · ${current.label}`}</h1>
@@ -337,7 +339,7 @@ export function MailPage() {
           </div>
         </div>
 
-        <div className="scrollbar-thin max-h-[calc(100vh-12rem)] overflow-y-auto p-2 lg:max-h-[calc(100vh-8rem)]">
+        <div className="scrollbar-thin overflow-y-auto p-2 lg:min-h-0 lg:flex-1">
           {error ? <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{error}</div> : null}
           {runtimeLoading ? <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" />正在连接 LifeTrace Mail…</div> : null}
           {!runtimeLoading && !runtimeReady ? <EmptyState icon={<Inbox size={22} />} title="Mail 服务尚未就绪" description={runtimeDescription} action={<Button size="sm" variant="outline" onClick={() => setSettingsOpen(true)}><Settings size={14} />检查账号配置</Button>} /> : null}
@@ -367,9 +369,9 @@ export function MailPage() {
         </div>
       </section>
 
-      <main className={cn("min-w-0 bg-background", mobileDetail ? "block" : "hidden lg:block")}>
-        {selectedMessage && mailbox !== "drafts" ? <div className="flex min-h-full flex-col">
-          <div className="border-b p-4 sm:p-5">
+      <main className={cn("min-w-0 bg-background lg:h-full lg:min-h-0 lg:overflow-hidden", mobileDetail ? "block" : "hidden lg:block")}>
+        {selectedMessage && mailbox !== "drafts" ? <div className="flex min-h-full flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
+          <div className="shrink-0 border-b p-4 sm:p-5">
             <div className="mb-3 flex items-center gap-2">
               <Button className="lg:hidden" size="icon" variant="ghost" onClick={() => setMobileDetail(false)} aria-label="返回邮件列表"><ArrowLeft size={17} /></Button>
               <div className="min-w-0 flex-1">
@@ -401,7 +403,7 @@ export function MailPage() {
             </div>
           </div>
 
-          <div className="scrollbar-thin flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
             {detailLoading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" />加载邮件正文…</div> : selectedMessage.html ? <div
               className="break-words text-sm leading-7 text-foreground [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap"
               dangerouslySetInnerHTML={{ __html: renderedHtml }}
@@ -415,7 +417,7 @@ export function MailPage() {
               })}</div>
             </div> : null}
           </div>
-        </div> : <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-8">
+        </div> : <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-8 lg:h-full lg:min-h-0">
           <div className="max-w-md text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">{detailLoading ? <Loader2 size={21} className="animate-spin" /> : <Mail size={21} />}</div>
             <h2 className="mt-4 text-lg font-semibold">{runtimeReady ? mailbox === "drafts" ? "选择或新建草稿" : "选择一封邮件" : "LifeTrace Mail"}</h2>
