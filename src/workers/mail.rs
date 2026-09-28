@@ -45,7 +45,7 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send
         while let Some(result) = idle_tasks.join_next().await {
             if let Ok(Some((user_id, account_id))) = result {
                 let user = UserId::new(user_id.to_string());
-                match service.sync_account(&user, account_id).await {
+                match service.sync_account_incremental(&user, account_id).await {
                     Ok(synced_messages) => {
                         if synced_messages > 0 {
                             state.mail_realtime.publish_account_updated(
