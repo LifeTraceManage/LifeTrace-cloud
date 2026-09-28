@@ -45,6 +45,9 @@ export interface HabitInput {
   normalTarget?: number | null;
   targetPeriod?: "daily" | "weekly" | string;
   targetDays?: number[];
+  scheduleType?: "daily" | "weekly" | "custom" | string;
+  startDate?: string | null;
+  checkinMethod?: "manual" | "automatic" | string;
   icon?: string | null;
   color?: string | null;
   description?: string | null;
@@ -59,7 +62,8 @@ export function createHabitActivity(userId: string, deviceId: string, input: Hab
     minimumTarget: input.minimumTarget ?? null, normalTarget: input.normalTarget ?? 1,
     targetPeriod: input.targetPeriod ?? "daily", targetDays: input.targetDays ?? [],
     icon: input.icon ?? name.slice(0, 1), color: input.color ?? "#0f766e",
-    scheduleType: "flexible", startDate: localDate(), checkinMethod: "manual",
+    scheduleType: input.scheduleType ?? "daily", startDate: input.startDate ?? localDate(),
+    checkinMethod: input.checkinMethod ?? "manual",
     syncSource: "web", description: input.description?.trim() || null, isArchived: false,
   };
 }
