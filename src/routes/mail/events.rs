@@ -1,11 +1,8 @@
-use std::convert::Infallible;
-use std::time::Duration;
-
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
-use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::response::Response;
 use axum::routing::get;
 use axum::Router;
-use futures_util::stream::{self, Stream};
 
 use crate::auth::AuthenticatedPrincipal;
 use crate::error::ApiError;
@@ -18,39 +15,43 @@ pub fn router() -> Router<AppState> {
 async fn mail_events(
     State(state): State<AppState>,
     principal: AuthenticatedPrincipal,
-) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    ws: WebSocketUpgrade,
+) -> Result<Response, ApiError> {
     principal.require_scope("mail:read")?;
 
     let user_id = principal.user_id.as_str().to_owned();
     let receiver = state.mail_realtime.subscribe();
 
-    let stream = stream::unfold((receiver, user_id), |(mut receiver, user_id)| async move {
-        loop {
-            match receiver.recv().await {
-                Ok(event) => {
-                    let visible = event
-                        .user_id
-                        .as_deref()
-                        .map(|event_user_id| event_user_id == user_id.as_str())
-                        .unwrap_or(true);
-                    if !visible {
-                        continue;
-                    }
+    Ok(ws.on_upgrade(move |socket| stream_events(socket, receiver, user_id)))
+}
 
-                    let item = Event::default()
-                        .event("mail.updated")
-                        .data(event.payload.to_string());
-                    return Some((Ok(item), (receiver, user_id)));
+async fn stream_events(
+    mut socket: WebSocket,
+    mut receiver: tokio::sync::broadcast::Receiver<crate::mail::realtime::MailRealtimeEvent>,
+    user_id: String,
+) {
+    loop {
+        match receiver.recv().await {
+            Ok(event) => {
+                let visible = event
+                    .user_id
+                    .as_deref()
+                    .map(|event_user_id| event_user_id == user_id.as_str())
+                    .unwrap_or(true);
+                if !visible {
+                    continue;
                 }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
-            }
-        }
-    });
 
-    Ok(Sse::new(stream).keep_alive(
-        KeepAlive::new()
-            .interval(Duration::from_secs(20))
-            .text("keep-alive"),
-    ))
+                if socket
+                    .send(Message::Text(event.payload.to_string().into()))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        }
+    }
 }
