@@ -252,6 +252,10 @@ function addressStrings(values?: MailAddress[]): string[] {
 export class MailApi {
   constructor(private readonly csrfToken?: string) {}
 
+  eventsUrl(): string {
+    return apiUrl("/api/v1/mail/events");
+  }
+
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const method = (init.method ?? "GET").toUpperCase();
     const headers = new Headers(init.headers);
