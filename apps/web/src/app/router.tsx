@@ -6,7 +6,7 @@ import { AppShell } from "../layouts/AppShell";
 const LoginPage = lazy(() => import("../features/auth/LoginPage").then((module) => ({ default: module.LoginPage })));
 const PortalPage = lazy(() => import("../features/portal/PortalPage").then((module) => ({ default: module.PortalPage })));
 const TodayPage = lazy(() => import("../features/dashboard/TodayPage").then((module) => ({ default: module.TodayPage })));
-const ExecutionPage = lazy(() => import("../features/execution/ExecutionPage").then((module) => ({ default: module.ExecutionPage })));
+const ExecutionWorkspace = lazy(() => import("../features/execution/ExecutionWorkspace").then((module) => ({ default: module.ExecutionWorkspace })));
 const CalendarPage = lazy(() => import("../features/calendar/CalendarPage").then((module) => ({ default: module.CalendarPage })));
 const HabitsPage = lazy(() => import("../features/habits/HabitsPage").then((module) => ({ default: module.HabitsPage })));
 const FitnessPage = lazy(() => import("../features/fitness/FitnessPage").then((module) => ({ default: module.FitnessPage })));
@@ -64,13 +64,14 @@ export const router = createBrowserRouter([
   { path: "/login", element: withSuspense(<LoginPage />) },
   { path: "/notes/*", element: <RequireAuth>{withSuspense(<NotesPage />)}</RequireAuth> },
   { path: "/mail/*", element: <RequireAuth>{withSuspense(<MailPage />)}</RequireAuth> },
+  { path: "/execute/*", element: <RequireAuth>{withSuspense(<ExecutionWorkspace />)}</RequireAuth> },
   {
     path: "/app",
     element: <ProtectedShell />,
     children: [
       { index: true, element: <Navigate to="today" replace /> },
       { path: "today", element: withSuspense(<TodayPage />) },
-      { path: "execution", element: withSuspense(<ExecutionPage />) },
+      { path: "execution", element: <Navigate to="/execute" replace /> },
       { path: "calendar", element: withSuspense(<CalendarPage />) },
       { path: "habits", element: withSuspense(<HabitsPage />) },
       { path: "fitness", element: withSuspense(<FitnessPage />) },
