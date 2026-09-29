@@ -200,6 +200,109 @@ pub struct UpdateHabitArgs {
     pub is_archived: Option<bool>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateMemoArgs {
+    pub content: String,
+    #[serde(default)]
+    pub context: Option<String>,
+    #[serde(default)]
+    pub is_pinned: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateMemoArgs {
+    pub memo_id: String,
+    #[serde(default)]
+    pub content: Option<String>,
+    #[serde(default)]
+    pub context: Option<String>,
+    #[serde(default)]
+    pub clear_context: bool,
+    #[serde(default)]
+    pub is_pinned: Option<bool>,
+    #[serde(default)]
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateWaitingItemArgs {
+    pub title: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub waiting_for: String,
+    #[serde(default)]
+    pub expected_at: Option<String>,
+    #[serde(default)]
+    pub follow_up_at: Option<String>,
+    #[serde(default)]
+    pub source_task_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateWaitingItemArgs {
+    pub waiting_item_id: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub clear_description: bool,
+    #[serde(default)]
+    pub waiting_for: Option<String>,
+    #[serde(default)]
+    pub expected_at: Option<String>,
+    #[serde(default)]
+    pub clear_expected_at: bool,
+    #[serde(default)]
+    pub follow_up_at: Option<String>,
+    #[serde(default)]
+    pub clear_follow_up_at: bool,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub resolution_summary: Option<String>,
+    #[serde(default)]
+    pub clear_resolution_summary: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateReminderArgs {
+    pub subject_type: String,
+    pub subject_id: String,
+    pub trigger_at: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateReminderArgs {
+    pub reminder_id: String,
+    #[serde(default)]
+    pub trigger_at: Option<String>,
+    #[serde(default)]
+    pub snoozed_until: Option<String>,
+    #[serde(default)]
+    pub clear_snooze: bool,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub clear_title: bool,
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub clear_body: bool,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateTaskAction {
@@ -293,6 +396,80 @@ struct UpdateHabitAction {
     is_archived: Option<bool>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateMemoAction {
+    entity_id: String,
+    content: String,
+    context: Option<String>,
+    is_pinned: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateMemoAction {
+    memo_id: String,
+    content: Option<String>,
+    context: Option<String>,
+    clear_context: bool,
+    is_pinned: Option<bool>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateWaitingItemAction {
+    entity_id: String,
+    title: String,
+    description: Option<String>,
+    waiting_for: String,
+    expected_at: Option<String>,
+    follow_up_at: Option<String>,
+    source_task_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateWaitingItemAction {
+    waiting_item_id: String,
+    title: Option<String>,
+    description: Option<String>,
+    clear_description: bool,
+    waiting_for: Option<String>,
+    expected_at: Option<String>,
+    clear_expected_at: bool,
+    follow_up_at: Option<String>,
+    clear_follow_up_at: bool,
+    status: Option<String>,
+    resolution_summary: Option<String>,
+    clear_resolution_summary: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateReminderAction {
+    entity_id: String,
+    subject_type: String,
+    subject_id: String,
+    trigger_at: String,
+    title: Option<String>,
+    body: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateReminderAction {
+    reminder_id: String,
+    trigger_at: Option<String>,
+    snoozed_until: Option<String>,
+    clear_snooze: bool,
+    status: Option<String>,
+    title: Option<String>,
+    clear_title: bool,
+    body: Option<String>,
+    clear_body: bool,
+}
+
 pub struct ProposeCreateTaskTool;
 pub struct ProposeUpdateTaskTool;
 pub struct ProposeCreateCalendarEventTool;
@@ -300,6 +477,12 @@ pub struct ProposeCreateProjectTool;
 pub struct ProposeUpdateProjectTool;
 pub struct ProposeCreateHabitTool;
 pub struct ProposeUpdateHabitTool;
+pub struct ProposeCreateMemoTool;
+pub struct ProposeUpdateMemoTool;
+pub struct ProposeCreateWaitingItemTool;
+pub struct ProposeUpdateWaitingItemTool;
+pub struct ProposeCreateReminderTool;
+pub struct ProposeUpdateReminderTool;
 
 impl Tool for ProposeCreateTaskTool {
     const NAME: &'static str = "lifetrace_propose_create_task";
@@ -894,6 +1077,463 @@ impl Tool for ProposeUpdateHabitTool {
             arguments_json,
             action,
             json!({"habitId": habit_id}),
+        )
+        .await
+    }
+}
+
+
+impl Tool for ProposeCreateMemoTool {
+    const NAME: &'static str = "lifetrace_propose_create_memo";
+    type Args = CreateMemoArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出创建 LifeTrace Memo 的写操作。适合把临时想法或待整理信息放入收集箱；不会直接执行，必须由用户批准。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "content":{"type":"string"},
+                "context":{"type":"string"},
+                "isPinned":{"type":"boolean","default":false}
+            },
+            "required":["content"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_execution_write(&ctx)?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let content = bounded_required(&args.content, "content", 8_000)?;
+        let action = json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "content": content,
+            "context": bounded_optional(args.context.as_deref(), 200),
+            "isPinned": args.is_pinned
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "create_memo",
+            arguments_json,
+            action,
+            json!({"content": content.chars().take(120).collect::<String>()}),
+        )
+        .await
+    }
+}
+
+impl Tool for ProposeUpdateMemoTool {
+    const NAME: &'static str = "lifetrace_propose_update_memo";
+    type Args = UpdateMemoArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出修改已有 Memo 的写操作。可修改内容、上下文、置顶或 active/archived 状态；修改前先查询确认 memoId。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "memoId":{"type":"string"},
+                "content":{"type":"string"},
+                "context":{"type":"string"},
+                "clearContext":{"type":"boolean","default":false},
+                "isPinned":{"type":"boolean"},
+                "status":{"type":"string","enum":["active","archived"]}
+            },
+            "required":["memoId"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_execution_write(&ctx)?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let memo_id = bounded_required(&args.memo_id, "memoId", 200)?;
+        let content = match args.content.as_deref() {
+            Some(value) => Some(bounded_required(value, "content", 8_000)?),
+            None => None,
+        };
+        if args.context.is_some() && args.clear_context {
+            return Err(ApprovalError::Invalid(
+                "context and clearContext cannot be used together".to_owned(),
+            ));
+        }
+        if let Some(status) = args.status.as_deref() {
+            validate_one_of(status, "status", &["active", "archived"])?;
+        }
+        if content.is_none()
+            && args.context.is_none()
+            && !args.clear_context
+            && args.is_pinned.is_none()
+            && args.status.is_none()
+        {
+            return Err(ApprovalError::Invalid(
+                "at least one memo field must be changed".to_owned(),
+            ));
+        }
+        let action = json!({
+            "memoId": memo_id,
+            "content": content,
+            "context": bounded_optional(args.context.as_deref(), 200),
+            "clearContext": args.clear_context,
+            "isPinned": args.is_pinned,
+            "status": args.status
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "update_memo",
+            arguments_json,
+            action,
+            json!({"memoId": memo_id}),
+        )
+        .await
+    }
+}
+
+impl Tool for ProposeCreateWaitingItemTool {
+    const NAME: &'static str = "lifetrace_propose_create_waiting_item";
+    type Args = CreateWaitingItemArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出创建 LifeTrace Waiting Item 的写操作，用于记录正在等待某人或某结果的事项。时间不明确时先询问，不要猜测。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "title":{"type":"string"},
+                "description":{"type":"string"},
+                "waitingFor":{"type":"string"},
+                "expectedAt":{"type":"string","description":"RFC3339 timestamp"},
+                "followUpAt":{"type":"string","description":"RFC3339 timestamp"},
+                "sourceTaskId":{"type":"string"}
+            },
+            "required":["title","waitingFor"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_execution_write(&ctx)?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let title = bounded_required(&args.title, "title", 300)?;
+        let waiting_for = bounded_required(&args.waiting_for, "waitingFor", 300)?;
+        validate_optional_timestamp(args.expected_at.as_deref(), "expectedAt")?;
+        validate_optional_timestamp(args.follow_up_at.as_deref(), "followUpAt")?;
+        let action = json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "title": title,
+            "description": bounded_optional(args.description.as_deref(), 4_000),
+            "waitingFor": waiting_for,
+            "expectedAt": args.expected_at,
+            "followUpAt": args.follow_up_at,
+            "sourceTaskId": bounded_optional(args.source_task_id.as_deref(), 200)
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "create_waiting_item",
+            arguments_json,
+            action,
+            json!({"title": title, "waitingFor": waiting_for}),
+        )
+        .await
+    }
+}
+
+impl Tool for ProposeUpdateWaitingItemTool {
+    const NAME: &'static str = "lifetrace_propose_update_waiting_item";
+    type Args = UpdateWaitingItemArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出修改 Waiting Item 的写操作。可调整内容、等待对象、预期/跟进时间，并可标记 resolved 或重新打开；修改前先查询 waitingItemId。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "waitingItemId":{"type":"string"},
+                "title":{"type":"string"},
+                "description":{"type":"string"},
+                "clearDescription":{"type":"boolean","default":false},
+                "waitingFor":{"type":"string"},
+                "expectedAt":{"type":"string","description":"RFC3339 timestamp"},
+                "clearExpectedAt":{"type":"boolean","default":false},
+                "followUpAt":{"type":"string","description":"RFC3339 timestamp"},
+                "clearFollowUpAt":{"type":"boolean","default":false},
+                "status":{"type":"string","enum":["open","resolved"]},
+                "resolutionSummary":{"type":"string"},
+                "clearResolutionSummary":{"type":"boolean","default":false}
+            },
+            "required":["waitingItemId"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_execution_write(&ctx)?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let waiting_item_id = bounded_required(&args.waiting_item_id, "waitingItemId", 200)?;
+        let title = match args.title.as_deref() {
+            Some(value) => Some(bounded_required(value, "title", 300)?),
+            None => None,
+        };
+        let waiting_for = match args.waiting_for.as_deref() {
+            Some(value) => Some(bounded_required(value, "waitingFor", 300)?),
+            None => None,
+        };
+        if args.description.is_some() && args.clear_description {
+            return Err(ApprovalError::Invalid(
+                "description and clearDescription cannot be used together".to_owned(),
+            ));
+        }
+        if args.expected_at.is_some() && args.clear_expected_at {
+            return Err(ApprovalError::Invalid(
+                "expectedAt and clearExpectedAt cannot be used together".to_owned(),
+            ));
+        }
+        if args.follow_up_at.is_some() && args.clear_follow_up_at {
+            return Err(ApprovalError::Invalid(
+                "followUpAt and clearFollowUpAt cannot be used together".to_owned(),
+            ));
+        }
+        if args.resolution_summary.is_some() && args.clear_resolution_summary {
+            return Err(ApprovalError::Invalid(
+                "resolutionSummary and clearResolutionSummary cannot be used together".to_owned(),
+            ));
+        }
+        validate_optional_timestamp(args.expected_at.as_deref(), "expectedAt")?;
+        validate_optional_timestamp(args.follow_up_at.as_deref(), "followUpAt")?;
+        if let Some(status) = args.status.as_deref() {
+            validate_one_of(status, "status", &["open", "resolved"])?;
+        }
+        if title.is_none()
+            && waiting_for.is_none()
+            && args.description.is_none()
+            && !args.clear_description
+            && args.expected_at.is_none()
+            && !args.clear_expected_at
+            && args.follow_up_at.is_none()
+            && !args.clear_follow_up_at
+            && args.status.is_none()
+            && args.resolution_summary.is_none()
+            && !args.clear_resolution_summary
+        {
+            return Err(ApprovalError::Invalid(
+                "at least one waiting item field must be changed".to_owned(),
+            ));
+        }
+        let action = json!({
+            "waitingItemId": waiting_item_id,
+            "title": title,
+            "description": bounded_optional(args.description.as_deref(), 4_000),
+            "clearDescription": args.clear_description,
+            "waitingFor": waiting_for,
+            "expectedAt": args.expected_at,
+            "clearExpectedAt": args.clear_expected_at,
+            "followUpAt": args.follow_up_at,
+            "clearFollowUpAt": args.clear_follow_up_at,
+            "status": args.status,
+            "resolutionSummary": bounded_optional(args.resolution_summary.as_deref(), 4_000),
+            "clearResolutionSummary": args.clear_resolution_summary
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "update_waiting_item",
+            arguments_json,
+            action,
+            json!({"waitingItemId": waiting_item_id}),
+        )
+        .await
+    }
+}
+
+impl Tool for ProposeCreateReminderTool {
+    const NAME: &'static str = "lifetrace_propose_create_reminder";
+    type Args = CreateReminderArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出为已有任务、日程、Waiting Item 或 Memo 创建提醒。必须先查询确认 subjectId；提醒时间不明确时先询问用户。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "subjectType":{"type":"string","enum":["task","calendar_event","waiting_item","memo"]},
+                "subjectId":{"type":"string"},
+                "triggerAt":{"type":"string","description":"RFC3339 timestamp"},
+                "title":{"type":"string"},
+                "body":{"type":"string"}
+            },
+            "required":["subjectType","subjectId","triggerAt"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_execution_write(&ctx)?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        validate_one_of(
+            &args.subject_type,
+            "subjectType",
+            &["task", "calendar_event", "waiting_item", "memo"],
+        )?;
+        let subject_id = bounded_required(&args.subject_id, "subjectId", 200)?;
+        validate_optional_timestamp(Some(args.trigger_at.as_str()), "triggerAt")?;
+        let action = json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "subjectType": args.subject_type,
+            "subjectId": subject_id,
+            "triggerAt": args.trigger_at,
+            "title": bounded_optional(args.title.as_deref(), 300),
+            "body": bounded_optional(args.body.as_deref(), 4_000)
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "create_reminder",
+            arguments_json,
+            action,
+            json!({"subjectType": args.subject_type, "subjectId": subject_id, "triggerAt": args.trigger_at}),
+        )
+        .await
+    }
+}
+
+impl Tool for ProposeUpdateReminderTool {
+    const NAME: &'static str = "lifetrace_propose_update_reminder";
+    type Args = UpdateReminderArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出修改已有提醒。可改触发时间、稍后提醒时间、标题/正文，或设为 scheduled/dismissed/cancelled；修改前先查询 reminderId。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "reminderId":{"type":"string"},
+                "triggerAt":{"type":"string","description":"RFC3339 timestamp"},
+                "snoozedUntil":{"type":"string","description":"RFC3339 timestamp"},
+                "clearSnooze":{"type":"boolean","default":false},
+                "status":{"type":"string","enum":["scheduled","dismissed","cancelled"]},
+                "title":{"type":"string"},
+                "clearTitle":{"type":"boolean","default":false},
+                "body":{"type":"string"},
+                "clearBody":{"type":"boolean","default":false}
+            },
+            "required":["reminderId"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_execution_write(&ctx)?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let reminder_id = bounded_required(&args.reminder_id, "reminderId", 200)?;
+        validate_optional_timestamp(args.trigger_at.as_deref(), "triggerAt")?;
+        validate_optional_timestamp(args.snoozed_until.as_deref(), "snoozedUntil")?;
+        if args.snoozed_until.is_some() && args.clear_snooze {
+            return Err(ApprovalError::Invalid(
+                "snoozedUntil and clearSnooze cannot be used together".to_owned(),
+            ));
+        }
+        if args.title.is_some() && args.clear_title {
+            return Err(ApprovalError::Invalid(
+                "title and clearTitle cannot be used together".to_owned(),
+            ));
+        }
+        if args.body.is_some() && args.clear_body {
+            return Err(ApprovalError::Invalid(
+                "body and clearBody cannot be used together".to_owned(),
+            ));
+        }
+        if let Some(status) = args.status.as_deref() {
+            validate_one_of(status, "status", &["scheduled", "dismissed", "cancelled"])?;
+        }
+        if args.trigger_at.is_none()
+            && args.snoozed_until.is_none()
+            && !args.clear_snooze
+            && args.status.is_none()
+            && args.title.is_none()
+            && !args.clear_title
+            && args.body.is_none()
+            && !args.clear_body
+        {
+            return Err(ApprovalError::Invalid(
+                "at least one reminder field must be changed".to_owned(),
+            ));
+        }
+        let action = json!({
+            "reminderId": reminder_id,
+            "triggerAt": args.trigger_at,
+            "snoozedUntil": args.snoozed_until,
+            "clearSnooze": args.clear_snooze,
+            "status": args.status,
+            "title": bounded_optional(args.title.as_deref(), 300),
+            "clearTitle": args.clear_title,
+            "body": bounded_optional(args.body.as_deref(), 4_000),
+            "clearBody": args.clear_body
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "update_reminder",
+            arguments_json,
+            action,
+            json!({"reminderId": reminder_id}),
         )
         .await
     }
