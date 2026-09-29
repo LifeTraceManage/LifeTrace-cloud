@@ -69,6 +69,7 @@ Cloud 主服务监听容器内部 `8787`；生产环境由 Web Nginx 容器监�
 | `/api/v1/mail/*` | 邮件 |
 | `/api/v1/assistant` | Agent 对话（Web/Native 共用 runtime） |
 | `/api/v1/assistant/sessions` | Agent 历史会话 |
+| `/api/v1/assistant/sessions/{id}` | DELETE 删除 Agent 会话及其消息、Run、工具调用与审批记录 |
 | `/api/v1/assistant/sessions/{id}/messages` | Agent 会话消息 |
 | `/api/v1/assistant/sessions/{id}/approvals` | Agent 会话写操作审批 |
 | `/api/v1/assistant/approvals/{id}/decision` | 批准/拒绝 Agent 写操作 |
@@ -355,7 +356,7 @@ Cloud 内置基于 Rig 的 Agent runtime。会话、消息、Run、工具调用�
 当前审批写操作白名单包括：
 
 - 创建任务；
-- 修改任务标题、状态、优先级或截止时间；
+- 修改任务标题、状态、优先级、截止时间或 Planner 执行时间段；
 - 创建日程；
 - 创建/修改 Project；
 - 创建/修改习惯（名称、目标、执行日、开始日期、说明与归档状态）；
@@ -365,7 +366,11 @@ Cloud 内置基于 Rig 的 Agent runtime。会话、消息、Run、工具调用�
 
 写操作采用 `Agent propose -> user approval -> deterministic backend execution`。propose 工具只写入 `agent_approvals` 和审计记录，不修改业务数据；用户在 Web 中显式批准后，Cloud 再通过现有 `SyncRepository.push` 执行，因此仍使用 Sync v1 的版本、冲突、change log 和客户端同步机制。批准请求默认 15 分钟过期，重复批准按 approval/action 的稳定标识处理为幂等操作。
 
+任务规划遵循 `dueAt != scheduledStartAt/scheduledEndAt`：截止时间只表示 deadline，Planner 时间段表示实际执行计划。对于用户给出明确 deadline 的任务，Agent 默认会先读取目标日期附近的任务和日程，主动选择无冲突的执行时段并把计划时间放入同一审批提案；用户明确要求“只收集、稍后再排”时才保留为待安排。已有任务也可直接通过修改 `scheduledStartAt/scheduledEndAt` 进入 Planner，不再需要额外创建 Calendar Event。
+
 审批同时要求同一 `user_id`、同一 `app_id + scopes` 分区，并在执行时按 action 重新校验当前 Session 的写权限：任务、日程、Project、Memo、Waiting Item、Reminder 要求 `sync:write + execution:write`，习惯要求 `sync:write + habits:write`。Reminder 执行时还会重新确认 subject 实体仍存在，避免产生悬空提醒。前端只提交 approval id 和 approve/reject，不接受模型生成的任意 API/SQL。删除数据、发送/删除邮件及其他高风险写操作目前仍未开放。
+
+Web Assistant 将会话列表和聊天正文做独立滚动；会话支持显式删除。审批区只在主视图展示待处理项，已批准/拒绝/过期项折叠为最近审批历史。会话删除会利用 SQLite 外键级联清理该会话的 message、run、tool call 和 approval，避免长期留下孤儿记录。
 
 每次工具调用都同时绑定当前 `user_id` 和当前认证 Session 的 scopes。旧 Web 客户端仍可发送 `context` 字段，但服务端不再把客户端拼装的 context 当作可信数据源。
 

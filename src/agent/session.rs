@@ -87,6 +87,28 @@ pub async fn list_sessions(
     .await
 }
 
+pub async fn delete_session(
+    pool: &SqlitePool,
+    user_id: Uuid,
+    access: &AgentAccessPartition,
+    session_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    let result = sqlx::query(
+        "DELETE FROM agent_sessions          WHERE id=$1 AND user_id=$2 AND app_id=$3 AND scopes_json=$4",
+    )
+    .bind(session_id)
+    .bind(user_id)
+    .bind(&access.app_id)
+    .bind(&access.scopes_json)
+    .execute(pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+    Ok(())
+}
+
 pub async fn list_messages(
     pool: &SqlitePool,
     user_id: Uuid,

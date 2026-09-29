@@ -4,7 +4,7 @@ import type { FetchLike } from "./types";
 
 export interface AssistantReply {
   reply: string;
-  provider: "deepseek" | "local";
+  provider: string;
   sessionId: string;
   runId: string;
   model?: string | null;
@@ -73,7 +73,7 @@ export class AssistantApi {
     }
     return {
       reply: payload.reply,
-      provider: payload.provider === "deepseek" ? "deepseek" : "local",
+      provider: payload.provider ?? "local",
       sessionId: payload.sessionId,
       runId: payload.runId,
       model: payload.model ?? null,
@@ -96,6 +96,30 @@ export class AssistantApi {
     return payload.items ?? [];
   }
 
+  async deleteSession(sessionId: string, csrfToken: string): Promise<void> {
+    const response = await this.fetcher(
+      `${API_BASE}/api/v1/assistant/sessions/${encodeURIComponent(sessionId)}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "x-csrf-token": csrfToken },
+      },
+    );
+    if (!response.ok) {
+      let message = `会话删除失败 (${response.status})`;
+      try {
+        const payload = await response.json() as {
+          message?: string;
+          error?: { message?: string };
+        };
+        message = payload.message || payload.error?.message || message;
+      } catch {
+        // Keep the status-based fallback.
+      }
+      throw new Error(message);
+    }
+  }
+
   async listMessages(sessionId: string, limit = 100): Promise<AssistantMessage[]> {
     const response = await this.fetcher(
       `${API_BASE}/api/v1/assistant/sessions/${encodeURIComponent(sessionId)}/messages?limit=${encodeURIComponent(String(limit))}`,
@@ -112,7 +136,7 @@ export class AssistantApi {
     return payload.items ?? [];
   }
 
-  async listApprovals(sessionId: string, limit = 50): Promise<AssistantApproval[]> {
+  async listApprovals(sessionId: string, limit = 20): Promise<AssistantApproval[]> {
     const response = await this.fetcher(
       `${API_BASE}/api/v1/assistant/sessions/${encodeURIComponent(sessionId)}/approvals?limit=${encodeURIComponent(String(limit))}`,
       { credentials: "include" },

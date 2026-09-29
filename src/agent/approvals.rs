@@ -8,7 +8,7 @@ use lifetrace_contracts::{ChangeId, DeviceId, EntityId, EntityType, RequestId, S
 use rig::tool::{MissingToolContext, Tool, ToolContext};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, Row, SqlitePool};
 use uuid::Uuid;
 
 use crate::agent::context::{AgentAccessPartition, AgentInvocationContext};
@@ -85,6 +85,8 @@ pub struct CreateTaskArgs {
     pub timezone: Option<String>,
     #[serde(default)]
     pub context: Option<String>,
+    #[serde(default)]
+    pub leave_unscheduled: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -101,6 +103,14 @@ pub struct UpdateTaskArgs {
     pub due_at: Option<String>,
     #[serde(default)]
     pub clear_due_at: bool,
+    #[serde(default)]
+    pub scheduled_start_at: Option<String>,
+    #[serde(default)]
+    pub scheduled_end_at: Option<String>,
+    #[serde(default)]
+    pub clear_schedule: bool,
+    #[serde(default)]
+    pub estimated_minutes: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -327,6 +337,11 @@ struct UpdateTaskAction {
     priority: Option<String>,
     due_at: Option<String>,
     clear_due_at: bool,
+    scheduled_start_at: Option<String>,
+    scheduled_end_at: Option<String>,
+    #[serde(default)]
+    clear_schedule: bool,
+    estimated_minutes: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -491,7 +506,7 @@ impl Tool for ProposeCreateTaskTool {
     type Error = ApprovalError;
 
     fn description(&self) -> String {
-        "提出创建 LifeTrace 任务的写操作。该工具不会直接写入数据，只生成一个必须由用户显式批准的审批请求。时间信息不明确时先向用户确认，不要猜测。".to_owned()
+        "提出创建 LifeTrace 任务的写操作。带截止时间的任务默认必须同时给出 Planner 执行时间段；只有用户明确要求先收集不排期时才使用 leaveUnscheduled=true。该工具不会直接写入数据，只生成审批请求。".to_owned()
     }
 
     fn parameters(&self) -> Value {
@@ -506,7 +521,8 @@ impl Tool for ProposeCreateTaskTool {
                 "scheduledStartAt":{"type":"string","description":"RFC3339 timestamp"},
                 "scheduledEndAt":{"type":"string","description":"RFC3339 timestamp"},
                 "timezone":{"type":"string","description":"IANA timezone, for example Asia/Shanghai"},
-                "context":{"type":"string"}
+                "context":{"type":"string"},
+                "leaveUnscheduled":{"type":"boolean","default":false,"description":"仅当用户明确要求先收集、不安排 Planner 时间时使用"}
             },
             "required":["title"],
             "additionalProperties":false
@@ -533,6 +549,16 @@ impl Tool for ProposeCreateTaskTool {
             args.scheduled_end_at.as_deref(),
         ) {
             validate_range(start, end, "scheduledStartAt", "scheduledEndAt")?;
+        }
+        if args.scheduled_start_at.is_some() ^ args.scheduled_end_at.is_some() {
+            return Err(ApprovalError::Invalid(
+                "scheduledStartAt and scheduledEndAt must be provided together".to_owned(),
+            ));
+        }
+        if args.due_at.is_some() && args.scheduled_start_at.is_none() && !args.leave_unscheduled {
+            return Err(ApprovalError::Invalid(
+                "deadline tasks require a Planner schedule; inspect existing tasks/calendar and retry with scheduledStartAt/scheduledEndAt, or set leaveUnscheduled=true only when the user explicitly asked to leave it unplanned".to_owned(),
+            ));
         }
 
         let action = json!({
@@ -566,7 +592,7 @@ impl Tool for ProposeUpdateTaskTool {
     type Error = ApprovalError;
 
     fn description(&self) -> String {
-        "提出修改已有 LifeTrace 任务的写操作。支持标题、状态、优先级和截止时间；不会直接执行，必须由用户显式批准。".to_owned()
+        "提出修改已有 LifeTrace 任务的写操作。支持标题、状态、优先级、截止时间和 Planner 执行时间段；不会直接执行，必须由用户显式批准。".to_owned()
     }
 
     fn parameters(&self) -> Value {
@@ -578,7 +604,11 @@ impl Tool for ProposeUpdateTaskTool {
                 "status":{"type":"string","enum":["todo","in_progress","waiting","done","cancelled"]},
                 "priority":{"type":"string","enum":["low","normal","high","urgent"]},
                 "dueAt":{"type":"string","description":"RFC3339 timestamp"},
-                "clearDueAt":{"type":"boolean","default":false}
+                "clearDueAt":{"type":"boolean","default":false},
+                "scheduledStartAt":{"type":"string","description":"RFC3339 Planner start timestamp"},
+                "scheduledEndAt":{"type":"string","description":"RFC3339 Planner end timestamp"},
+                "clearSchedule":{"type":"boolean","default":false},
+                "estimatedMinutes":{"type":"integer","minimum":15,"maximum":720}
             },
             "required":["taskId"],
             "additionalProperties":false
@@ -610,6 +640,33 @@ impl Tool for ProposeUpdateTaskTool {
             validate_one_of(priority, "priority", &["low", "normal", "high", "urgent"])?;
         }
         validate_optional_timestamp(args.due_at.as_deref(), "dueAt")?;
+        validate_optional_timestamp(args.scheduled_start_at.as_deref(), "scheduledStartAt")?;
+        validate_optional_timestamp(args.scheduled_end_at.as_deref(), "scheduledEndAt")?;
+        if let (Some(start), Some(end)) = (
+            args.scheduled_start_at.as_deref(),
+            args.scheduled_end_at.as_deref(),
+        ) {
+            validate_range(start, end, "scheduledStartAt", "scheduledEndAt")?;
+        }
+        if args.scheduled_start_at.is_some() ^ args.scheduled_end_at.is_some() {
+            return Err(ApprovalError::Invalid(
+                "scheduledStartAt and scheduledEndAt must be provided together".to_owned(),
+            ));
+        }
+        if args.clear_schedule
+            && (args.scheduled_start_at.is_some() || args.scheduled_end_at.is_some())
+        {
+            return Err(ApprovalError::Invalid(
+                "scheduled time fields and clearSchedule cannot be used together".to_owned(),
+            ));
+        }
+        if let Some(estimated_minutes) = args.estimated_minutes {
+            if !(15..=720).contains(&estimated_minutes) {
+                return Err(ApprovalError::Invalid(
+                    "estimatedMinutes must be between 15 and 720".to_owned(),
+                ));
+            }
+        }
         if args.due_at.is_some() && args.clear_due_at {
             return Err(ApprovalError::Invalid(
                 "dueAt and clearDueAt cannot be used together".to_owned(),
@@ -620,6 +677,10 @@ impl Tool for ProposeUpdateTaskTool {
             && args.priority.is_none()
             && args.due_at.is_none()
             && !args.clear_due_at
+            && args.scheduled_start_at.is_none()
+            && args.scheduled_end_at.is_none()
+            && !args.clear_schedule
+            && args.estimated_minutes.is_none()
         {
             return Err(ApprovalError::Invalid(
                 "at least one task field must be changed".to_owned(),
@@ -632,7 +693,11 @@ impl Tool for ProposeUpdateTaskTool {
             "status": args.status,
             "priority": args.priority,
             "dueAt": args.due_at,
-            "clearDueAt": args.clear_due_at
+            "clearDueAt": args.clear_due_at,
+            "scheduledStartAt": args.scheduled_start_at,
+            "scheduledEndAt": args.scheduled_end_at,
+            "clearSchedule": args.clear_schedule,
+            "estimatedMinutes": args.estimated_minutes
         });
         propose(
             &ctx,
@@ -1607,6 +1672,26 @@ pub async fn list_for_session(
     session_id: Uuid,
     limit: i64,
 ) -> Result<Vec<AgentApproval>, ApprovalError> {
+    let expired = sqlx::query(
+        "UPDATE agent_approvals SET status='expired',decided_at=CURRENT_TIMESTAMP          WHERE user_id=$1 AND session_id=$2 AND status='pending'            AND expires_at IS NOT NULL AND expires_at<=CURRENT_TIMESTAMP          RETURNING tool_call_id",
+    )
+    .bind(user_id)
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    for row in expired {
+        let tool_call_id: Option<Uuid> = row.try_get("tool_call_id")?;
+        if let Some(tool_call_id) = tool_call_id {
+            sqlx::query(
+                "UPDATE agent_tool_calls SET status='denied',error_message='approval expired',                  finished_at=CURRENT_TIMESTAMP WHERE id=$1 AND user_id=$2                    AND status='awaiting_approval'",
+            )
+            .bind(tool_call_id)
+            .bind(user_id)
+            .execute(pool)
+            .await?;
+        }
+    }
+
     let items = sqlx::query_as::<_, AgentApproval>(
         "SELECT a.id,a.run_id,a.session_id,a.tool_call_id,a.action_name,a.action_json, \
                 a.status,a.requested_at,a.decided_at,a.expires_at \
@@ -1614,7 +1699,7 @@ pub async fn list_for_session(
          JOIN agent_sessions s ON s.id=a.session_id \
          WHERE a.user_id=$1 AND a.session_id=$2 AND s.user_id=$1 \
            AND s.app_id=$3 AND s.scopes_json=$4 \
-         ORDER BY a.requested_at DESC,a.rowid DESC LIMIT $5",
+         ORDER BY CASE WHEN a.status='pending' THEN 0 ELSE 1 END,                   a.requested_at DESC,a.rowid DESC LIMIT $5",
     )
     .bind(user_id)
     .bind(session_id)
@@ -2035,6 +2120,20 @@ async fn execute_update_task(
         changed |= set_if_changed(object, "dueAt", Value::Null);
     } else if let Some(due_at) = action.due_at.as_ref() {
         changed |= set_if_changed(object, "dueAt", Value::String(due_at.clone()));
+    }
+    if action.clear_schedule {
+        changed |= set_if_changed(object, "scheduledStartAt", Value::Null);
+        changed |= set_if_changed(object, "scheduledEndAt", Value::Null);
+    } else if let (Some(start), Some(end)) = (
+        action.scheduled_start_at.as_ref(),
+        action.scheduled_end_at.as_ref(),
+    ) {
+        changed |= set_if_changed(object, "scheduledStartAt", Value::String(start.clone()));
+        changed |= set_if_changed(object, "scheduledEndAt", Value::String(end.clone()));
+        changed |= set_if_changed(object, "context", Value::Null);
+    }
+    if let Some(estimated_minutes) = action.estimated_minutes {
+        changed |= set_if_changed(object, "estimatedMinutes", json!(estimated_minutes));
     }
 
     if !changed {
