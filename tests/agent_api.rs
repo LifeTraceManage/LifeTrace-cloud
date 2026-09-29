@@ -56,7 +56,9 @@ async fn assistant_creates_and_reuses_persisted_session() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(first["provider"], "local");
-    assert!(first["reply"].as_str().is_some_and(|value| !value.is_empty()));
+    assert!(first["reply"]
+        .as_str()
+        .is_some_and(|value| !value.is_empty()));
 
     let session_id = first["sessionId"].as_str().unwrap().to_owned();
     let first_run_id = first["runId"].as_str().unwrap().to_owned();
@@ -90,8 +92,7 @@ async fn assistant_creates_and_reuses_persisted_session() {
         "/api/v1/assistant/sessions/{}/messages?limit=20",
         first["sessionId"].as_str().unwrap()
     );
-    let (status, messages) =
-        send(app, Method::GET, &messages_uri, Value::Null).await;
+    let (status, messages) = send(app, Method::GET, &messages_uri, Value::Null).await;
     assert_eq!(status, StatusCode::OK);
 
     let items = messages["items"].as_array().unwrap();
