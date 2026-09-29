@@ -191,7 +191,6 @@ async fn assistant_history_is_partitioned_by_app_and_scopes() {
     assert!(matches!(resumed, Err(sqlx::Error::RowNotFound)));
 }
 
-
 #[tokio::test]
 async fn assistant_privacy_export_contains_current_access_partition() {
     let (_state, app) = test_state_and_app().await;
