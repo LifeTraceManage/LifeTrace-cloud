@@ -164,7 +164,9 @@ pub async fn fetch_folder(
         let mailbox = session
             .select(&folder)
             .map_err(|_| MailProtocolError::Folder)?;
-        let uidvalidity = mailbox.uid_validity.ok_or(MailProtocolError::MissingUidValidity)?;
+        let uidvalidity = mailbox
+            .uid_validity
+            .ok_or(MailProtocolError::MissingUidValidity)?;
 
         let uid_query = if previous_uidvalidity == Some(i64::from(uidvalidity)) && last_seen_uid > 0
         {
