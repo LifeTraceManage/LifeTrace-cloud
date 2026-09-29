@@ -42,7 +42,7 @@ async function installMocks(page: Page) {
 
 test("finance transactions use BeeCount Cloud Web as the only runtime UI and data source", async ({ page }) => {
   await installMocks(page);
-  await page.goto("/app/finance/transactions");
+  await page.goto("/finance/transactions");
   await expect(page.getByRole("heading", { name: "BeeCount", level: 1 })).toBeVisible();
   await expect(page.getByText("Cloud Web", { exact: true })).toBeVisible();
   await expect(page.getByText("Coffee Shop")).toBeVisible();
