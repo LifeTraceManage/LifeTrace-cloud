@@ -33,6 +33,7 @@ const SUPPORTED_MODULES: &[&str] = &[
     "workouts",
     "execution",
     "mail",
+    "agent",
 ];
 
 pub fn router() -> Router<AppState> {
@@ -100,6 +101,7 @@ fn module_read_scope(module: &str) -> Option<&'static str> {
         "workouts" => Some("workouts:read"),
         "execution" => Some("execution:read"),
         "mail" => Some("mail:read"),
+        "agent" => Some("account:read"),
         _ => None,
     }
 }
@@ -161,6 +163,35 @@ async fn json_array(state: &AppState, sql: &str, user_id: Uuid) -> Result<Value,
         api_error(
             ErrorCode::InternalError,
             format!("failed to decode privacy export JSON: {error}"),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )
+    })
+}
+
+async fn agent_json_array(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    sql: &str,
+    user_id: Uuid,
+) -> Result<Value, ApiError> {
+    let scopes_json = serde_json::to_string(&principal.scopes).map_err(|error| {
+        api_error(
+            ErrorCode::InternalError,
+            format!("failed to encode agent export scope partition: {error}"),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )
+    })?;
+    let raw = sqlx::query_scalar::<_, String>(sql)
+        .bind(user_id)
+        .bind(principal.app_id.as_str())
+        .bind(scopes_json)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(db_error)?;
+    serde_json::from_str(&raw).map_err(|error| {
+        api_error(
+            ErrorCode::InternalError,
+            format!("failed to decode agent privacy export JSON: {error}"),
             StatusCode::INTERNAL_SERVER_ERROR,
         )
     })
@@ -266,6 +297,91 @@ async fn database_section(
                 "attachments": attachments,
                 "drafts": drafts,
                 "draftAttachments": draft_attachments
+            })))
+        }
+        "agent" => {
+            let sessions = agent_json_array(
+                state,
+                principal,
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',CASE WHEN typeof(id)='blob' THEN lower(hex(id)) ELSE id END,'title',title,'status',status,'appId',app_id,'scopes',json(scopes_json),
+                    'createdAt',created_at,'updatedAt',updated_at,'lastMessageAt',last_message_at
+                )), '[]') FROM agent_sessions
+                WHERE user_id=$1 AND app_id=$2 AND scopes_json=$3
+                ORDER BY created_at",
+                user_id,
+            )
+            .await?;
+            let messages = agent_json_array(
+                state,
+                principal,
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',CASE WHEN typeof(m.id)='blob' THEN lower(hex(m.id)) ELSE m.id END,
+                    'sessionId',CASE WHEN typeof(m.session_id)='blob' THEN lower(hex(m.session_id)) ELSE m.session_id END,
+                    'runId',CASE WHEN m.run_id IS NULL THEN NULL WHEN typeof(m.run_id)='blob' THEN lower(hex(m.run_id)) ELSE m.run_id END,'role',m.role,'content',m.content,
+                    'provider',m.provider,'metadata',json(m.metadata_json),'createdAt',m.created_at
+                )), '[]') FROM agent_messages m
+                JOIN agent_sessions s ON s.id=m.session_id
+                WHERE m.user_id=$1 AND s.app_id=$2 AND s.scopes_json=$3
+                ORDER BY m.created_at,m.rowid",
+                user_id,
+            )
+            .await?;
+            let runs = agent_json_array(
+                state,
+                principal,
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',CASE WHEN typeof(r.id)='blob' THEN lower(hex(r.id)) ELSE r.id END,
+                    'sessionId',CASE WHEN typeof(r.session_id)='blob' THEN lower(hex(r.session_id)) ELSE r.session_id END,'status',r.status,'provider',r.provider,'model',r.model,
+                    'prompt',r.prompt,'errorCode',r.error_code,'errorMessage',r.error_message,
+                    'createdAt',r.created_at,'startedAt',r.started_at,'finishedAt',r.finished_at
+                )), '[]') FROM agent_runs r
+                JOIN agent_sessions s ON s.id=r.session_id
+                WHERE r.user_id=$1 AND s.app_id=$2 AND s.scopes_json=$3
+                ORDER BY r.created_at,r.rowid",
+                user_id,
+            )
+            .await?;
+            let tool_calls = agent_json_array(
+                state,
+                principal,
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',CASE WHEN typeof(t.id)='blob' THEN lower(hex(t.id)) ELSE t.id END,
+                    'runId',CASE WHEN typeof(t.run_id)='blob' THEN lower(hex(t.run_id)) ELSE t.run_id END,
+                    'sessionId',CASE WHEN typeof(t.session_id)='blob' THEN lower(hex(t.session_id)) ELSE t.session_id END,'toolName',t.tool_name,
+                    'arguments',json(t.arguments_json),'status',t.status,'result',json(t.result_json),
+                    'errorMessage',t.error_message,'requiresApproval',t.requires_approval,
+                    'startedAt',t.started_at,'finishedAt',t.finished_at
+                )), '[]') FROM agent_tool_calls t
+                JOIN agent_sessions s ON s.id=t.session_id
+                WHERE t.user_id=$1 AND s.app_id=$2 AND s.scopes_json=$3
+                ORDER BY t.started_at,t.rowid",
+                user_id,
+            )
+            .await?;
+            let approvals = agent_json_array(
+                state,
+                principal,
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',CASE WHEN typeof(a.id)='blob' THEN lower(hex(a.id)) ELSE a.id END,
+                    'runId',CASE WHEN typeof(a.run_id)='blob' THEN lower(hex(a.run_id)) ELSE a.run_id END,
+                    'sessionId',CASE WHEN typeof(a.session_id)='blob' THEN lower(hex(a.session_id)) ELSE a.session_id END,
+                    'toolCallId',CASE WHEN a.tool_call_id IS NULL THEN NULL WHEN typeof(a.tool_call_id)='blob' THEN lower(hex(a.tool_call_id)) ELSE a.tool_call_id END,
+                    'actionName',a.action_name,'action',json(a.action_json),'status',a.status,
+                    'requestedAt',a.requested_at,'decidedAt',a.decided_at,'expiresAt',a.expires_at
+                )), '[]') FROM agent_approvals a
+                JOIN agent_sessions s ON s.id=a.session_id
+                WHERE a.user_id=$1 AND s.app_id=$2 AND s.scopes_json=$3
+                ORDER BY a.requested_at,a.rowid",
+                user_id,
+            )
+            .await?;
+            Ok(Some(json!({
+                "sessions": sessions,
+                "messages": messages,
+                "runs": runs,
+                "toolCalls": tool_calls,
+                "approvals": approvals
             })))
         }
         _ => Ok(None),
@@ -392,6 +508,7 @@ async fn policy(
         "fileObjects": "the current cloud service stores metadata only; any non-null external storage reference blocks account deletion until an object cleanup provider is configured",
         "backupDeletion": "logical deletion is immediate; encrypted backup copies age out under the deployment backup-retention window and must be re-deleted if restored",
         "diagnosticLogs": "authentication secrets must be redacted before structured diagnostic metadata is written",
+        "agentHistory": "agent sessions, messages, runs and tool-call audit records are retained with the account, exported only within the current app/scope partition, and deleted with the owning account",
         "environment": state.config.environment
     })))
 }

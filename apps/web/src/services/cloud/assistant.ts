@@ -1,44 +1,96 @@
 import { API_BASE } from "./base";
 import { browserFetch } from "./http";
-import type { CloudState, FetchLike, JsonEntity } from "./types";
+import type { FetchLike } from "./types";
 
 export interface AssistantReply {
   reply: string;
   provider: "deepseek" | "local";
+  sessionId: string;
+  runId: string;
+  model?: string | null;
 }
 
-function compactEntity(entity: JsonEntity): Record<string, unknown> {
-  const entries = Object.entries(entity)
-    .filter(([key]) => key !== "contentHtml" && key !== "contentJson")
-    .slice(0, 24);
-  return Object.fromEntries(entries);
+export interface AssistantSession {
+  id: string;
+  title: string;
+  status: "active" | "archived";
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt?: string | null;
 }
 
-export function buildAssistantContext(state: CloudState): Record<string, unknown> {
-  const context: Record<string, unknown> = {};
-  for (const [entityType, collection] of Object.entries(state.entities)) {
-    if (!collection) continue;
-    context[entityType] = Object.values(collection)
-      .sort((left, right) => right.meta.updatedAt.localeCompare(left.meta.updatedAt))
-      .slice(0, 40)
-      .map(compactEntity);
-  }
-  return context;
+export interface AssistantMessage {
+  id: string;
+  sessionId: string;
+  runId?: string | null;
+  role: "user" | "assistant" | "system" | "tool";
+  content: string;
+  provider?: string | null;
+  metadataJson: Record<string, unknown>;
+  createdAt: string;
 }
 
 export class AssistantApi {
   constructor(private readonly fetcher: FetchLike = browserFetch) {}
 
-  async ask(prompt: string, state: CloudState, csrfToken: string): Promise<AssistantReply> {
+  async ask(prompt: string, csrfToken: string, sessionId?: string | null): Promise<AssistantReply> {
     const response = await this.fetcher(`${API_BASE}/api/v1/web/assistant`, {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
-      body: JSON.stringify({ prompt: prompt.trim(), context: buildAssistantContext(state) }),
+      body: JSON.stringify({
+        prompt: prompt.trim(),
+        ...(sessionId ? { sessionId } : {}),
+      }),
     });
-    const payload = await response.json() as Partial<AssistantReply> & { message?: string; error?: { message?: string } };
-    if (!response.ok) throw new Error(payload.message || payload.error?.message || `AI 请求失败 (${response.status})`);
-    if (!payload.reply) throw new Error("AI 服务未返回内容");
-    return { reply: payload.reply, provider: payload.provider === "deepseek" ? "deepseek" : "local" };
+    const payload = await response.json() as Partial<AssistantReply> & {
+      message?: string;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      throw new Error(payload.message || payload.error?.message || `AI 请求失败 (${response.status})`);
+    }
+    if (!payload.reply || !payload.sessionId || !payload.runId) {
+      throw new Error("AI 服务返回的数据不完整");
+    }
+    return {
+      reply: payload.reply,
+      provider: payload.provider === "deepseek" ? "deepseek" : "local",
+      sessionId: payload.sessionId,
+      runId: payload.runId,
+      model: payload.model ?? null,
+    };
+  }
+
+  async listSessions(limit = 30): Promise<AssistantSession[]> {
+    const response = await this.fetcher(
+      `${API_BASE}/api/v1/assistant/sessions?limit=${encodeURIComponent(String(limit))}`,
+      { credentials: "include" },
+    );
+    const payload = await response.json() as {
+      items?: AssistantSession[];
+      message?: string;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      throw new Error(payload.message || payload.error?.message || `会话加载失败 (${response.status})`);
+    }
+    return payload.items ?? [];
+  }
+
+  async listMessages(sessionId: string, limit = 100): Promise<AssistantMessage[]> {
+    const response = await this.fetcher(
+      `${API_BASE}/api/v1/assistant/sessions/${encodeURIComponent(sessionId)}/messages?limit=${encodeURIComponent(String(limit))}`,
+      { credentials: "include" },
+    );
+    const payload = await response.json() as {
+      items?: AssistantMessage[];
+      message?: string;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      throw new Error(payload.message || payload.error?.message || `消息加载失败 (${response.status})`);
+    }
+    return payload.items ?? [];
   }
 }
