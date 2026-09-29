@@ -1,6 +1,7 @@
 name: Agent lockfile bootstrap
 
 on:
+  workflow_dispatch:
   push:
     branches: [feat/agent-runtime-rig]
     paths:
@@ -31,4 +32,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.lock
           git commit -m "chore: resolve agent runtime dependencies"
+          git pull --rebase origin feat/agent-runtime-rig
           git push
