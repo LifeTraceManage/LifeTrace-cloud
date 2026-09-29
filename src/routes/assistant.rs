@@ -146,7 +146,6 @@ async fn list_messages(
     Ok(Json(Items { items }))
 }
 
-
 async fn list_approvals(
     State(state): State<AppState>,
     principal: AuthenticatedPrincipal,
@@ -191,17 +190,10 @@ async fn decide_approval(
         .await
         .map_err(map_database_error)?;
     let access = context::AgentAccessPartition::from_principal(&principal);
-    approvals::decide(
-        &state,
-        &principal,
-        user_id,
-        &access,
-        approval_id,
-        decision,
-    )
-    .await
-    .map(Json)
-    .map_err(map_approval_error)
+    approvals::decide(&state, &principal, user_id, &access, approval_id, decision)
+        .await
+        .map(Json)
+        .map_err(map_approval_error)
 }
 
 fn map_approval_error(error: approvals::ApprovalError) -> ApiError {
