@@ -89,9 +89,14 @@ pub async fn run(
     )
     .await
     {
-        let _ =
-            session::fail_run(&state.pool, run_id, user_id, "message_persist_failed", &error.to_string())
-                .await;
+        let _ = session::fail_run(
+            &state.pool,
+            run_id,
+            user_id,
+            "message_persist_failed",
+            &error.to_string(),
+        )
+        .await;
         return Err(error.into());
     }
 
@@ -103,17 +108,9 @@ pub async fn run(
         session_id: conversation.id,
     };
 
-    let (reply, provider, model, fallback_error) =
-        match state.config.deepseek_api_key.as_deref() {
-            Some(api_key) => match run_deepseek(
-                state,
-                api_key,
-                prompt,
-                history,
-                invocation.clone(),
-            )
-            .await
-            {
+    let (reply, provider, model, fallback_error) = match state.config.deepseek_api_key.as_deref() {
+        Some(api_key) => {
+            match run_deepseek(state, api_key, prompt, history, invocation.clone()).await {
                 Ok(reply) => (
                     reply,
                     "deepseek".to_owned(),
@@ -134,14 +131,15 @@ pub async fn run(
                         Some(truncate(&error.to_string(), 500)),
                     )
                 }
-            },
-            None => (
-                local_fallback(&invocation, prompt).await,
-                "local".to_owned(),
-                None,
-                None,
-            ),
-        };
+            }
+        }
+        None => (
+            local_fallback(&invocation, prompt).await,
+            "local".to_owned(),
+            None,
+            None,
+        ),
+    };
 
     if let Err(error) = session::insert_message(
         &state.pool,
@@ -240,7 +238,9 @@ async fn local_fallback(ctx: &AgentInvocationContext, prompt: &str) -> String {
             counts
                 .iter()
                 .filter_map(|(entity_type, count)| {
-                    count.as_i64().map(|count| format!("{entity_type} {count} 条"))
+                    count
+                        .as_i64()
+                        .map(|count| format!("{entity_type} {count} 条"))
                 })
                 .take(8)
                 .collect::<Vec<_>>()
