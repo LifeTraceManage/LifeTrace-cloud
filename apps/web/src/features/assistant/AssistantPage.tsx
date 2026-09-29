@@ -1,8 +1,8 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { Bot, Send } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Bot, Plus, Send } from "lucide-react";
 import { useApp } from "../../app/AppContext";
 import { Badge, Button, Card, CardContent, EmptyState, PageHeader, Textarea } from "../../components/ui";
-import { AssistantApi } from "../../services/core";
+import { AssistantApi, type AssistantSession } from "../../services/core";
 
 type Message = { role: "user" | "assistant"; content: string; provider?: string };
 
@@ -10,10 +10,68 @@ export function AssistantPage() {
   const { session } = useApp();
   const api = useMemo(() => new AssistantApi(), []);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<AssistantSession[]>([]);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [asking, setAsking] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!session) return;
+    let active = true;
+    void api
+      .listSessions()
+      .then((items) => {
+        if (active) setSessions(items);
+      })
+      .catch((cause) => {
+        if (active) setError(cause instanceof Error ? cause.message : "会话加载失败");
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, session]);
+
+  async function refreshSessions() {
+    if (!session) return;
+    try {
+      setSessions(await api.listSessions());
+    } catch {
+      // Conversation itself is still usable if history refresh fails.
+    }
+  }
+
+  async function openSession(id: string) {
+    if (asking || loadingHistory) return;
+    setLoadingHistory(true);
+    setError("");
+    try {
+      const items = await api.listMessages(id);
+      setSessionId(id);
+      setMessages(
+        items
+          .filter((item) => item.role === "user" || item.role === "assistant")
+          .map((item) => ({
+            role: item.role as "user" | "assistant",
+            content: item.content,
+            provider: item.role === "assistant" ? item.provider ?? undefined : undefined,
+          })),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "会话加载失败");
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+
+  function newConversation() {
+    if (asking) return;
+    setSessionId(null);
+    setMessages([]);
+    setPrompt("");
+    setError("");
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -34,6 +92,7 @@ export function AssistantPage() {
           provider: reply.model ? `${reply.provider} · ${reply.model}` : reply.provider,
         },
       ]);
+      await refreshSessions();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "AI 请求失败");
     } finally {
@@ -44,11 +103,43 @@ export function AssistantPage() {
   return (
     <div className="page-shell">
       <PageHeader title="AI 助手" />
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <Card className="h-fit">
+          <CardContent className="space-y-3 pt-5">
+            <Button className="w-full justify-start" variant="outline" onClick={newConversation} disabled={asking}>
+              <Plus size={16} />
+              新对话
+            </Button>
+            <div className="space-y-1">
+              {sessions.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => void openSession(item.id)}
+                  disabled={asking || loadingHistory}
+                  className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted ${
+                    item.id === sessionId ? "bg-muted font-medium" : ""
+                  }`}
+                >
+                  <div className="truncate">{item.title}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {new Date(item.lastMessageAt ?? item.updatedAt).toLocaleString()}
+                  </div>
+                </button>
+              ))}
+              {!sessions.length ? (
+                <div className="px-2 py-3 text-xs text-muted-foreground">暂无历史会话</div>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardContent className="pt-5">
-            <div className="min-h-[420px] space-y-4">
-              {!messages.length ? (
+            <div className="min-h-[520px] space-y-4">
+              {loadingHistory ? (
+                <div className="text-sm text-muted-foreground">正在加载会话…</div>
+              ) : !messages.length ? (
                 <EmptyState
                   icon={<Bot size={26} />}
                   title="问问 LifeTrace"
@@ -81,7 +172,7 @@ export function AssistantPage() {
                 onChange={(event) => setPrompt(event.target.value)}
                 placeholder="输入问题…"
               />
-              <Button type="submit" disabled={asking || !prompt.trim()}>
+              <Button type="submit" disabled={asking || loadingHistory || !prompt.trim()}>
                 <Send size={16} />
                 发送
               </Button>
