@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Bot, Check, Plus, Send, X } from "lucide-react";
+import { Bot, Check, ChevronDown, History, Plus, Send, Trash2, X } from "lucide-react";
 import { useApp } from "../../app/AppContext";
 import { Badge, Button, Card, CardContent, EmptyState, PageHeader, Textarea } from "../../components/ui";
 import { AssistantApi, type AssistantApproval, type AssistantSession } from "../../services/core";
@@ -142,7 +142,11 @@ export function AssistantPage() {
   const [asking, setAsking] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [decidingApprovalId, setDecidingApprovalId] = useState<string | null>(null);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [showApprovalHistory, setShowApprovalHistory] = useState(false);
   const [error, setError] = useState("");
+  const pendingApprovals = approvals.filter((item) => item.status === "pending");
+  const approvalHistory = approvals.filter((item) => item.status !== "pending").slice(0, 10);
 
   useEffect(() => {
     if (!session) return;
@@ -180,6 +184,7 @@ export function AssistantPage() {
       ]);
       setSessionId(id);
       setApprovals(approvalItems);
+      setShowApprovalHistory(false);
       setMessages(
         items
           .filter((item) => item.role === "user" || item.role === "assistant")
@@ -201,8 +206,28 @@ export function AssistantPage() {
     setSessionId(null);
     setMessages([]);
     setApprovals([]);
+    setShowApprovalHistory(false);
     setPrompt("");
     setError("");
+  }
+
+  async function deleteConversation(id: string) {
+    if (!session || deletingSessionId || asking) return;
+    const target = sessions.find((item) => item.id === id);
+    if (!window.confirm(`删除会话“${target?.title ?? "未命名会话"}”？该会话的消息和审批记录也会一起删除。`)) return;
+    setDeletingSessionId(id);
+    setError("");
+    try {
+      await api.deleteSession(id, session.csrfToken);
+      setSessions((items) => items.filter((item) => item.id !== id));
+      if (sessionId === id) {
+        newConversation();
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "会话删除失败");
+    } finally {
+      setDeletingSessionId(null);
+    }
   }
 
   async function submit(event: FormEvent) {
@@ -260,29 +285,43 @@ export function AssistantPage() {
   return (
     <div className="page-shell">
       <PageHeader title="AI 助手" />
-      <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <Card className="h-fit">
-          <CardContent className="space-y-3 pt-5">
+      <div className="mx-auto grid h-[calc(100vh-9rem)] min-h-[600px] max-w-6xl gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <Card className="min-h-0 overflow-hidden">
+          <CardContent className="flex h-full min-h-0 flex-col gap-3 pt-5">
             <Button className="w-full justify-start" variant="outline" onClick={newConversation} disabled={asking}>
               <Plus size={16} />
               新对话
             </Button>
-            <div className="space-y-1">
+            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
               {sessions.map((item) => (
-                <button
+                <div
                   key={item.id}
-                  type="button"
-                  onClick={() => void openSession(item.id)}
-                  disabled={asking || loadingHistory}
-                  className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted ${
+                  className={`group flex items-center gap-1 rounded-md transition-colors hover:bg-muted ${
                     item.id === sessionId ? "bg-muted font-medium" : ""
                   }`}
                 >
-                  <div className="truncate">{item.title}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {new Date(item.lastMessageAt ?? item.updatedAt).toLocaleString()}
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => void openSession(item.id)}
+                    disabled={asking || loadingHistory}
+                    className="min-w-0 flex-1 px-3 py-2 text-left text-sm"
+                  >
+                    <div className="truncate">{item.title}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {new Date(item.lastMessageAt ?? item.updatedAt).toLocaleString()}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    title="删除会话"
+                    aria-label={`删除会话 ${item.title}`}
+                    onClick={() => void deleteConversation(item.id)}
+                    disabled={Boolean(deletingSessionId) || asking}
+                    className="mr-1 rounded p-2 text-muted-foreground opacity-0 hover:bg-background hover:text-destructive focus:opacity-100 group-hover:opacity-100"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               ))}
               {!sessions.length ? (
                 <div className="px-2 py-3 text-xs text-muted-foreground">暂无历史会话</div>
@@ -291,9 +330,9 @@ export function AssistantPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-5">
-            <div className="min-h-[520px] space-y-4">
+        <Card className="min-h-0 overflow-hidden">
+          <CardContent className="flex h-full min-h-0 flex-col pt-5">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
               {loadingHistory ? (
                 <div className="text-sm text-muted-foreground">正在加载会话…</div>
               ) : !messages.length ? (
@@ -319,9 +358,10 @@ export function AssistantPage() {
                   </div>
                 ))
               )}
-              {approvals.length ? (
+              {pendingApprovals.length ? (
                 <div className="space-y-3 border-t pt-4">
-                  {approvals.map((approval) => (
+                  <div className="text-xs font-medium text-muted-foreground">待确认操作</div>
+                  {pendingApprovals.map((approval) => (
                     <div key={approval.id} className="rounded-lg border bg-card px-4 py-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
@@ -330,35 +370,64 @@ export function AssistantPage() {
                         </div>
                         <Badge>{statusLabel(approval.status)}</Badge>
                       </div>
-                      {approval.status === "pending" ? (
-                        <div className="mt-3 flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => void decideApproval(approval.id, "approve")}
-                            disabled={Boolean(decidingApprovalId)}
-                          >
-                            <Check size={14} />
-                            批准并执行
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void decideApproval(approval.id, "reject")}
-                            disabled={Boolean(decidingApprovalId)}
-                          >
-                            <X size={14} />
-                            拒绝
-                          </Button>
-                        </div>
-                      ) : null}
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => void decideApproval(approval.id, "approve")}
+                          disabled={Boolean(decidingApprovalId)}
+                        >
+                          <Check size={14} />
+                          批准并执行
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void decideApproval(approval.id, "reject")}
+                          disabled={Boolean(decidingApprovalId)}
+                        >
+                          <X size={14} />
+                          拒绝
+                        </Button>
+                      </div>
                     </div>
                   ))}
+                </div>
+              ) : null}
+              {approvalHistory.length ? (
+                <div className="border-t pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowApprovalHistory((value) => !value)}
+                    className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <History size={14} />
+                    最近审批历史 ({approvalHistory.length})
+                    <ChevronDown
+                      size={14}
+                      className={showApprovalHistory ? "rotate-180 transition-transform" : "transition-transform"}
+                    />
+                  </button>
+                  {showApprovalHistory ? (
+                    <div className="mt-3 space-y-2">
+                      {approvalHistory.map((approval) => (
+                        <div key={approval.id} className="rounded-md border bg-muted/30 px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-medium">{approvalLabel(approval)}</div>
+                              <div className="mt-1 truncate text-xs text-muted-foreground">{approvalSummary(approval)}</div>
+                            </div>
+                            <Badge>{statusLabel(approval.status)}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {asking ? <div className="text-sm text-muted-foreground">正在查询并分析云端记录…</div> : null}
               {error ? <div className="text-sm text-destructive">{error}</div> : null}
             </div>
-            <form className="mt-4 flex items-end gap-2 border-t pt-4" onSubmit={(event) => void submit(event)}>
+            <form className="mt-4 flex shrink-0 items-end gap-2 border-t pt-4" onSubmit={(event) => void submit(event)}>
               <Textarea
                 className="min-h-20 flex-1"
                 value={prompt}
