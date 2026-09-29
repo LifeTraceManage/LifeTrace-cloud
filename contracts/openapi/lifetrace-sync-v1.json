@@ -198,7 +198,7 @@
         "type": "string"
       },
       "ActivityScheduleType": {
-        "description": "Habit schedule type. Known values: daily, weekly, custom. Unknown values are preserved (forward compatible).",
+        "description": "Habit schedule type. Known values: daily, weekly, custom, interval, monthly. Unknown values are preserved (forward compatible).",
         "type": "string"
       },
       "ActivitySyncSource": {
