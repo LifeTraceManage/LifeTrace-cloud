@@ -354,6 +354,22 @@ async fn audit_start<T: Serialize>(
     Ok(id)
 }
 
+pub async fn fail_open_tool_calls(
+    ctx: &AgentInvocationContext,
+    message: &str,
+) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(
+        "UPDATE agent_tool_calls SET status='failed',error_message=$3,finished_at=CURRENT_TIMESTAMP \
+         WHERE run_id=$1 AND user_id=$2 AND status='running'",
+    )
+    .bind(ctx.run_id)
+    .bind(ctx.user_id)
+    .bind(message.chars().take(500).collect::<String>())
+    .execute(&ctx.pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
 async fn finish_audited(
     ctx: &AgentInvocationContext,
     call_id: Uuid,
@@ -372,6 +388,12 @@ async fn finish_audited(
             .bind(encoded)
             .execute(&ctx.pool)
             .await?;
+            tracing::info!(
+                run_id = %ctx.run_id,
+                session_id = %ctx.session_id,
+                tool_call_id = %call_id,
+                "agent tool completed"
+            );
             Ok(value)
         }
         Err(error) => {
@@ -385,6 +407,13 @@ async fn finish_audited(
             .bind(message)
             .execute(&ctx.pool)
             .await;
+            tracing::warn!(
+                run_id = %ctx.run_id,
+                session_id = %ctx.session_id,
+                tool_call_id = %call_id,
+                error = %error,
+                "agent tool failed"
+            );
             Err(error)
         }
     }
