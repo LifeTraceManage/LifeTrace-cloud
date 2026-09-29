@@ -27,8 +27,12 @@ function approvalSummary(approval: AssistantApproval): string {
   const action = approval.actionJson;
   const title = typeof action.title === "string" ? action.title : "";
   if (approval.actionName === "create_task") {
+    const schedule =
+      typeof action.scheduledStartAt === "string"
+        ? ` · 安排 ${new Date(action.scheduledStartAt).toLocaleString()}`
+        : "";
     const due = typeof action.dueAt === "string" ? ` · 截止 ${new Date(action.dueAt).toLocaleString()}` : "";
-    return `${title || "未命名任务"}${due}`;
+    return `${title || "未命名任务"}${schedule}${due}`;
   }
   if (approval.actionName === "update_task") {
     const parts = [
@@ -37,6 +41,14 @@ function approvalSummary(approval: AssistantApproval): string {
       typeof action.priority === "string" ? `优先级 → ${action.priority}` : "",
       typeof action.dueAt === "string" ? `截止 → ${new Date(action.dueAt).toLocaleString()}` : "",
       action.clearDueAt === true ? "清除截止时间" : "",
+      typeof action.scheduledStartAt === "string"
+        ? `安排 → ${new Date(action.scheduledStartAt).toLocaleString()}`
+        : "",
+      typeof action.scheduledEndAt === "string"
+        ? `结束 → ${new Date(action.scheduledEndAt).toLocaleString()}`
+        : "",
+      action.clearSchedule === true ? "移出 Planner 时间轴" : "",
+      typeof action.estimatedMinutes === "number" ? `预计 ${action.estimatedMinutes} 分钟` : "",
     ].filter(Boolean);
     return parts.length ? parts.join(" · ") : `任务 ${String(action.taskId ?? "")}`;
   }
@@ -339,7 +351,7 @@ export function AssistantPage() {
                 <EmptyState
                   icon={<Bot size={26} />}
                   title="问问 LifeTrace"
-                  description="可以查询已同步数据；创建/修改任务和创建日程会先生成审批，只有你确认后才执行。"
+                  description="可以查询已同步数据并主动规划任务时间；所有写操作都会先生成审批，只有你确认后才执行。"
                 />
               ) : (
                 messages.map((message, index) => (
