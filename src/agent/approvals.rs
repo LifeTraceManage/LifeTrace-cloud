@@ -123,6 +123,83 @@ pub struct CreateCalendarEventArgs {
     pub timezone: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectArgs {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProjectArgs {
+    pub project_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub clear_description: bool,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateHabitArgs {
+    pub name: String,
+    #[serde(default)]
+    pub activity_type: Option<String>,
+    #[serde(default)]
+    pub unit: Option<String>,
+    #[serde(default)]
+    pub minimum_target: Option<f64>,
+    #[serde(default)]
+    pub normal_target: Option<f64>,
+    #[serde(default)]
+    pub target_days: Vec<u8>,
+    #[serde(default)]
+    pub schedule_type: Option<String>,
+    pub start_date: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateHabitArgs {
+    pub habit_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub minimum_target: Option<f64>,
+    #[serde(default)]
+    pub clear_minimum_target: bool,
+    #[serde(default)]
+    pub normal_target: Option<f64>,
+    #[serde(default)]
+    pub target_days: Option<Vec<u8>>,
+    #[serde(default)]
+    pub schedule_type: Option<String>,
+    #[serde(default)]
+    pub start_date: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub clear_description: bool,
+    #[serde(default)]
+    pub is_archived: Option<bool>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateTaskAction {
@@ -163,9 +240,66 @@ struct CreateCalendarEventAction {
     timezone: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateProjectAction {
+    entity_id: String,
+    name: String,
+    description: Option<String>,
+    color: String,
+    icon: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateProjectAction {
+    project_id: String,
+    name: Option<String>,
+    description: Option<String>,
+    clear_description: bool,
+    status: Option<String>,
+    color: Option<String>,
+    icon: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateHabitAction {
+    entity_id: String,
+    name: String,
+    activity_type: String,
+    unit: String,
+    minimum_target: Option<f64>,
+    normal_target: f64,
+    target_days: Vec<u8>,
+    schedule_type: String,
+    start_date: String,
+    description: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateHabitAction {
+    habit_id: String,
+    name: Option<String>,
+    minimum_target: Option<f64>,
+    clear_minimum_target: bool,
+    normal_target: Option<f64>,
+    target_days: Option<Vec<u8>>,
+    schedule_type: Option<String>,
+    start_date: Option<String>,
+    description: Option<String>,
+    clear_description: bool,
+    is_archived: Option<bool>,
+}
+
 pub struct ProposeCreateTaskTool;
 pub struct ProposeUpdateTaskTool;
 pub struct ProposeCreateCalendarEventTool;
+pub struct ProposeCreateProjectTool;
+pub struct ProposeUpdateProjectTool;
+pub struct ProposeCreateHabitTool;
+pub struct ProposeUpdateHabitTool;
 
 impl Tool for ProposeCreateTaskTool {
     const NAME: &'static str = "lifetrace_propose_create_task";
@@ -410,6 +544,361 @@ impl Tool for ProposeCreateCalendarEventTool {
     }
 }
 
+impl Tool for ProposeCreateProjectTool {
+    const NAME: &'static str = "lifetrace_propose_create_project";
+    type Args = CreateProjectArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出创建 LifeTrace Project 的写操作。不会直接执行，必须由用户显式批准。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "name":{"type":"string"},
+                "description":{"type":"string"},
+                "color":{"type":"string"},
+                "icon":{"type":"string"}
+            },
+            "required":["name"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_context_write_scopes(&ctx, &["sync:write", "execution:write"])?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+
+        let name = bounded_required(&args.name, "name", 300)?;
+        let action = json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "name": name,
+            "description": bounded_optional(args.description.as_deref(), 4_000),
+            "color": bounded_optional(args.color.as_deref(), 100).unwrap_or_else(|| "#49715d".to_owned()),
+            "icon": bounded_optional(args.icon.as_deref(), 100).unwrap_or_else(|| "target".to_owned())
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "create_project",
+            arguments_json,
+            action,
+            json!({"name": name}),
+        )
+        .await
+    }
+}
+
+impl Tool for ProposeUpdateProjectTool {
+    const NAME: &'static str = "lifetrace_propose_update_project";
+    type Args = UpdateProjectArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出修改已有 LifeTrace Project 的写操作。可修改名称、说明、状态、颜色和图标；不会直接执行。修改前先搜索确认 projectId。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "projectId":{"type":"string"},
+                "name":{"type":"string"},
+                "description":{"type":"string"},
+                "clearDescription":{"type":"boolean","default":false},
+                "status":{"type":"string","enum":["active","archived"]},
+                "color":{"type":"string"},
+                "icon":{"type":"string"}
+            },
+            "required":["projectId"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_context_write_scopes(&ctx, &["sync:write", "execution:write"])?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+
+        let project_id = bounded_required(&args.project_id, "projectId", 200)?;
+        let name = match args.name.as_deref() {
+            Some(value) => Some(bounded_required(value, "name", 300)?),
+            None => None,
+        };
+        if args.description.is_some() && args.clear_description {
+            return Err(ApprovalError::Invalid(
+                "description and clearDescription cannot be used together".to_owned(),
+            ));
+        }
+        if let Some(status) = args.status.as_deref() {
+            validate_one_of(status, "status", &["active", "archived"])?;
+        }
+        if name.is_none()
+            && args.description.is_none()
+            && !args.clear_description
+            && args.status.is_none()
+            && args.color.is_none()
+            && args.icon.is_none()
+        {
+            return Err(ApprovalError::Invalid(
+                "at least one project field must be changed".to_owned(),
+            ));
+        }
+
+        let action = json!({
+            "projectId": project_id,
+            "name": name,
+            "description": bounded_optional(args.description.as_deref(), 4_000),
+            "clearDescription": args.clear_description,
+            "status": args.status,
+            "color": bounded_optional(args.color.as_deref(), 100),
+            "icon": bounded_optional(args.icon.as_deref(), 100)
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "update_project",
+            arguments_json,
+            action,
+            json!({"projectId": project_id}),
+        )
+        .await
+    }
+}
+
+impl Tool for ProposeCreateHabitTool {
+    const NAME: &'static str = "lifetrace_propose_create_habit";
+    type Args = CreateHabitArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出创建 LifeTrace 习惯的写操作。支持完成、计数、时长三类习惯；必须提供开始日期，不会直接执行。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "name":{"type":"string"},
+                "activityType":{"type":"string","enum":["completion","count","duration"]},
+                "unit":{"type":"string"},
+                "minimumTarget":{"type":"number","minimum":0},
+                "normalTarget":{"type":"number","exclusiveMinimum":0},
+                "targetDays":{"type":"array","items":{"type":"integer","minimum":1,"maximum":7}},
+                "scheduleType":{"type":"string","enum":["daily","custom"]},
+                "startDate":{"type":"string","description":"YYYY-MM-DD"},
+                "description":{"type":"string"}
+            },
+            "required":["name","startDate"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_context_write_scopes(&ctx, &["sync:write", "habits:write"])?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+
+        let name = bounded_required(&args.name, "name", 300)?;
+        let activity_type = args
+            .activity_type
+            .unwrap_or_else(|| "completion".to_owned());
+        validate_one_of(
+            &activity_type,
+            "activityType",
+            &["completion", "count", "duration"],
+        )?;
+        let schedule_type = args.schedule_type.unwrap_or_else(|| "daily".to_owned());
+        validate_one_of(&schedule_type, "scheduleType", &["daily", "custom"])?;
+        validate_optional_date(Some(args.start_date.as_str()), "startDate")?;
+        let target_days = normalize_target_days(args.target_days)?;
+        if schedule_type == "custom" && target_days.is_empty() {
+            return Err(ApprovalError::Invalid(
+                "targetDays must contain at least one weekday for custom schedules".to_owned(),
+            ));
+        }
+        let target_days = if schedule_type == "daily" {
+            Vec::new()
+        } else {
+            target_days
+        };
+        let normal_target = args.normal_target.unwrap_or(1.0);
+        validate_habit_targets(args.minimum_target, normal_target)?;
+        let unit = bounded_optional(args.unit.as_deref(), 100).unwrap_or_else(|| {
+            if activity_type == "duration" {
+                "分钟".to_owned()
+            } else {
+                "次".to_owned()
+            }
+        });
+
+        let action = json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "name": name,
+            "activityType": activity_type,
+            "unit": unit,
+            "minimumTarget": args.minimum_target,
+            "normalTarget": normal_target,
+            "targetDays": target_days,
+            "scheduleType": schedule_type,
+            "startDate": args.start_date,
+            "description": bounded_optional(args.description.as_deref(), 4_000)
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "create_habit",
+            arguments_json,
+            action,
+            json!({"name": name, "scheduleType": schedule_type}),
+        )
+        .await
+    }
+}
+
+impl Tool for ProposeUpdateHabitTool {
+    const NAME: &'static str = "lifetrace_propose_update_habit";
+    type Args = UpdateHabitArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出修改已有 LifeTrace 习惯的写操作。支持名称、目标、执行日、开始日期、说明和归档状态；不会直接执行。修改前先搜索确认 habitId。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "habitId":{"type":"string"},
+                "name":{"type":"string"},
+                "minimumTarget":{"type":"number","minimum":0},
+                "clearMinimumTarget":{"type":"boolean","default":false},
+                "normalTarget":{"type":"number","exclusiveMinimum":0},
+                "targetDays":{"type":"array","items":{"type":"integer","minimum":1,"maximum":7}},
+                "scheduleType":{"type":"string","enum":["daily","custom"]},
+                "startDate":{"type":"string","description":"YYYY-MM-DD"},
+                "description":{"type":"string"},
+                "clearDescription":{"type":"boolean","default":false},
+                "isArchived":{"type":"boolean"}
+            },
+            "required":["habitId"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_context_write_scopes(&ctx, &["sync:write", "habits:write"])?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+
+        let habit_id = bounded_required(&args.habit_id, "habitId", 200)?;
+        let name = match args.name.as_deref() {
+            Some(value) => Some(bounded_required(value, "name", 300)?),
+            None => None,
+        };
+        if args.minimum_target.is_some() && args.clear_minimum_target {
+            return Err(ApprovalError::Invalid(
+                "minimumTarget and clearMinimumTarget cannot be used together".to_owned(),
+            ));
+        }
+        if args.description.is_some() && args.clear_description {
+            return Err(ApprovalError::Invalid(
+                "description and clearDescription cannot be used together".to_owned(),
+            ));
+        }
+        if let Some(normal_target) = args.normal_target {
+            if !normal_target.is_finite() || normal_target <= 0.0 {
+                return Err(ApprovalError::Invalid(
+                    "normalTarget must be a finite value greater than zero".to_owned(),
+                ));
+            }
+        }
+        if let Some(minimum_target) = args.minimum_target {
+            if !minimum_target.is_finite() || minimum_target < 0.0 {
+                return Err(ApprovalError::Invalid(
+                    "minimumTarget must be a finite non-negative value".to_owned(),
+                ));
+            }
+        }
+        if let Some(schedule_type) = args.schedule_type.as_deref() {
+            validate_one_of(schedule_type, "scheduleType", &["daily", "custom"])?;
+        }
+        let target_days = match args.target_days {
+            Some(values) => Some(normalize_target_days(values)?),
+            None => None,
+        };
+        if args.schedule_type.as_deref() == Some("custom")
+            && target_days.as_ref().is_some_and(Vec::is_empty)
+        {
+            return Err(ApprovalError::Invalid(
+                "targetDays must contain at least one weekday for custom schedules".to_owned(),
+            ));
+        }
+        validate_optional_date(args.start_date.as_deref(), "startDate")?;
+        if name.is_none()
+            && args.minimum_target.is_none()
+            && !args.clear_minimum_target
+            && args.normal_target.is_none()
+            && target_days.is_none()
+            && args.schedule_type.is_none()
+            && args.start_date.is_none()
+            && args.description.is_none()
+            && !args.clear_description
+            && args.is_archived.is_none()
+        {
+            return Err(ApprovalError::Invalid(
+                "at least one habit field must be changed".to_owned(),
+            ));
+        }
+
+        let action = json!({
+            "habitId": habit_id,
+            "name": name,
+            "minimumTarget": args.minimum_target,
+            "clearMinimumTarget": args.clear_minimum_target,
+            "normalTarget": args.normal_target,
+            "targetDays": target_days,
+            "scheduleType": args.schedule_type,
+            "startDate": args.start_date,
+            "description": bounded_optional(args.description.as_deref(), 4_000),
+            "clearDescription": args.clear_description,
+            "isArchived": args.is_archived
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "update_habit",
+            arguments_json,
+            action,
+            json!({"habitId": habit_id}),
+        )
+        .await
+    }
+}
+
 async fn propose(
     ctx: &AgentInvocationContext,
     tool_name: &str,
@@ -562,7 +1051,7 @@ pub async fn decide(
             })
         }
         ApprovalDecision::Approve => {
-            require_principal_execution_write(principal)?;
+            require_principal_action_write(principal, &approval.action_name)?;
             if approval.status == "approved" {
                 let result = load_tool_result(&state.pool, user_id, approval.tool_call_id).await?;
                 return Ok(ApprovalDecisionOutput { approval, result });
@@ -732,6 +1221,26 @@ async fn execute_action(
                 serde_json::from_value(approval.action_json.clone())
                     .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
             execute_create_calendar_event(state, principal, approval, action).await
+        }
+        "create_project" => {
+            let action: CreateProjectAction = serde_json::from_value(approval.action_json.clone())
+                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_create_project(state, principal, approval, action).await
+        }
+        "update_project" => {
+            let action: UpdateProjectAction = serde_json::from_value(approval.action_json.clone())
+                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_update_project(state, principal, approval, action).await
+        }
+        "create_habit" => {
+            let action: CreateHabitAction = serde_json::from_value(approval.action_json.clone())
+                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_create_habit(state, principal, approval, action).await
+        }
+        "update_habit" => {
+            let action: UpdateHabitAction = serde_json::from_value(approval.action_json.clone())
+                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_update_habit(state, principal, approval, action).await
         }
         other => Err(ApprovalError::Invalid(format!(
             "unsupported action name: {other}"
@@ -939,6 +1448,312 @@ async fn execute_create_calendar_event(
     .await
 }
 
+async fn execute_create_project(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: CreateProjectAction,
+) -> Result<Value, ApprovalError> {
+    if let Some(existing) = state
+        .store
+        .entity(
+            &principal.user_id,
+            EntityType::EXECUTION_PROJECT,
+            &action.entity_id,
+        )
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+    {
+        if !existing.deleted {
+            return Ok(json!({
+                "action":"create_project",
+                "entityType":EntityType::EXECUTION_PROJECT,
+                "entityId":action.entity_id,
+                "serverVersion":existing.server_version.to_string(),
+                "alreadySatisfied":true
+            }));
+        }
+    }
+
+    let payload = json!({
+        "meta": base_meta(principal, &action.entity_id, approval.requested_at),
+        "name": action.name,
+        "description": action.description,
+        "status": "active",
+        "color": action.color,
+        "icon": action.icon,
+        "sortOrder": 0
+    });
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_PROJECT,
+            entity_id: action.entity_id,
+            base_server_version: ServerVersion::zero(),
+            payload,
+            change_id: format!("agent-approval-{}", approval.id),
+        },
+    )
+    .await
+}
+
+async fn execute_update_project(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: UpdateProjectAction,
+) -> Result<Value, ApprovalError> {
+    let current = state
+        .store
+        .entity(
+            &principal.user_id,
+            EntityType::EXECUTION_PROJECT,
+            &action.project_id,
+        )
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+        .filter(|record| !record.deleted)
+        .ok_or(ApprovalError::NotFound)?;
+
+    let mut payload: Value = current.payload.clone().into();
+    let object = payload.as_object_mut().ok_or_else(|| {
+        ApprovalError::Invalid("stored project payload is not a JSON object".to_owned())
+    })?;
+
+    let mut changed = false;
+    if let Some(name) = action.name.as_ref() {
+        changed |= set_if_changed(object, "name", Value::String(name.clone()));
+    }
+    if action.clear_description {
+        changed |= set_if_changed(object, "description", Value::Null);
+    } else if let Some(description) = action.description.as_ref() {
+        changed |= set_if_changed(object, "description", Value::String(description.clone()));
+    }
+    if let Some(status) = action.status.as_ref() {
+        changed |= set_if_changed(object, "status", Value::String(status.clone()));
+    }
+    if let Some(color) = action.color.as_ref() {
+        changed |= set_if_changed(object, "color", Value::String(color.clone()));
+    }
+    if let Some(icon) = action.icon.as_ref() {
+        changed |= set_if_changed(object, "icon", Value::String(icon.clone()));
+    }
+
+    if !changed {
+        return Ok(json!({
+            "action":"update_project",
+            "entityType":EntityType::EXECUTION_PROJECT,
+            "entityId":action.project_id,
+            "serverVersion":current.server_version.to_string(),
+            "alreadySatisfied":true
+        }));
+    }
+
+    update_meta_for_server_edit(&mut payload, approval.requested_at)?;
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_PROJECT,
+            entity_id: action.project_id,
+            base_server_version: ServerVersion::from_u64(current.server_version),
+            payload,
+            change_id: format!("agent-approval-{}-v{}", approval.id, current.server_version),
+        },
+    )
+    .await
+}
+
+async fn execute_create_habit(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: CreateHabitAction,
+) -> Result<Value, ApprovalError> {
+    if let Some(existing) = state
+        .store
+        .entity(
+            &principal.user_id,
+            EntityType::HABIT_ACTIVITY,
+            &action.entity_id,
+        )
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+    {
+        if !existing.deleted {
+            return Ok(json!({
+                "action":"create_habit",
+                "entityType":EntityType::HABIT_ACTIVITY,
+                "entityId":action.entity_id,
+                "serverVersion":existing.server_version.to_string(),
+                "alreadySatisfied":true
+            }));
+        }
+    }
+
+    validate_habit_targets(action.minimum_target, action.normal_target)?;
+    validate_optional_date(Some(action.start_date.as_str()), "startDate")?;
+    let target_days = normalize_target_days(action.target_days)?;
+    if action.schedule_type == "custom" && target_days.is_empty() {
+        return Err(ApprovalError::Invalid(
+            "custom habit schedule requires at least one target day".to_owned(),
+        ));
+    }
+    let icon = action
+        .name
+        .chars()
+        .next()
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "✓".to_owned());
+    let payload = json!({
+        "meta": base_meta(principal, &action.entity_id, approval.requested_at),
+        "name": action.name,
+        "activityType": action.activity_type,
+        "unit": action.unit,
+        "minimumTarget": action.minimum_target,
+        "normalTarget": action.normal_target,
+        "targetPeriod": "daily",
+        "targetDays": if action.schedule_type == "daily" { Vec::<u8>::new() } else { target_days },
+        "icon": icon,
+        "color": "#0f766e",
+        "scheduleType": action.schedule_type,
+        "startDate": action.start_date,
+        "checkinMethod": "manual",
+        "syncSource": "web",
+        "description": action.description,
+        "isArchived": false
+    });
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::HABIT_ACTIVITY,
+            entity_id: action.entity_id,
+            base_server_version: ServerVersion::zero(),
+            payload,
+            change_id: format!("agent-approval-{}", approval.id),
+        },
+    )
+    .await
+}
+
+async fn execute_update_habit(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: UpdateHabitAction,
+) -> Result<Value, ApprovalError> {
+    let current = state
+        .store
+        .entity(
+            &principal.user_id,
+            EntityType::HABIT_ACTIVITY,
+            &action.habit_id,
+        )
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+        .filter(|record| !record.deleted)
+        .ok_or(ApprovalError::NotFound)?;
+
+    let mut payload: Value = current.payload.clone().into();
+    let object = payload.as_object_mut().ok_or_else(|| {
+        ApprovalError::Invalid("stored habit payload is not a JSON object".to_owned())
+    })?;
+
+    let mut changed = false;
+    if let Some(name) = action.name.as_ref() {
+        changed |= set_if_changed(object, "name", Value::String(name.clone()));
+    }
+    if action.clear_minimum_target {
+        changed |= set_if_changed(object, "minimumTarget", Value::Null);
+    } else if let Some(minimum_target) = action.minimum_target {
+        changed |= set_if_changed(object, "minimumTarget", json!(minimum_target));
+    }
+    if let Some(normal_target) = action.normal_target {
+        changed |= set_if_changed(object, "normalTarget", json!(normal_target));
+    }
+    if let Some(target_days) = action.target_days {
+        changed |= set_if_changed(
+            object,
+            "targetDays",
+            json!(normalize_target_days(target_days)?),
+        );
+    }
+    if let Some(schedule_type) = action.schedule_type.as_ref() {
+        changed |= set_if_changed(object, "scheduleType", Value::String(schedule_type.clone()));
+        if schedule_type == "daily" {
+            changed |= set_if_changed(object, "targetDays", json!([]));
+        }
+    }
+    if let Some(start_date) = action.start_date.as_ref() {
+        validate_optional_date(Some(start_date.as_str()), "startDate")?;
+        changed |= set_if_changed(object, "startDate", Value::String(start_date.clone()));
+    }
+    if action.clear_description {
+        changed |= set_if_changed(object, "description", Value::Null);
+    } else if let Some(description) = action.description.as_ref() {
+        changed |= set_if_changed(object, "description", Value::String(description.clone()));
+    }
+    if let Some(is_archived) = action.is_archived {
+        changed |= set_if_changed(object, "isArchived", Value::Bool(is_archived));
+    }
+
+    let normal_target = object
+        .get("normalTarget")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| ApprovalError::Invalid("habit normalTarget is invalid".to_owned()))?;
+    let minimum_target = match object.get("minimumTarget") {
+        Some(Value::Null) | None => None,
+        Some(value) => value.as_f64(),
+    };
+    validate_habit_targets(minimum_target, normal_target)?;
+
+    let schedule_type = object
+        .get("scheduleType")
+        .and_then(Value::as_str)
+        .unwrap_or("daily");
+    if schedule_type == "custom" {
+        let target_days = object
+            .get("targetDays")
+            .and_then(Value::as_array)
+            .ok_or_else(|| ApprovalError::Invalid("habit targetDays is invalid".to_owned()))?;
+        if target_days.is_empty() {
+            return Err(ApprovalError::Invalid(
+                "custom habit schedule requires at least one target day".to_owned(),
+            ));
+        }
+    }
+
+    if !changed {
+        return Ok(json!({
+            "action":"update_habit",
+            "entityType":EntityType::HABIT_ACTIVITY,
+            "entityId":action.habit_id,
+            "serverVersion":current.server_version.to_string(),
+            "alreadySatisfied":true
+        }));
+    }
+
+    update_meta_for_server_edit(&mut payload, approval.requested_at)?;
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::HABIT_ACTIVITY,
+            entity_id: action.habit_id,
+            base_server_version: ServerVersion::from_u64(current.server_version),
+            payload,
+            change_id: format!("agent-approval-{}-v{}", approval.id, current.server_version),
+        },
+    )
+    .await
+}
+
 struct SyncUpsertAction {
     entity_type: &'static str,
     entity_id: String,
@@ -1032,7 +1847,7 @@ fn update_meta_for_server_edit(
     let meta = payload
         .get_mut("meta")
         .and_then(Value::as_object_mut)
-        .ok_or_else(|| ApprovalError::Invalid("task payload has no meta object".to_owned()))?;
+        .ok_or_else(|| ApprovalError::Invalid("entity payload has no meta object".to_owned()))?;
     meta.insert(
         "updatedAt".to_owned(),
         serde_json::to_value(timestamp).unwrap_or(Value::Null),
@@ -1056,20 +1871,76 @@ fn set_if_changed(object: &mut serde_json::Map<String, Value>, key: &str, value:
 }
 
 fn require_execution_write(ctx: &AgentInvocationContext) -> Result<(), ApprovalError> {
-    for required in ["sync:write", "execution:write"] {
-        if !ctx.scopes.contains(required) {
-            return Err(ApprovalError::Permission(required.to_owned()));
+    require_context_write_scopes(ctx, &["sync:write", "execution:write"])
+}
+
+fn require_context_write_scopes(
+    ctx: &AgentInvocationContext,
+    required_scopes: &[&str],
+) -> Result<(), ApprovalError> {
+    for required in required_scopes {
+        if !ctx.scopes.contains(*required) {
+            return Err(ApprovalError::Permission((*required).to_owned()));
         }
     }
     Ok(())
 }
 
-fn require_principal_execution_write(
+fn require_principal_action_write(
     principal: &AuthenticatedPrincipal,
+    action_name: &str,
 ) -> Result<(), ApprovalError> {
-    for required in ["sync:write", "execution:write"] {
-        if !principal.scopes.contains(required) {
-            return Err(ApprovalError::Permission(required.to_owned()));
+    let required_scopes: &[&str] = match action_name {
+        "create_task"
+        | "update_task"
+        | "create_calendar_event"
+        | "create_project"
+        | "update_project" => &["sync:write", "execution:write"],
+        "create_habit" | "update_habit" => &["sync:write", "habits:write"],
+        other => {
+            return Err(ApprovalError::Invalid(format!(
+                "unsupported action name: {other}"
+            )))
+        }
+    };
+    for required in required_scopes {
+        if !principal.scopes.contains(*required) {
+            return Err(ApprovalError::Permission((*required).to_owned()));
+        }
+    }
+    Ok(())
+}
+
+fn normalize_target_days(mut values: Vec<u8>) -> Result<Vec<u8>, ApprovalError> {
+    if values.iter().any(|value| !(1..=7).contains(value)) {
+        return Err(ApprovalError::Invalid(
+            "targetDays values must be between 1 and 7".to_owned(),
+        ));
+    }
+    values.sort_unstable();
+    values.dedup();
+    Ok(values)
+}
+
+fn validate_habit_targets(
+    minimum_target: Option<f64>,
+    normal_target: f64,
+) -> Result<(), ApprovalError> {
+    if !normal_target.is_finite() || normal_target <= 0.0 {
+        return Err(ApprovalError::Invalid(
+            "normalTarget must be a finite value greater than zero".to_owned(),
+        ));
+    }
+    if let Some(minimum_target) = minimum_target {
+        if !minimum_target.is_finite() || minimum_target < 0.0 {
+            return Err(ApprovalError::Invalid(
+                "minimumTarget must be a finite non-negative value".to_owned(),
+            ));
+        }
+        if minimum_target > normal_target {
+            return Err(ApprovalError::Invalid(
+                "minimumTarget must not exceed normalTarget".to_owned(),
+            ));
         }
     }
     Ok(())

@@ -409,3 +409,184 @@ async fn assistant_rejected_approval_never_writes_entity() {
     .unwrap();
     assert_eq!(count, 0);
 }
+
+#[tokio::test]
+async fn assistant_approval_creates_and_updates_project_and_habit() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"准备测试 Project 和习惯审批"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+
+    let project_id = Uuid::new_v4().to_string();
+    let create_project = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_project",
+        json!({
+            "entityId": project_id,
+            "name": "Agent Project",
+            "description": "created by approval test",
+            "color": "#49715d",
+            "icon": "target"
+        }),
+    )
+    .await;
+    let (status, created_project) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{create_project}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(created_project["result"]["entityType"], "execution.project");
+    assert_eq!(created_project["result"]["entityId"], project_id);
+
+    let project: (String, String) = sqlx::query_as(
+        "SELECT payload->>'name',payload->>'status' FROM sync_entities \
+         WHERE entity_type='execution.project' AND entity_id=$1 AND is_deleted=0",
+    )
+    .bind(&project_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(project.0, "Agent Project");
+    assert_eq!(project.1, "active");
+
+    let update_project = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "update_project",
+        json!({
+            "projectId": project_id,
+            "name": "Agent Project Updated",
+            "description": null,
+            "clearDescription": true,
+            "status": "archived",
+            "color": null,
+            "icon": null
+        }),
+    )
+    .await;
+    let (status, updated_project) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{update_project}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(updated_project["approval"]["status"], "approved");
+
+    let project: (String, String, Option<String>) = sqlx::query_as(
+        "SELECT payload->>'name',payload->>'status',payload->>'description' \
+         FROM sync_entities WHERE entity_type='execution.project' AND entity_id=$1 AND is_deleted=0",
+    )
+    .bind(&project_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(project.0, "Agent Project Updated");
+    assert_eq!(project.1, "archived");
+    assert_eq!(project.2, None);
+
+    let habit_id = Uuid::new_v4().to_string();
+    let create_habit = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_habit",
+        json!({
+            "entityId": habit_id,
+            "name": "阅读",
+            "activityType": "duration",
+            "unit": "分钟",
+            "minimumTarget": 10.0,
+            "normalTarget": 30.0,
+            "targetDays": [],
+            "scheduleType": "daily",
+            "startDate": "2026-09-29",
+            "description": "每天阅读"
+        }),
+    )
+    .await;
+    let (status, created_habit) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{create_habit}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(created_habit["result"]["entityType"], "habit.activity");
+    assert_eq!(created_habit["result"]["entityId"], habit_id);
+
+    let habit: (String, f64, String) = sqlx::query_as(
+        "SELECT payload->>'name',json_extract(payload,'$.normalTarget'),payload->>'scheduleType' \
+         FROM sync_entities WHERE entity_type='habit.activity' AND entity_id=$1 AND is_deleted=0",
+    )
+    .bind(&habit_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(habit.0, "阅读");
+    assert_eq!(habit.1, 30.0);
+    assert_eq!(habit.2, "daily");
+
+    let update_habit = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "update_habit",
+        json!({
+            "habitId": habit_id,
+            "name": "深度阅读",
+            "minimumTarget": 15.0,
+            "clearMinimumTarget": false,
+            "normalTarget": 45.0,
+            "targetDays": [1,3,5],
+            "scheduleType": "custom",
+            "startDate": null,
+            "description": null,
+            "clearDescription": true,
+            "isArchived": false
+        }),
+    )
+    .await;
+    let (status, updated_habit) = send(
+        app,
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{update_habit}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(updated_habit["approval"]["status"], "approved");
+
+    let habit: (String, f64, f64, String, String, Option<String>) = sqlx::query_as(
+        "SELECT payload->>'name',json_extract(payload,'$.minimumTarget'), \
+                json_extract(payload,'$.normalTarget'),payload->>'scheduleType', \
+                json_extract(payload,'$.targetDays'),payload->>'description' \
+         FROM sync_entities WHERE entity_type='habit.activity' AND entity_id=$1 AND is_deleted=0",
+    )
+    .bind(&habit_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(habit.0, "深度阅读");
+    assert_eq!(habit.1, 15.0);
+    assert_eq!(habit.2, 45.0);
+    assert_eq!(habit.3, "custom");
+    assert_eq!(habit.4, "[1,3,5]");
+    assert_eq!(habit.5, None);
+}
