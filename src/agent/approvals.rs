@@ -85,6 +85,8 @@ pub struct CreateTaskArgs {
     pub timezone: Option<String>,
     #[serde(default)]
     pub context: Option<String>,
+    #[serde(default)]
+    pub leave_unscheduled: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -504,7 +506,7 @@ impl Tool for ProposeCreateTaskTool {
     type Error = ApprovalError;
 
     fn description(&self) -> String {
-        "提出创建 LifeTrace 任务的写操作。该工具不会直接写入数据，只生成一个必须由用户显式批准的审批请求。时间信息不明确时先向用户确认，不要猜测。".to_owned()
+        "提出创建 LifeTrace 任务的写操作。带截止时间的任务默认必须同时给出 Planner 执行时间段；只有用户明确要求先收集不排期时才使用 leaveUnscheduled=true。该工具不会直接写入数据，只生成审批请求。".to_owned()
     }
 
     fn parameters(&self) -> Value {
@@ -519,7 +521,8 @@ impl Tool for ProposeCreateTaskTool {
                 "scheduledStartAt":{"type":"string","description":"RFC3339 timestamp"},
                 "scheduledEndAt":{"type":"string","description":"RFC3339 timestamp"},
                 "timezone":{"type":"string","description":"IANA timezone, for example Asia/Shanghai"},
-                "context":{"type":"string"}
+                "context":{"type":"string"},
+                "leaveUnscheduled":{"type":"boolean","default":false,"description":"仅当用户明确要求先收集、不安排 Planner 时间时使用"}
             },
             "required":["title"],
             "additionalProperties":false
@@ -546,6 +549,19 @@ impl Tool for ProposeCreateTaskTool {
             args.scheduled_end_at.as_deref(),
         ) {
             validate_range(start, end, "scheduledStartAt", "scheduledEndAt")?;
+        }
+        if args.scheduled_start_at.is_some() ^ args.scheduled_end_at.is_some() {
+            return Err(ApprovalError::Invalid(
+                "scheduledStartAt and scheduledEndAt must be provided together".to_owned(),
+            ));
+        }
+        if args.due_at.is_some()
+            && args.scheduled_start_at.is_none()
+            && !args.leave_unscheduled
+        {
+            return Err(ApprovalError::Invalid(
+                "deadline tasks require a Planner schedule; inspect existing tasks/calendar and retry with scheduledStartAt/scheduledEndAt, or set leaveUnscheduled=true only when the user explicitly asked to leave it unplanned".to_owned(),
+            ));
         }
 
         let action = json!({
