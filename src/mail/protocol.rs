@@ -412,8 +412,7 @@ pub async fn probe_smtp(
     // establish SMTPS and perform AUTH LOGIN. AsyncSmtpTransport::test_connection()
     // ultimately probes with NOOP, so a provider-specific NOOP quirk must not be
     // reported as an authentication failure when AUTH LOGIN itself succeeds.
-    if matches!(account.provider.as_str(), "126" | "163" | "yeah")
-        && account.smtp_security == "tls"
+    if matches!(account.provider.as_str(), "126" | "163" | "yeah") && account.smtp_security == "tls"
     {
         let tls = TlsParameters::new(account.smtp_host.clone())
             .map_err(|_| MailProtocolError::Connect)?;
