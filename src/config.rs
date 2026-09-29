@@ -67,9 +67,10 @@ pub struct Config {
 
     pub mail_credential_key: Option<String>,
 
-    pub deepseek_api_key: Option<String>,
-    pub deepseek_base_url: String,
-    pub deepseek_model: String,
+    pub model_provider: String,
+    pub model_api_key: Option<String>,
+    pub model_base_url: String,
+    pub model_name: String,
 
     pub zhipu_api_key: Option<String>,
     pub zhipu_base_url: String,
@@ -137,9 +138,10 @@ impl Default for Config {
             file_object_storage_presign_ttl_seconds: 900,
             file_max_upload_bytes: 256 * 1024 * 1024,
             mail_credential_key: None,
-            deepseek_api_key: None,
-            deepseek_base_url: "https://api.deepseek.com".to_owned(),
-            deepseek_model: "deepseek-chat".to_owned(),
+            model_provider: "deepseek".to_owned(),
+            model_api_key: None,
+            model_base_url: "https://api.deepseek.com".to_owned(),
+            model_name: "deepseek-chat".to_owned(),
             zhipu_api_key: None,
             zhipu_base_url: "https://open.bigmodel.cn/api/paas/v4".to_owned(),
             photo_challenge_model: "glm-4v-flash".to_owned(),
@@ -269,9 +271,27 @@ impl Config {
 
         c.mail_credential_key = env_var("MAIL_CREDENTIAL_KEY");
 
-        c.deepseek_api_key = env_var("DEEPSEEK_API_KEY");
-        c.deepseek_base_url = env_string("DEEPSEEK_BASE_URL", &c.deepseek_base_url);
-        c.deepseek_model = env_string("DEEPSEEK_MODEL", &c.deepseek_model);
+        let legacy_deepseek_api_key = env_var("DEEPSEEK_API_KEY");
+        c.model_provider = env_var("MODEL_PROVIDER")
+            .unwrap_or_else(|| c.model_provider.clone())
+            .trim()
+            .to_ascii_lowercase();
+        let (default_base_url, default_model) = model_provider_defaults(&c.model_provider);
+        c.model_api_key = env_var("MODEL_API_KEY").or(legacy_deepseek_api_key);
+        c.model_base_url = env_var("MODEL_BASE_URL")
+            .or_else(|| {
+                (c.model_provider == "deepseek")
+                    .then(|| env_var("DEEPSEEK_BASE_URL"))
+                    .flatten()
+            })
+            .unwrap_or_else(|| default_base_url.to_owned());
+        c.model_name = env_var("MODEL_NAME")
+            .or_else(|| {
+                (c.model_provider == "deepseek")
+                    .then(|| env_var("DEEPSEEK_MODEL"))
+                    .flatten()
+            })
+            .unwrap_or_else(|| default_model.to_owned());
 
         c.zhipu_api_key = env_var("ZHIPU_API_KEY");
         c.zhipu_base_url = env_string("ZHIPU_BASE_URL", &c.zhipu_base_url);
@@ -322,6 +342,29 @@ impl Config {
         if self.file_max_upload_bytes <= 0 {
             return Err("FILE_MAX_UPLOAD_BYTES must be greater than zero".to_owned());
         }
+
+        if !matches!(
+            self.model_provider.as_str(),
+            "deepseek" | "qwen" | "openai" | "openai-compatible"
+        ) {
+            return Err(
+                "MODEL_PROVIDER must be deepseek, qwen, openai or openai-compatible".to_owned(),
+            );
+        }
+        if self.model_api_key.is_some() {
+            if self.model_name.trim().is_empty() {
+                return Err("MODEL_NAME must not be empty when MODEL_API_KEY is configured".to_owned());
+            }
+            let base_url = self.model_base_url.trim();
+            if base_url.is_empty()
+                || !(base_url.starts_with("https://") || base_url.starts_with("http://"))
+            {
+                return Err(
+                    "MODEL_BASE_URL must be an http(s) URL when MODEL_API_KEY is configured"
+                        .to_owned(),
+                );
+            }
+        }
         if self.is_production() {
             if self.dev_auth_enabled {
                 return Err("production must not enable DEV_AUTH".to_owned());
@@ -366,6 +409,19 @@ impl Config {
             }
         }
         Ok(())
+    }
+}
+
+fn model_provider_defaults(provider: &str) -> (&'static str, &'static str) {
+    match provider {
+        "deepseek" => ("https://api.deepseek.com", "deepseek-chat"),
+        "qwen" => (
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "qwen-plus",
+        ),
+        "openai" => ("https://api.openai.com/v1", ""),
+        "openai-compatible" => ("", ""),
+        _ => ("", ""),
     }
 }
 
@@ -415,6 +471,34 @@ mod tests {
     #[test]
     fn development_config_accepts_default_sqlite_path() {
         assert!(Config::default().validate().is_ok());
+    }
+
+    #[test]
+    fn model_provider_defaults_cover_supported_aliases() {
+        assert_eq!(
+            model_provider_defaults("deepseek"),
+            ("https://api.deepseek.com", "deepseek-chat")
+        );
+        assert_eq!(
+            model_provider_defaults("qwen"),
+            (
+                "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "qwen-plus"
+            )
+        );
+        assert_eq!(model_provider_defaults("openai-compatible"), ("", ""));
+    }
+
+    #[test]
+    fn configured_custom_model_requires_base_url_and_model_name() {
+        let config = Config {
+            model_provider: "openai-compatible".to_owned(),
+            model_api_key: Some("test-key".to_owned()),
+            model_base_url: String::new(),
+            model_name: String::new(),
+            ..Config::default()
+        };
+        assert!(config.validate().is_err());
     }
 
     #[test]
