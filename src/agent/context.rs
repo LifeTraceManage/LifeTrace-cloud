@@ -5,6 +5,24 @@ use lifetrace_contracts::UserId;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
+use crate::auth::AuthenticatedPrincipal;
+
+#[derive(Debug, Clone)]
+pub struct AgentAccessPartition {
+    pub app_id: String,
+    pub scopes_json: String,
+}
+
+impl AgentAccessPartition {
+    pub fn from_principal(principal: &AuthenticatedPrincipal) -> Self {
+        Self {
+            app_id: principal.app_id.as_str().to_owned(),
+            scopes_json: serde_json::to_string(&principal.scopes)
+                .unwrap_or_else(|_| "[]".to_owned()),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AgentInvocationContext {
     pub pool: SqlitePool,
