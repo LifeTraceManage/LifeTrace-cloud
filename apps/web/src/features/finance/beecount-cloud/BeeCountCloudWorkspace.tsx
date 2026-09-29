@@ -181,7 +181,7 @@ export function BeeCountCloudWorkspace() {
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><span className="text-lg font-black">B</span></div>
             <div className="min-w-0">
               <div className="flex items-center gap-2"><h1 className="truncate text-lg font-semibold tracking-tight">BeeCount</h1><span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">Cloud Web</span></div>
-              <p className="truncate text-xs text-muted-foreground">LifeTrace 仅提供登录、外层导航和 PostgreSQL 兼容接口</p>
+              <p className="truncate text-xs text-muted-foreground">LifeTrace 提供统一登录、工作区导航与云端兼容接口</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
