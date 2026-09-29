@@ -2084,12 +2084,8 @@ fn decode_imap_mailbox_name(value: &str) -> String {
     result
 }
 
-fn should_disable_folder_after_sync_error(
-    folder: &MailFolder,
-    error: &MailProtocolError,
-) -> bool {
-    folder.normalized_role == "other"
-        && matches!(error, MailProtocolError::MissingUidValidity)
+fn should_disable_folder_after_sync_error(folder: &MailFolder, error: &MailProtocolError) -> bool {
+    folder.normalized_role == "other" && matches!(error, MailProtocolError::MissingUidValidity)
 }
 
 fn folder_role(value: &str) -> &'static str {
