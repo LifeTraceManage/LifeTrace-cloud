@@ -139,9 +139,6 @@ pub const REGISTRY: &[EntityDescriptor] = &[
     user_owned(EntityType::EXECUTION_CALENDAR_OCCURRENCE, false),
     user_owned(EntityType::EXECUTION_IMPORTANT_DATE, false),
     user_owned(EntityType::EXECUTION_FOCUS_SESSION, false),
-    user_owned(EntityType::EXECUTION_MEMO, false),
-    user_owned(EntityType::EXECUTION_MEMO_TAG, false),
-    user_owned(EntityType::EXECUTION_MEMO_TAG_RELATION, false),
     user_owned(EntityType::EXECUTION_REMINDER, false),
     user_owned(EntityType::EXECUTION_COMPLETION_RESULT, false),
     user_owned(EntityType::EXECUTION_ENTITY_LINK, false),
@@ -209,9 +206,6 @@ impl EntityType {
     pub const EXECUTION_CALENDAR_OCCURRENCE: &'static str = "execution.calendar_occurrence";
     pub const EXECUTION_IMPORTANT_DATE: &'static str = "execution.important_date";
     pub const EXECUTION_FOCUS_SESSION: &'static str = "execution.focus_session";
-    pub const EXECUTION_MEMO: &'static str = "execution.memo";
-    pub const EXECUTION_MEMO_TAG: &'static str = "execution.memo_tag";
-    pub const EXECUTION_MEMO_TAG_RELATION: &'static str = "execution.memo_tag_relation";
     pub const EXECUTION_REMINDER: &'static str = "execution.reminder";
     pub const EXECUTION_COMPLETION_RESULT: &'static str = "execution.completion_result";
     pub const EXECUTION_ENTITY_LINK: &'static str = "execution.entity_link";
@@ -271,9 +265,6 @@ impl EntityType {
             Self::EXECUTION_CALENDAR_OCCURRENCE,
             Self::EXECUTION_IMPORTANT_DATE,
             Self::EXECUTION_FOCUS_SESSION,
-            Self::EXECUTION_MEMO,
-            Self::EXECUTION_MEMO_TAG,
-            Self::EXECUTION_MEMO_TAG_RELATION,
             Self::EXECUTION_REMINDER,
             Self::EXECUTION_COMPLETION_RESULT,
             Self::EXECUTION_ENTITY_LINK,
@@ -386,5 +377,8 @@ mod tests {
         assert!(is_syncable(EntityType::EXECUTION_GOAL));
         assert!(is_syncable(EntityType::EXECUTION_IMPORTANT_DATE));
         assert!(is_syncable(EntityType::EXECUTION_FOCUS_SESSION));
+        assert!(!is_syncable("execution.memo"));
+        assert!(!is_syncable("execution.memo_tag"));
+        assert!(!is_syncable("execution.memo_tag_relation"));
     }
 }
