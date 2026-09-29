@@ -10,9 +10,8 @@ use uuid::Uuid;
 use crate::agent::approvals::{
     ProposeCreateCalendarEventTool, ProposeCreateHabitTool, ProposeCreateProjectTool,
     ProposeCreateReminderTool, ProposeCreateTaskTool, ProposeCreateWaitingItemTool,
-    ProposeUpdateHabitTool,
-    ProposeUpdateProjectTool, ProposeUpdateReminderTool, ProposeUpdateTaskTool,
-    ProposeUpdateWaitingItemTool,
+    ProposeUpdateHabitTool, ProposeUpdateProjectTool, ProposeUpdateReminderTool,
+    ProposeUpdateTaskTool, ProposeUpdateWaitingItemTool,
 };
 use crate::agent::context::{ensure_cloud_user, AgentAccessPartition, AgentInvocationContext};
 use crate::agent::session;
