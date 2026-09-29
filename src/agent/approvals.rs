@@ -203,12 +203,7 @@ impl Tool for ProposeCreateTaskTool {
     ) -> Result<Self::Output, Self::Error> {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
-        let arguments_json =
-            serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
-        let arguments_json =
-            serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
-        let arguments_json =
-            serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
 
         let title = bounded_required(&args.title, "title", 300)?;
         let priority = args.priority.unwrap_or_else(|| "normal".to_owned());
@@ -280,6 +275,7 @@ impl Tool for ProposeUpdateTaskTool {
     ) -> Result<Self::Output, Self::Error> {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
 
         let task_id = bounded_required(&args.task_id, "taskId", 200)?;
         let title = match args.title.as_deref() {
@@ -368,6 +364,7 @@ impl Tool for ProposeCreateCalendarEventTool {
     ) -> Result<Self::Output, Self::Error> {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
 
         let title = bounded_required(&args.title, "title", 300)?;
         validate_optional_timestamp(args.start_at.as_deref(), "startAt")?;
