@@ -591,7 +591,6 @@ async fn assistant_approval_creates_and_updates_project_and_habit() {
     assert_eq!(habit.5, None);
 }
 
-
 #[tokio::test]
 async fn assistant_approval_manages_memo_waiting_item_and_reminder() {
     let (state, app) = test_state_and_app().await;
