@@ -27,8 +27,14 @@ pub enum MailProtocolError {
     Fetch,
     #[error("mail message state update failed")]
     State,
-    #[error("mail server does not support the requested capability")]
-    Capability,
+    #[error("mail client identification command is unsupported")]
+    ClientIdentification,
+    #[error("mail server capability query failed")]
+    CapabilityQuery,
+    #[error("mail folder does not expose UIDVALIDITY")]
+    MissingUidValidity,
+    #[error("mail server does not support IMAP IDLE")]
+    IdleUnsupported,
     #[error("mail address is invalid")]
     InvalidAddress,
     #[error("mail message could not be built")]
@@ -103,7 +109,7 @@ fn identify_imap_session(
     );
     session
         .run_command_and_check_ok(command)
-        .map_err(|_| MailProtocolError::Capability)
+        .map_err(|_| MailProtocolError::ClientIdentification)
 }
 
 pub async fn probe_imap(
@@ -118,7 +124,7 @@ pub async fn probe_imap(
         identify_imap_session(&mut session, &account)?;
         let capabilities = session
             .capabilities()
-            .map_err(|_| MailProtocolError::Capability)?;
+            .map_err(|_| MailProtocolError::CapabilityQuery)?;
         let idle_supported = capabilities.has_str("IDLE");
         let move_supported = capabilities.has_str("MOVE");
         let folders = session
@@ -312,7 +318,7 @@ pub async fn move_message(
             .map_err(|_| MailProtocolError::Folder)?;
         let capabilities = session
             .capabilities()
-            .map_err(|_| MailProtocolError::Capability)?;
+            .map_err(|_| MailProtocolError::CapabilityQuery)?;
         if capabilities.has_str("MOVE") {
             session
                 .uid_mv(uid.to_string(), destination_folder)
@@ -356,7 +362,7 @@ pub async fn wait_for_inbox_change(
         identify_imap_session(&mut session, &account)?;
         let capabilities = session
             .capabilities()
-            .map_err(|_| MailProtocolError::Capability)?;
+            .map_err(|_| MailProtocolError::CapabilityQuery)?;
         if !capabilities.has_str("IDLE") {
             return Err(MailProtocolError::Capability);
         }
