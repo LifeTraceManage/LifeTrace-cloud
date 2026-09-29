@@ -1,13 +1,16 @@
 CREATE TABLE agent_sessions (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES cloud_users(id) ON DELETE CASCADE,
+    app_id TEXT NOT NULL,
+    scopes_json TEXT NOT NULL,
     title TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived')),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_message_at TEXT
 );
-CREATE INDEX idx_agent_sessions_user_updated ON agent_sessions(user_id,status,updated_at DESC);
+CREATE INDEX idx_agent_sessions_user_access_updated
+ON agent_sessions(user_id,app_id,scopes_json,status,updated_at DESC);
 
 CREATE TABLE agent_runs (
     id TEXT PRIMARY KEY,
