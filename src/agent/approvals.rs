@@ -4,9 +4,7 @@ use lifetrace_contracts::sync::v1::{
     ChangeOperation, ClientPlatform, PushChangeResultV1, PushRequestV1, SyncChangeV1,
     SyncClientInfo,
 };
-use lifetrace_contracts::{
-    ChangeId, DeviceId, EntityId, EntityType, RequestId, ServerVersion,
-};
+use lifetrace_contracts::{ChangeId, DeviceId, EntityId, EntityType, RequestId, ServerVersion};
 use rig::tool::{MissingToolContext, Tool, ToolContext};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -701,14 +699,13 @@ async fn load_tool_result(
     let Some(tool_call_id) = tool_call_id else {
         return Ok(None);
     };
-    let encoded: Option<String> = sqlx::query_scalar(
-        "SELECT result_json FROM agent_tool_calls WHERE id=$1 AND user_id=$2",
-    )
-    .bind(tool_call_id)
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?
-    .flatten();
+    let encoded: Option<String> =
+        sqlx::query_scalar("SELECT result_json FROM agent_tool_calls WHERE id=$1 AND user_id=$2")
+            .bind(tool_call_id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?
+            .flatten();
     Ok(encoded.and_then(|value| serde_json::from_str(&value).ok()))
 }
 
@@ -748,7 +745,11 @@ async fn execute_create_task(
 ) -> Result<Value, ApprovalError> {
     if let Some(existing) = state
         .store
-        .entity(&principal.user_id, EntityType::EXECUTION_TASK, &action.entity_id)
+        .entity(
+            &principal.user_id,
+            EntityType::EXECUTION_TASK,
+            &action.entity_id,
+        )
         .await
         .map_err(|error| ApprovalError::Execution(error.to_string()))?
     {
@@ -871,10 +872,7 @@ async fn execute_update_task(
         &action.task_id,
         ServerVersion::from_u64(current.server_version),
         payload,
-        format!(
-            "agent-approval-{}-v{}",
-            approval.id, current.server_version
-        ),
+        format!("agent-approval-{}-v{}", approval.id, current.server_version),
     )
     .await
 }
@@ -978,8 +976,7 @@ async fn push_upsert(
         .next()
         .ok_or_else(|| ApprovalError::Execution("sync returned no result".to_owned()))?;
     match result {
-        accepted @ (PushChangeResultV1::Accepted { .. }
-        | PushChangeResultV1::Duplicate { .. }) => {
+        accepted @ (PushChangeResultV1::Accepted { .. } | PushChangeResultV1::Duplicate { .. }) => {
             let sync_result = serde_json::to_value(&accepted)
                 .map_err(|error| ApprovalError::Execution(error.to_string()))?;
             Ok(json!({
@@ -1037,11 +1034,7 @@ fn update_meta_for_server_edit(
     Ok(())
 }
 
-fn set_if_changed(
-    object: &mut serde_json::Map<String, Value>,
-    key: &str,
-    value: Value,
-) -> bool {
+fn set_if_changed(object: &mut serde_json::Map<String, Value>, key: &str, value: Value) -> bool {
     if object.get(key) == Some(&value) {
         false
     } else {
@@ -1073,9 +1066,7 @@ fn require_principal_execution_write(
 fn bounded_required(value: &str, field: &str, max: usize) -> Result<String, ApprovalError> {
     let value = value.trim();
     if value.is_empty() {
-        return Err(ApprovalError::Invalid(format!(
-            "{field} must not be empty"
-        )));
+        return Err(ApprovalError::Invalid(format!("{field} must not be empty")));
     }
     if value.chars().count() > max {
         return Err(ApprovalError::Invalid(format!(
@@ -1104,9 +1095,8 @@ fn validate_one_of(value: &str, field: &str, allowed: &[&str]) -> Result<(), App
 
 fn validate_optional_timestamp(value: Option<&str>, field: &str) -> Result<(), ApprovalError> {
     if let Some(value) = value {
-        DateTime::parse_from_rfc3339(value).map_err(|_| {
-            ApprovalError::Invalid(format!("{field} must be an RFC3339 timestamp"))
-        })?;
+        DateTime::parse_from_rfc3339(value)
+            .map_err(|_| ApprovalError::Invalid(format!("{field} must be an RFC3339 timestamp")))?;
     }
     Ok(())
 }
