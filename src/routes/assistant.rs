@@ -118,14 +118,10 @@ async fn list_messages(
     let user_id = context::ensure_cloud_user(&state.pool, &principal.user_id)
         .await
         .map_err(map_database_error)?;
-    let items = session::list_messages(
-        &state.pool,
-        user_id,
-        session_id,
-        query.limit.unwrap_or(100),
-    )
-    .await
-    .map_err(map_database_error)?;
+    let items =
+        session::list_messages(&state.pool, user_id, session_id, query.limit.unwrap_or(100))
+            .await
+            .map_err(map_database_error)?;
     Ok(Json(Items { items }))
 }
 
