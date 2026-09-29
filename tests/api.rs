@@ -1001,7 +1001,25 @@ async fn execution_duplicate_and_domain_conflicts_are_not_silent() {
 
     let (_, archive) = send(app_a.clone(), Method::POST, "/api/v1/sync/push", TOKEN_A, execution_push_request("execution-conflict-a", vec![execution_change(user, "exec-conflict-waiting-c2", "execution.waiting_item", "waiting-conflict", 1, "upsert", json!({"title":"Base waiting item","status":"resolved","waitingFor":"Alice","resolvedAt":"2026-08-09T01:00:00Z"}))])).await;
     assert_eq!(archive["results"][0]["status"], "accepted");
-    let (_, stale_edit) = send(app_b.clone(), Method::POST, "/api/v1/sync/push", TOKEN_A, execution_push_request("execution-conflict-b", vec![execution_change(user, "exec-conflict-waiting-c3", "execution.waiting_item", "waiting-conflict", 1, "upsert", json!({"title":"Edited on B","status":"open","waitingFor":"Alice"}))])).await;
+    let (_, stale_edit) = send(
+        app_b.clone(),
+        Method::POST,
+        "/api/v1/sync/push",
+        TOKEN_A,
+        execution_push_request(
+            "execution-conflict-b",
+            vec![execution_change(
+                user,
+                "exec-conflict-waiting-c3",
+                "execution.waiting_item",
+                "waiting-conflict",
+                1,
+                "upsert",
+                json!({"title":"Edited on B","status":"open","waitingFor":"Alice"}),
+            )],
+        ),
+    )
+    .await;
     assert_eq!(stale_edit["results"][0]["status"], "conflict");
     assert_eq!(stale_edit["results"][0]["reason"], "base_version_mismatch");
     assert_eq!(
