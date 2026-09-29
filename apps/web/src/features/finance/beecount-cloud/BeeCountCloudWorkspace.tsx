@@ -10,7 +10,7 @@
  *   - frontend/packages/web-features/src/nav.ts
  *   - frontend/packages/web-features/src/features/*
  *
- * LifeTrace owns only the outer AppShell/session and the API adapter. One
+ * LifeTrace owns only the shared WorkspaceShell/session and the API adapter. One
  * deliberate platform deviation from upstream is active-ledger persistence:
  * LifeTrace Web forbids browser-local persistence outside the Vditor draft
  * cache, so the selected ledger remains React session state. Cross-session
@@ -113,7 +113,7 @@ function financeView(pathname: string): FinanceView {
 }
 
 function viewPath(view: FinanceView): string {
-  return view === "overview" ? "/app/finance" : `/app/finance/${view}`;
+  return view === "overview" ? "/finance" : `/finance/${view}`;
 }
 
 export function BeeCountCloudWorkspace() {
