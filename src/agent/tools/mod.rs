@@ -57,7 +57,8 @@ impl Tool for LifeTraceOverviewTool {
     type Error = AgentToolError;
 
     fn description(&self) -> String {
-        "读取当前用户 LifeTrace 各业务实体的数量概览。适合在不知道该先查哪类记录时使用。只读。".to_owned()
+        "读取当前用户 LifeTrace 各业务实体的数量概览。适合在不知道该先查哪类记录时使用。只读。"
+            .to_owned()
     }
 
     fn parameters(&self) -> Value {
@@ -194,7 +195,10 @@ async fn search_records(
         Some(requested) if !requested.is_empty() => {
             let mut selected = Vec::new();
             for entity_type in requested {
-                if !allowed.iter().any(|allowed_type| allowed_type == &entity_type) {
+                if !allowed
+                    .iter()
+                    .any(|allowed_type| allowed_type == &entity_type)
+                {
                     return Err(AgentToolError::Permission(entity_type));
                 }
                 if !selected.contains(&entity_type) {
