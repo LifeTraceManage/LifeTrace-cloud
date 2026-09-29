@@ -64,7 +64,9 @@ fn map_error(error: MailServiceError) -> ApiError {
             StatusCode::SERVICE_UNAVAILABLE,
             "mail credential store is unavailable",
         ),
-        MailServiceError::Protocol(_) => (StatusCode::BAD_GATEWAY, "mail provider operation failed"),
+        MailServiceError::Protocol(_) => {
+            (StatusCode::BAD_GATEWAY, "mail provider operation failed")
+        }
         MailServiceError::Database => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "mail storage operation failed",
