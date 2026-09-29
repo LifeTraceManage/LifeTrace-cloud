@@ -12,6 +12,7 @@ pub mod error;
 pub mod http;
 pub mod mail;
 pub mod object_storage;
+pub mod observability;
 pub mod repository;
 pub mod routes;
 pub mod state;
@@ -82,6 +83,7 @@ pub fn app(state: AppState) -> Router {
             http::rate_limit::middleware,
         ))
         .with_state(state)
+        .layer(middleware::from_fn(http::logging::middleware))
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(cors);
