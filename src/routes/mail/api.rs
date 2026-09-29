@@ -350,7 +350,10 @@ async fn move_message(
     let user_id = principal.user_id.clone();
     tokio::spawn(async move {
         let started = std::time::Instant::now();
-        match reconcile.sync_account_incremental(&user_id, account_id).await {
+        match reconcile
+            .sync_account_incremental(&user_id, account_id)
+            .await
+        {
             Ok(messages) => {
                 realtime.publish_account_updated(
                     user_id.as_str(),
