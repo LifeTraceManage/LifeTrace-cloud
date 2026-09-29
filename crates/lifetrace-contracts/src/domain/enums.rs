@@ -139,6 +139,8 @@ wire_string_enum!(ActivityScheduleType, "Habit schedule type.", [
     DAILY => "daily",
     WEEKLY => "weekly",
     CUSTOM => "custom",
+    INTERVAL => "interval",
+    MONTHLY => "monthly",
 ]);
 
 wire_string_enum!(ActivityCheckinMethod, "Habit check-in method.", [
