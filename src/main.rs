@@ -5,9 +5,10 @@ use lifetrace_cloud::{app, Config};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    lifetrace_cloud::observability::init();
     let config = Config::from_env();
     config.validate().map_err(|message| {
-        eprintln!("[lifetrace-cloud] invalid configuration: {message}");
+        tracing::error!(target: "lifetrace::startup", error = %message, "invalid configuration");
         message
     })?;
     let state = lifetrace_cloud::AppState::new(config.clone());
@@ -27,9 +28,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let beecount_listener = tokio::net::TcpListener::bind(beecount_addr).await?;
     let beecount_address = beecount_listener.local_addr().unwrap_or(beecount_addr);
 
-    println!(
-        "[lifetrace-cloud] env={} storage=sqlite http=http://{} beecount=http://{}",
-        config.environment, primary_address, beecount_address
+    tracing::info!(
+        target: "lifetrace::startup",
+        environment = %config.environment,
+        storage = "sqlite",
+        http = %primary_address,
+        beecount = %beecount_address,
+        "LifeTrace Cloud started"
     );
 
     let primary = axum::serve(
@@ -46,14 +51,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mail_state = state.clone();
         tokio::spawn(async move {
             if let Err(error) = lifetrace_cloud::workers::mail::run(mail_state).await {
-                eprintln!("[lifetrace-cloud] mail worker stopped: {error}");
+                tracing::error!(target: "lifetrace::mail", error = %error, "mail worker stopped");
             }
         });
     }
 
     tokio::spawn(async move {
         if let Err(error) = lifetrace_cloud::workers::execution::run(state).await {
-            eprintln!("[lifetrace-cloud] execution worker stopped: {error}");
+            tracing::error!(target: "lifetrace::execution", error = %error, "execution worker stopped");
         }
     });
 
@@ -112,7 +117,7 @@ async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
-    println!("[lifetrace-cloud] shutting down");
+    tracing::info!(target: "lifetrace::startup", "LifeTrace Cloud shutting down");
 }
 
 fn arg_value(args: &[String], name: &str) -> Option<String> {
