@@ -7,7 +7,7 @@ use rig::tool::ToolContext;
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::agent::context::{ensure_cloud_user, AgentInvocationContext};
+use crate::agent::context::{ensure_cloud_user, AgentAccessPartition, AgentInvocationContext};
 use crate::agent::session;
 use crate::agent::tools::{
     fail_open_tool_calls, load_overview, LifeTraceOverviewTool, SearchMailTool, SearchRecordsTool,
@@ -53,9 +53,16 @@ pub async fn run(
     requested_session_id: Option<Uuid>,
 ) -> Result<AgentRunOutput, AgentRuntimeError> {
     let user_id = ensure_cloud_user(&state.pool, &principal.user_id).await?;
-    let conversation =
-        session::ensure_session(&state.pool, user_id, requested_session_id, prompt).await?;
-    let history = session::load_history(&state.pool, user_id, conversation.id).await?;
+    let access = AgentAccessPartition::from_principal(principal);
+    let conversation = session::ensure_session(
+        &state.pool,
+        user_id,
+        &access,
+        requested_session_id,
+        prompt,
+    )
+    .await?;
+    let history = session::load_history(&state.pool, user_id, &access, conversation.id).await?;
 
     let configured_provider = if state.config.deepseek_api_key.is_some() {
         "deepseek"
