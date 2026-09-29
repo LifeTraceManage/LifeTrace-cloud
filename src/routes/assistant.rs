@@ -5,7 +5,7 @@
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use lifetrace_contracts::ErrorCode;
 use serde::{Deserialize, Serialize};
@@ -52,6 +52,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/web/assistant", post(assistant))
         .route("/api/v1/assistant", post(assistant))
         .route("/api/v1/assistant/sessions", get(list_sessions))
+        .route(
+            "/api/v1/assistant/sessions/{session_id}",
+            delete(delete_session),
+        )
         .route(
             "/api/v1/assistant/sessions/{session_id}/messages",
             get(list_messages),
@@ -122,6 +126,21 @@ async fn list_sessions(
         .await
         .map_err(map_database_error)?;
     Ok(Json(Items { items }))
+}
+
+async fn delete_session(
+    State(state): State<AppState>,
+    principal: AuthenticatedPrincipal,
+    Path(session_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    let user_id = context::ensure_cloud_user(&state.pool, &principal.user_id)
+        .await
+        .map_err(map_database_error)?;
+    let access = context::AgentAccessPartition::from_principal(&principal);
+    session::delete_session(&state.pool, user_id, &access, session_id)
+        .await
+        .map_err(map_database_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn list_messages(
