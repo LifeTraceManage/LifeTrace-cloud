@@ -387,9 +387,7 @@ async fn assistant_rejected_approval_never_writes_entity() {
     )
     .await;
 
-    let decision_uri = format!(
-        "/api/v1/assistant/approvals/{approval_id}/decision"
-    );
+    let decision_uri = format!("/api/v1/assistant/approvals/{approval_id}/decision");
     let (status, rejected) = send(
         app,
         Method::POST,
