@@ -38,7 +38,7 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 
 - `src/routes/`：HTTP API
 - `src/auth/`：认证、Session、Token 与密码逻辑
-- `src/agent/`：Rig Agent runtime、会话持久化与只读工具
+- `src/agent/`：Rig Agent runtime、会话持久化、数据工具与审批执行层
 - `src/beecount/`：BeeCount 兼容和财务同步
 - `src/mail/`：邮件协议、解析和邮件服务
 - `src/workers/`：随 Cloud 进程启动的后台任务
@@ -70,6 +70,8 @@ Cloud 主服务监听容器内部 `8787`；生产环境由 Web Nginx 容器监�
 | `/api/v1/assistant` | Agent 对话（Web/Native 共用 runtime） |
 | `/api/v1/assistant/sessions` | Agent 历史会话 |
 | `/api/v1/assistant/sessions/{id}/messages` | Agent 会话消息 |
+| `/api/v1/assistant/sessions/{id}/approvals` | Agent 会话写操作审批 |
+| `/api/v1/assistant/approvals/{id}/decision` | 批准/拒绝 Agent 写操作 |
 | `/api/v1/photo-*/*` | 照片相关能力 |
 | 其他路径 | Cloud 不负责 SPA；由 `web` 容器提供 |
 
@@ -342,13 +344,23 @@ GitHub Actions 仍可继续构建 GHCR 镜像作为可选发布产物，但默�
 
 ## Agent
 
-Cloud 内置基于 Rig 的 Agent runtime。会话、消息、Run、工具调用审计和未来写操作审批都保存在同一 SQLite 中；模型只负责推理和 function calling，不拥有独立的数据权限层。
+Cloud 内置基于 Rig 的 Agent runtime。会话、消息、Run、工具调用与写操作审批都保存在同一 SQLite 中；模型只负责推理、读取工具调用和生成结构化写操作提案，不拥有绕过认证或直接写数据库的能力。
 
-第一阶段只开放只读工具：
+读取工具包括：
 
 - LifeTrace 实体概览；
 - 按 entity type / 关键词搜索任务、日程、笔记、习惯、复盘、训练、财务等 Sync 数据；
 - 搜索近 30 天邮件元数据和摘要。
+
+当前审批写操作白名单包括：
+
+- 创建任务；
+- 修改任务标题、状态、优先级或截止时间；
+- 创建日程。
+
+写操作采用 `Agent propose -> user approval -> deterministic backend execution`。propose 工具只写入 `agent_approvals` 和审计记录，不修改业务数据；用户在 Web 中显式批准后，Cloud 再通过现有 `SyncRepository.push` 执行，因此仍使用 Sync v1 的版本、冲突、change log 和客户端同步机制。批准请求默认 15 分钟过期，重复批准按 approval/action 的稳定标识处理为幂等操作。
+
+审批同时要求同一 `user_id`、同一 `app_id + scopes` 分区，并在执行时重新校验当前 Session 仍具有 `sync:write` 与 `execution:write`。前端只提交 approval id 和 approve/reject，不接受模型生成的任意 API/SQL。删除数据、发送/删除邮件及其他高风险写操作目前仍未开放。
 
 每次工具调用都同时绑定当前 `user_id` 和当前认证 Session 的 scopes。旧 Web 客户端仍可发送 `context` 字段，但服务端不再把客户端拼装的 context 当作可信数据源。
 
@@ -360,9 +372,9 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
 ```
 
-未配置 `DEEPSEEK_API_KEY` 时接口仍可用，会保存会话并返回 local fallback；配置后使用 Rig 的多轮 Agent loop 和只读工具。当前没有开放任务修改、邮件发送/删除等写工具，`agent_approvals` 仅作为后续审批执行层的 schema 基础。
+未配置 `DEEPSEEK_API_KEY` 时接口仍可用，会保存会话并返回 local fallback；配置后使用 Rig 的多轮 Agent loop、读取工具与审批提案工具。
 
-Agent 的 INFO 日志只记录 run/session/tool call ID、provider、model、状态与错误，不记录 prompt、邮件正文或工具结果正文。排障时可在 `.env.production` 中提高 Agent 模块日志级别。
+Agent 的 INFO 日志只记录 run/session/tool call/approval ID、provider、model、状态与错误，不记录 prompt、邮件正文或工具结果正文。排障时可在 `.env.production` 中提高 Agent 模块日志级别。
 
 ## 对象存储
 

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::agent::{context, runtime, session};
+use crate::agent::{approvals, context, runtime, session};
 use crate::auth::AuthenticatedPrincipal;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -41,6 +41,12 @@ struct Items<T> {
     items: Vec<T>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApprovalDecisionRequest {
+    decision: String,
+}
+
 pub fn router() -> Router<AppState> {
     Router::<AppState>::new()
         .route("/api/v1/web/assistant", post(assistant))
@@ -49,6 +55,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/assistant/sessions/{session_id}/messages",
             get(list_messages),
+        )
+        .route(
+            "/api/v1/assistant/sessions/{session_id}/approvals",
+            get(list_approvals),
+        )
+        .route(
+            "/api/v1/assistant/approvals/{approval_id}/decision",
+            post(decide_approval),
         )
 }
 
@@ -130,6 +144,104 @@ async fn list_messages(
     .await
     .map_err(map_database_error)?;
     Ok(Json(Items { items }))
+}
+
+async fn list_approvals(
+    State(state): State<AppState>,
+    principal: AuthenticatedPrincipal,
+    Path(session_id): Path<Uuid>,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<Items<approvals::AgentApproval>>, ApiError> {
+    let user_id = context::ensure_cloud_user(&state.pool, &principal.user_id)
+        .await
+        .map_err(map_database_error)?;
+    let access = context::AgentAccessPartition::from_principal(&principal);
+    let items = approvals::list_for_session(
+        &state.pool,
+        user_id,
+        &access,
+        session_id,
+        query.limit.unwrap_or(50),
+    )
+    .await
+    .map_err(map_approval_error)?;
+    Ok(Json(Items { items }))
+}
+
+async fn decide_approval(
+    State(state): State<AppState>,
+    principal: AuthenticatedPrincipal,
+    Path(approval_id): Path<Uuid>,
+    Json(request): Json<ApprovalDecisionRequest>,
+) -> Result<Json<approvals::ApprovalDecisionOutput>, ApiError> {
+    let decision = match request.decision.as_str() {
+        "approve" => approvals::ApprovalDecision::Approve,
+        "reject" => approvals::ApprovalDecision::Reject,
+        _ => {
+            return Err(ApiError::new(
+                ErrorCode::InvalidRequest,
+                "decision must be approve or reject",
+                StatusCode::BAD_REQUEST,
+            ))
+        }
+    };
+
+    let user_id = context::ensure_cloud_user(&state.pool, &principal.user_id)
+        .await
+        .map_err(map_database_error)?;
+    let access = context::AgentAccessPartition::from_principal(&principal);
+    approvals::decide(&state, &principal, user_id, &access, approval_id, decision)
+        .await
+        .map(Json)
+        .map_err(map_approval_error)
+}
+
+fn map_approval_error(error: approvals::ApprovalError) -> ApiError {
+    match error {
+        approvals::ApprovalError::Database(error) => map_database_error(error),
+        approvals::ApprovalError::Permission(scope) => ApiError::new(
+            ErrorCode::AuthScopeDenied,
+            format!("required scope is not granted: {scope}"),
+            StatusCode::FORBIDDEN,
+        ),
+        approvals::ApprovalError::Invalid(message) => {
+            ApiError::new(ErrorCode::InvalidRequest, message, StatusCode::BAD_REQUEST)
+        }
+        approvals::ApprovalError::NotFound => ApiError::new(
+            ErrorCode::InvalidRequest,
+            "agent approval was not found",
+            StatusCode::NOT_FOUND,
+        ),
+        approvals::ApprovalError::Expired => ApiError::new(
+            ErrorCode::InvalidRequest,
+            "agent approval has expired",
+            StatusCode::GONE,
+        ),
+        approvals::ApprovalError::Conflict(message) => {
+            tracing::warn!(error = %message, "agent approval conflict");
+            ApiError::new(
+                ErrorCode::InvalidRequest,
+                "agent approval can no longer be applied in its current state",
+                StatusCode::CONFLICT,
+            )
+        }
+        approvals::ApprovalError::Execution(message) => {
+            tracing::warn!(error = %message, "agent approved action execution failed");
+            ApiError::new(
+                ErrorCode::InvalidRequest,
+                "approved action could not be applied; refresh the conversation and try again",
+                StatusCode::CONFLICT,
+            )
+        }
+        approvals::ApprovalError::Context(error) => {
+            tracing::error!(error = %error, "agent approval context missing");
+            ApiError::new(
+                ErrorCode::InternalError,
+                "agent approval context is unavailable",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )
+        }
+    }
 }
 
 fn map_runtime_error(error: runtime::AgentRuntimeError) -> ApiError {
