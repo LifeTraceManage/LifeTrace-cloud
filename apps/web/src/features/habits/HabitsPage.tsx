@@ -64,7 +64,7 @@ export function habitScheduledOnDate(activity: JsonEntity, dateKey: string): boo
   }
 
   if (scheduleType === "monthly") {
-    const targetDay = Math.min(31, Math.max(1, Math.round(rawTargetDays[0] ?? Number(startDate.slice(8, 10)) || 1)));
+    const targetDay = Math.min(31, Math.max(1, Math.round(rawTargetDays[0] ?? (Number(startDate.slice(8, 10)) || 1))));
     const parts = dateKeyParts(dateKey);
     return Boolean(parts && parts.day === targetDay);
   }
@@ -117,7 +117,7 @@ function scheduleLabel(activity: JsonEntity): string {
   }
 
   if (scheduleType === "monthly") {
-    const targetDay = Math.min(31, Math.max(1, Math.round(targetDays[0] ?? Number(text(activity, "startDate").slice(8, 10)) || 1)));
+    const targetDay = Math.min(31, Math.max(1, Math.round(targetDays[0] ?? (Number(text(activity, "startDate").slice(8, 10)) || 1))));
     return `每月 ${targetDay} 日`;
   }
 
