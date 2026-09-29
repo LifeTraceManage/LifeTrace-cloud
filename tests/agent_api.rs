@@ -1072,3 +1072,73 @@ async fn assistant_session_delete_cascades_conversation_records() {
         assert_eq!(count, 0, "{table} should be deleted with the session");
     }
 }
+
+
+#[tokio::test]
+async fn assistant_approval_listing_expires_stale_pending_cards() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"测试过期审批自动收起"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+    let approval_id = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_task",
+        json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "title": "expired approval",
+            "description": null,
+            "projectId": null,
+            "priority": "normal",
+            "dueAt": null,
+            "scheduledStartAt": null,
+            "scheduledEndAt": null,
+            "timezone": "UTC",
+            "context": null
+        }),
+    )
+    .await;
+
+    sqlx::query(
+        "UPDATE agent_approvals SET expires_at=datetime('now','-1 minute') WHERE id=$1",
+    )
+    .bind(approval_id)
+    .execute(&state.pool)
+    .await
+    .unwrap();
+
+    let (status, listed) = send(
+        app,
+        Method::GET,
+        &format!("/api/v1/assistant/sessions/{session_id}/approvals?limit=20"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let item = listed["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == approval_id.to_string())
+        .unwrap();
+    assert_eq!(item["status"], "expired");
+
+    let tool_status: String = sqlx::query_scalar(
+        "SELECT t.status FROM agent_tool_calls t \
+         JOIN agent_approvals a ON a.tool_call_id=t.id WHERE a.id=$1",
+    )
+    .bind(approval_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(tool_status, "denied");
+}
