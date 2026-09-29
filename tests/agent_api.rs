@@ -126,7 +126,7 @@ async fn assistant_rejects_unknown_session_without_creating_a_run() {
     .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body["code"], "invalid_request");
+    assert_eq!(body["code"], "LIFETRACE_INVALID_REQUEST");
 }
 
 #[tokio::test]
@@ -157,12 +157,11 @@ async fn assistant_history_is_partitioned_by_app_and_scopes() {
     assert_eq!(status, StatusCode::OK);
 
     let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
-    let user_id_raw: String = sqlx::query_scalar("SELECT user_id FROM agent_sessions WHERE id=$1")
+    let user_id: Uuid = sqlx::query_scalar("SELECT user_id FROM agent_sessions WHERE id=$1")
         .bind(session_id)
         .fetch_one(&state.pool)
         .await
         .unwrap();
-    let user_id = Uuid::parse_str(&user_id_raw).unwrap();
 
     let wrong_scope_partition = AgentAccessPartition {
         app_id: "lifetrace-desktop".to_owned(),
