@@ -348,10 +348,11 @@ async fn move_message(
     let reconcile = service(&state);
     let realtime = state.mail_realtime.clone();
     let user_id = principal.user_id.clone();
+    let reconcile_destination = destination.clone();
     tokio::spawn(async move {
         let started = std::time::Instant::now();
         match reconcile
-            .sync_folder_role_incremental(&user_id, account_id, &destination)
+            .sync_folder_role_incremental(&user_id, account_id, &reconcile_destination)
             .await
         {
             Ok(messages) => {
@@ -368,7 +369,7 @@ async fn move_message(
                         messages_synced = messages,
                         duration_ms = started.elapsed().as_millis() as u64,
                         trigger = "move_reconcile",
-                        destination = %destination,
+                        destination = %reconcile_destination,
                         "mail destination reconcile completed"
                     );
                 } else {
