@@ -45,7 +45,7 @@ export interface HabitInput {
   normalTarget?: number | null;
   targetPeriod?: "daily" | "weekly" | string;
   targetDays?: number[];
-  scheduleType?: "daily" | "weekly" | "custom" | string;
+  scheduleType?: "daily" | "weekly" | "custom" | "interval" | "monthly" | string;
   startDate?: string | null;
   checkinMethod?: "manual" | "automatic" | string;
   icon?: string | null;
