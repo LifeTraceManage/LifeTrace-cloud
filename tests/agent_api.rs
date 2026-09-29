@@ -215,5 +215,6 @@ async fn assistant_privacy_export_contains_current_access_partition() {
     assert_eq!(agent["sessions"].as_array().unwrap().len(), 1);
     assert_eq!(agent["messages"].as_array().unwrap().len(), 2);
     assert_eq!(agent["runs"].as_array().unwrap().len(), 1);
-    assert_eq!(agent["sessions"][0]["id"], first["sessionId"]);
+    let exported_session_id = first["sessionId"].as_str().unwrap().replace('-', "");
+    assert_eq!(agent["sessions"][0]["id"], exported_session_id);
 }
