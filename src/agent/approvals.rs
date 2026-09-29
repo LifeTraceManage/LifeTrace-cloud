@@ -1082,7 +1082,6 @@ impl Tool for ProposeUpdateHabitTool {
     }
 }
 
-
 impl Tool for ProposeCreateMemoTool {
     const NAME: &'static str = "lifetrace_propose_create_memo";
     type Args = CreateMemoArgs;
@@ -2426,7 +2425,6 @@ async fn execute_update_habit(
     .await
 }
 
-
 async fn execute_create_memo(
     state: &AppState,
     principal: &AuthenticatedPrincipal,
@@ -2702,7 +2700,8 @@ async fn execute_create_reminder(
     approval: &AgentApproval,
     action: CreateReminderAction,
 ) -> Result<Value, ApprovalError> {
-    ensure_reminder_subject_exists(state, principal, &action.subject_type, &action.subject_id).await?;
+    ensure_reminder_subject_exists(state, principal, &action.subject_type, &action.subject_id)
+        .await?;
     if let Some(existing) = state
         .store
         .entity(
@@ -2800,11 +2799,7 @@ async fn execute_update_reminder(
     if action.clear_snooze {
         changed |= set_if_changed(object, "snoozedUntil", Value::Null);
     } else if let Some(snoozed_until) = action.snoozed_until.as_ref() {
-        changed |= set_if_changed(
-            object,
-            "snoozedUntil",
-            Value::String(snoozed_until.clone()),
-        );
+        changed |= set_if_changed(object, "snoozedUntil", Value::String(snoozed_until.clone()));
     }
     if action.clear_title {
         changed |= set_if_changed(object, "title", Value::Null);
