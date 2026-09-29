@@ -658,7 +658,6 @@ impl MailService {
                     .await?;
                 }
                 Err(error) => {
-                    failed_folders += 1;
                     if should_disable_folder_after_sync_error(&folder, &error) {
                         sqlx::query(
                             "UPDATE mail_folders SET sync_enabled=FALSE,updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND account_id=$2 AND id=$3",
@@ -684,6 +683,7 @@ impl MailService {
                             "mail folder disabled because it cannot be synchronized safely"
                         );
                     } else {
+                        failed_folders += 1;
                         tracing::warn!(
                             target: "lifetrace::mail",
                             account_id = %account_id,
