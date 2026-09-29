@@ -1666,7 +1666,7 @@ pub async fn list_for_session(
          JOIN agent_sessions s ON s.id=a.session_id \
          WHERE a.user_id=$1 AND a.session_id=$2 AND s.user_id=$1 \
            AND s.app_id=$3 AND s.scopes_json=$4 \
-         ORDER BY a.requested_at DESC,a.rowid DESC LIMIT $5",
+         ORDER BY CASE WHEN a.status='pending' THEN 0 ELSE 1 END,                   a.requested_at DESC,a.rowid DESC LIMIT $5",
     )
     .bind(user_id)
     .bind(session_id)
