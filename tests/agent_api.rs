@@ -592,94 +592,19 @@ async fn assistant_approval_creates_and_updates_project_and_habit() {
 }
 
 #[tokio::test]
-async fn assistant_approval_manages_memo_waiting_item_and_reminder() {
+async fn assistant_approval_manages_waiting_item_and_reminder() {
     let (state, app) = test_state_and_app().await;
     let (status, first) = send(
         app.clone(),
         Method::POST,
         "/api/v1/assistant",
-        json!({"prompt":"准备测试 Memo、Waiting Item 和 Reminder 审批"}),
+        json!({"prompt":"准备测试 Waiting Item 和 Reminder 审批"}),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
 
     let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
     let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
-
-    let memo_id = Uuid::new_v4().to_string();
-    let create_memo = seed_approval(
-        &state,
-        session_id,
-        run_id,
-        "create_memo",
-        json!({
-            "entityId": memo_id,
-            "content": "联系导师确认论文计划",
-            "context": "inbox",
-            "isPinned": true
-        }),
-    )
-    .await;
-    let (status, memo_created) = send(
-        app.clone(),
-        Method::POST,
-        &format!("/api/v1/assistant/approvals/{create_memo}/decision"),
-        json!({"decision":"approve"}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(memo_created["result"]["entityType"], "execution.memo");
-
-    let memo: (String, String, i64) = sqlx::query_as(
-        "SELECT payload->>'content',payload->>'status',json_extract(payload,'$.isPinned') \
-         FROM sync_entities WHERE entity_type='execution.memo' AND entity_id=$1 AND is_deleted=0",
-    )
-    .bind(&memo_id)
-    .fetch_one(&state.pool)
-    .await
-    .unwrap();
-    assert_eq!(memo.0, "联系导师确认论文计划");
-    assert_eq!(memo.1, "active");
-    assert_eq!(memo.2, 1);
-
-    let update_memo = seed_approval(
-        &state,
-        session_id,
-        run_id,
-        "update_memo",
-        json!({
-            "memoId": memo_id,
-            "content": "联系导师确认最终论文计划",
-            "context": null,
-            "clearContext": true,
-            "isPinned": false,
-            "status": "archived"
-        }),
-    )
-    .await;
-    let (status, memo_updated) = send(
-        app.clone(),
-        Method::POST,
-        &format!("/api/v1/assistant/approvals/{update_memo}/decision"),
-        json!({"decision":"approve"}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(memo_updated["approval"]["status"], "approved");
-
-    let memo: (String, String, Option<String>, i64) = sqlx::query_as(
-        "SELECT payload->>'content',payload->>'status',payload->>'context', \
-                json_extract(payload,'$.isPinned') \
-         FROM sync_entities WHERE entity_type='execution.memo' AND entity_id=$1 AND is_deleted=0",
-    )
-    .bind(&memo_id)
-    .fetch_one(&state.pool)
-    .await
-    .unwrap();
-    assert_eq!(memo.0, "联系导师确认最终论文计划");
-    assert_eq!(memo.1, "archived");
-    assert_eq!(memo.2, None);
-    assert_eq!(memo.3, 0);
 
     let waiting_id = Uuid::new_v4().to_string();
     let create_waiting = seed_approval(
@@ -762,8 +687,8 @@ async fn assistant_approval_manages_memo_waiting_item_and_reminder() {
         "create_reminder",
         json!({
             "entityId": reminder_id,
-            "subjectType": "memo",
-            "subjectId": memo_id,
+            "subjectType": "waiting_item",
+            "subjectId": waiting_id,
             "triggerAt": "2026-10-01T09:00:00+08:00",
             "title": "检查论文计划",
             "body": "确认是否需要继续跟进"
@@ -791,8 +716,8 @@ async fn assistant_approval_manages_memo_waiting_item_and_reminder() {
     .fetch_one(&state.pool)
     .await
     .unwrap();
-    assert_eq!(reminder.0, "memo");
-    assert_eq!(reminder.1, memo_id);
+    assert_eq!(reminder.0, "waiting_item");
+    assert_eq!(reminder.1, waiting_id);
     assert_eq!(reminder.2, "scheduled");
 
     let update_reminder = seed_approval(
@@ -835,6 +760,54 @@ async fn assistant_approval_manages_memo_waiting_item_and_reminder() {
     assert_eq!(reminder.1, "论文计划已处理");
     assert_eq!(reminder.2, None);
     assert!(reminder.3.contains("2026-10-01T10:00:00+08:00"));
+}
+
+#[tokio::test]
+async fn assistant_reminder_approval_rejects_removed_memo_subject() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"测试已经移除的 Memo 提醒类型"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+    let approval_id = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_reminder",
+        json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "subjectType": "memo",
+            "subjectId": Uuid::new_v4().to_string(),
+            "triggerAt": "2026-10-01T09:00:00+08:00",
+            "title": null,
+            "body": null
+        }),
+    )
+    .await;
+
+    let (status, _) = send(
+        app,
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{approval_id}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sync_entities WHERE entity_type='execution.reminder'",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 0);
 }
 
 #[tokio::test]
