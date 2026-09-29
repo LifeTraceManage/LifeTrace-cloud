@@ -101,6 +101,14 @@ pub struct UpdateTaskArgs {
     pub due_at: Option<String>,
     #[serde(default)]
     pub clear_due_at: bool,
+    #[serde(default)]
+    pub scheduled_start_at: Option<String>,
+    #[serde(default)]
+    pub scheduled_end_at: Option<String>,
+    #[serde(default)]
+    pub clear_schedule: bool,
+    #[serde(default)]
+    pub estimated_minutes: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -327,6 +335,10 @@ struct UpdateTaskAction {
     priority: Option<String>,
     due_at: Option<String>,
     clear_due_at: bool,
+    scheduled_start_at: Option<String>,
+    scheduled_end_at: Option<String>,
+    clear_schedule: bool,
+    estimated_minutes: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -566,7 +578,7 @@ impl Tool for ProposeUpdateTaskTool {
     type Error = ApprovalError;
 
     fn description(&self) -> String {
-        "提出修改已有 LifeTrace 任务的写操作。支持标题、状态、优先级和截止时间；不会直接执行，必须由用户显式批准。".to_owned()
+        "提出修改已有 LifeTrace 任务的写操作。支持标题、状态、优先级、截止时间和 Planner 执行时间段；不会直接执行，必须由用户显式批准。".to_owned()
     }
 
     fn parameters(&self) -> Value {
@@ -578,7 +590,11 @@ impl Tool for ProposeUpdateTaskTool {
                 "status":{"type":"string","enum":["todo","in_progress","waiting","done","cancelled"]},
                 "priority":{"type":"string","enum":["low","normal","high","urgent"]},
                 "dueAt":{"type":"string","description":"RFC3339 timestamp"},
-                "clearDueAt":{"type":"boolean","default":false}
+                "clearDueAt":{"type":"boolean","default":false},
+                "scheduledStartAt":{"type":"string","description":"RFC3339 Planner start timestamp"},
+                "scheduledEndAt":{"type":"string","description":"RFC3339 Planner end timestamp"},
+                "clearSchedule":{"type":"boolean","default":false},
+                "estimatedMinutes":{"type":"integer","minimum":15,"maximum":720}
             },
             "required":["taskId"],
             "additionalProperties":false
@@ -610,6 +626,33 @@ impl Tool for ProposeUpdateTaskTool {
             validate_one_of(priority, "priority", &["low", "normal", "high", "urgent"])?;
         }
         validate_optional_timestamp(args.due_at.as_deref(), "dueAt")?;
+        validate_optional_timestamp(args.scheduled_start_at.as_deref(), "scheduledStartAt")?;
+        validate_optional_timestamp(args.scheduled_end_at.as_deref(), "scheduledEndAt")?;
+        if let (Some(start), Some(end)) = (
+            args.scheduled_start_at.as_deref(),
+            args.scheduled_end_at.as_deref(),
+        ) {
+            validate_range(start, end, "scheduledStartAt", "scheduledEndAt")?;
+        }
+        if args.scheduled_start_at.is_some() ^ args.scheduled_end_at.is_some() {
+            return Err(ApprovalError::Invalid(
+                "scheduledStartAt and scheduledEndAt must be provided together".to_owned(),
+            ));
+        }
+        if args.clear_schedule
+            && (args.scheduled_start_at.is_some() || args.scheduled_end_at.is_some())
+        {
+            return Err(ApprovalError::Invalid(
+                "scheduled time fields and clearSchedule cannot be used together".to_owned(),
+            ));
+        }
+        if let Some(estimated_minutes) = args.estimated_minutes {
+            if !(15..=720).contains(&estimated_minutes) {
+                return Err(ApprovalError::Invalid(
+                    "estimatedMinutes must be between 15 and 720".to_owned(),
+                ));
+            }
+        }
         if args.due_at.is_some() && args.clear_due_at {
             return Err(ApprovalError::Invalid(
                 "dueAt and clearDueAt cannot be used together".to_owned(),
@@ -620,6 +663,10 @@ impl Tool for ProposeUpdateTaskTool {
             && args.priority.is_none()
             && args.due_at.is_none()
             && !args.clear_due_at
+            && args.scheduled_start_at.is_none()
+            && args.scheduled_end_at.is_none()
+            && !args.clear_schedule
+            && args.estimated_minutes.is_none()
         {
             return Err(ApprovalError::Invalid(
                 "at least one task field must be changed".to_owned(),
@@ -632,7 +679,11 @@ impl Tool for ProposeUpdateTaskTool {
             "status": args.status,
             "priority": args.priority,
             "dueAt": args.due_at,
-            "clearDueAt": args.clear_due_at
+            "clearDueAt": args.clear_due_at,
+            "scheduledStartAt": args.scheduled_start_at,
+            "scheduledEndAt": args.scheduled_end_at,
+            "clearSchedule": args.clear_schedule,
+            "estimatedMinutes": args.estimated_minutes
         });
         propose(
             &ctx,
@@ -2035,6 +2086,20 @@ async fn execute_update_task(
         changed |= set_if_changed(object, "dueAt", Value::Null);
     } else if let Some(due_at) = action.due_at.as_ref() {
         changed |= set_if_changed(object, "dueAt", Value::String(due_at.clone()));
+    }
+    if action.clear_schedule {
+        changed |= set_if_changed(object, "scheduledStartAt", Value::Null);
+        changed |= set_if_changed(object, "scheduledEndAt", Value::Null);
+    } else if let (Some(start), Some(end)) = (
+        action.scheduled_start_at.as_ref(),
+        action.scheduled_end_at.as_ref(),
+    ) {
+        changed |= set_if_changed(object, "scheduledStartAt", Value::String(start.clone()));
+        changed |= set_if_changed(object, "scheduledEndAt", Value::String(end.clone()));
+        changed |= set_if_changed(object, "context", Value::Null);
+    }
+    if let Some(estimated_minutes) = action.estimated_minutes {
+        changed |= set_if_changed(object, "estimatedMinutes", json!(estimated_minutes));
     }
 
     if !changed {
