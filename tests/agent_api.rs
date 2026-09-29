@@ -410,7 +410,6 @@ async fn assistant_rejected_approval_never_writes_entity() {
     assert_eq!(count, 0);
 }
 
-
 #[tokio::test]
 async fn assistant_approval_creates_and_updates_project_and_habit() {
     let (state, app) = test_state_and_app().await;
