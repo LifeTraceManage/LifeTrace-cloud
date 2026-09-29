@@ -416,7 +416,6 @@ impl MailService {
                 VALUES ($1,$2,$3,$4,$5,$6)
                 ON CONFLICT (account_id,remote_name)
                 DO UPDATE SET normalized_role=EXCLUDED.normalized_role,
-                              sync_enabled=TRUE,
                               updated_at=CURRENT_TIMESTAMP
                 "#,
             )
@@ -660,19 +659,45 @@ impl MailService {
                 }
                 Err(error) => {
                     failed_folders += 1;
-                    tracing::warn!(
-                        target: "lifetrace::mail",
-                        account_id = %account_id,
-                        folder_id = %folder.id,
-                        folder_role = %folder.normalized_role,
-                        error = %error,
-                        "mail folder sync failed"
-                    );
-                    sqlx::query("UPDATE mail_sync_jobs SET state='retry_wait',attempt=attempt+1,finished_at=CURRENT_TIMESTAMP,next_retry_at=datetime('now','+3 minutes'),error_code='MAIL_SYNC_FAILED',error_detail_redacted=$2 WHERE id=$1")
+                    if should_disable_folder_after_sync_error(&folder, &error) {
+                        sqlx::query(
+                            "UPDATE mail_folders SET sync_enabled=FALSE,updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND account_id=$2 AND id=$3",
+                        )
+                        .bind(user_id)
+                        .bind(account_id)
+                        .bind(folder.id)
+                        .execute(&self.pool)
+                        .await?;
+                        sqlx::query(
+                            "UPDATE mail_sync_jobs SET state='unsupported',attempt=attempt+1,finished_at=CURRENT_TIMESTAMP,next_retry_at=NULL,error_code='MAIL_FOLDER_UIDVALIDITY_MISSING',error_detail_redacted=$2 WHERE id=$1",
+                        )
                         .bind(job_id)
                         .bind(error.to_string())
                         .execute(&self.pool)
                         .await?;
+                        tracing::warn!(
+                            target: "lifetrace::mail",
+                            account_id = %account_id,
+                            folder_id = %folder.id,
+                            folder_role = %folder.normalized_role,
+                            reason = "missing_uidvalidity",
+                            "mail folder disabled because it cannot be synchronized safely"
+                        );
+                    } else {
+                        tracing::warn!(
+                            target: "lifetrace::mail",
+                            account_id = %account_id,
+                            folder_id = %folder.id,
+                            folder_role = %folder.normalized_role,
+                            error = %error,
+                            "mail folder sync failed"
+                        );
+                        sqlx::query("UPDATE mail_sync_jobs SET state='retry_wait',attempt=attempt+1,finished_at=CURRENT_TIMESTAMP,next_retry_at=datetime('now','+3 minutes'),error_code='MAIL_SYNC_FAILED',error_detail_redacted=$2 WHERE id=$1")
+                            .bind(job_id)
+                            .bind(error.to_string())
+                            .execute(&self.pool)
+                            .await?;
+                    }
                 }
             }
         }
@@ -2059,6 +2084,14 @@ fn decode_imap_mailbox_name(value: &str) -> String {
     result
 }
 
+fn should_disable_folder_after_sync_error(
+    folder: &MailFolder,
+    error: &MailProtocolError,
+) -> bool {
+    folder.normalized_role == "other"
+        && matches!(error, MailProtocolError::MissingUidValidity)
+}
+
 fn folder_role(value: &str) -> &'static str {
     let decoded = decode_imap_mailbox_name(value);
     let value = decoded.as_str();
@@ -2092,6 +2125,36 @@ fn folder_role(value: &str) -> &'static str {
 mod tests {
     use super::*;
     use crate::mail::domain::MailProvider;
+
+    #[test]
+    fn disables_only_unsupported_other_folders() {
+        let folder = MailFolder {
+            id: Uuid::nil(),
+            account_id: Uuid::nil(),
+            remote_name: "provider-special".to_owned(),
+            normalized_role: "other".to_owned(),
+            uidvalidity: None,
+            uidnext: None,
+            last_seen_uid: 0,
+            last_sync_at: None,
+            sync_enabled: true,
+        };
+        assert!(should_disable_folder_after_sync_error(
+            &folder,
+            &MailProtocolError::MissingUidValidity,
+        ));
+        assert!(!should_disable_folder_after_sync_error(
+            &folder,
+            &MailProtocolError::Fetch,
+        ));
+
+        let mut inbox = folder;
+        inbox.normalized_role = "inbox".to_owned();
+        assert!(!should_disable_folder_after_sync_error(
+            &inbox,
+            &MailProtocolError::MissingUidValidity,
+        ));
+    }
 
     #[test]
     fn recognizes_common_folder_roles() {
