@@ -143,7 +143,6 @@ async fn assistant_rejects_oversized_prompt() {
     assert_eq!(body["code"], "invalid_request");
 }
 
-
 #[tokio::test]
 async fn assistant_history_is_partitioned_by_app_and_scopes() {
     let (state, app) = test_state_and_app().await;
@@ -157,12 +156,11 @@ async fn assistant_history_is_partitioned_by_app_and_scopes() {
     assert_eq!(status, StatusCode::OK);
 
     let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
-    let user_id_raw: String =
-        sqlx::query_scalar("SELECT user_id FROM agent_sessions WHERE id=$1")
-            .bind(session_id)
-            .fetch_one(&state.pool)
-            .await
-            .unwrap();
+    let user_id_raw: String = sqlx::query_scalar("SELECT user_id FROM agent_sessions WHERE id=$1")
+        .bind(session_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
     let user_id = Uuid::parse_str(&user_id_raw).unwrap();
 
     let wrong_scope_partition = AgentAccessPartition {
@@ -170,21 +168,15 @@ async fn assistant_history_is_partitioned_by_app_and_scopes() {
         scopes_json: "[]".to_owned(),
     };
 
-    let sessions =
-        agent_session::list_sessions(&state.pool, user_id, &wrong_scope_partition, 10)
-            .await
-            .unwrap();
+    let sessions = agent_session::list_sessions(&state.pool, user_id, &wrong_scope_partition, 10)
+        .await
+        .unwrap();
     assert!(sessions.is_empty());
 
-    let messages = agent_session::list_messages(
-        &state.pool,
-        user_id,
-        &wrong_scope_partition,
-        session_id,
-        20,
-    )
-    .await
-    .unwrap();
+    let messages =
+        agent_session::list_messages(&state.pool, user_id, &wrong_scope_partition, session_id, 20)
+            .await
+            .unwrap();
     assert!(messages.is_empty());
 
     let resumed = agent_session::ensure_session(
