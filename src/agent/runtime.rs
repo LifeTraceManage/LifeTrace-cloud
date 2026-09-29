@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rig::prelude::*;
-use rig::providers::deepseek;
+use rig::providers::{deepseek, openai};
 use rig::tool::ToolContext;
 use serde::Serialize;
 use uuid::Uuid;
@@ -71,16 +71,16 @@ pub async fn run(
             .await?;
     let history = session::load_history(&state.pool, user_id, &access, conversation.id).await?;
 
-    let configured_provider = if state.config.deepseek_api_key.is_some() {
-        "deepseek"
+    let configured_provider = if state.config.model_api_key.is_some() {
+        state.config.model_provider.as_str()
     } else {
         "local"
     };
     let configured_model = state
         .config
-        .deepseek_api_key
+        .model_api_key
         .as_ref()
-        .map(|_| state.config.deepseek_model.as_str());
+        .map(|_| state.config.model_name.as_str());
 
     let run_id = session::start_run(
         &state.pool,
@@ -129,13 +129,14 @@ pub async fn run(
         "agent run started"
     );
 
-    let (reply, provider, model, fallback_error) = match state.config.deepseek_api_key.as_deref() {
+    let (reply, provider, model, fallback_error) = match state.config.model_api_key.as_deref() {
         Some(api_key) => {
-            match run_deepseek(state, api_key, prompt, history, invocation.clone()).await {
+            match run_configured_provider(state, api_key, prompt, history, invocation.clone()).await
+            {
                 Ok(reply) => (
                     reply,
-                    "deepseek".to_owned(),
-                    Some(state.config.deepseek_model.clone()),
+                    state.config.model_provider.clone(),
+                    Some(state.config.model_name.clone()),
                     None,
                 ),
                 Err(error) => {
@@ -144,6 +145,8 @@ pub async fn run(
                     tracing::warn!(
                         run_id = %run_id,
                         session_id = %conversation.id,
+                        provider = %state.config.model_provider,
+                        model = %state.config.model_name,
                         error = %error,
                         "agent provider failed; using local fallback"
                     );
@@ -212,6 +215,24 @@ pub async fn run(
     })
 }
 
+async fn run_configured_provider(
+    state: &AppState,
+    api_key: &str,
+    prompt: &str,
+    history: Vec<rig::completion::Message>,
+    invocation: AgentInvocationContext,
+) -> Result<String, AgentRuntimeError> {
+    match state.config.model_provider.as_str() {
+        "deepseek" => run_deepseek(state, api_key, prompt, history, invocation).await,
+        "qwen" | "openai" | "openai-compatible" => {
+            run_openai_compatible(state, api_key, prompt, history, invocation).await
+        }
+        provider => Err(AgentRuntimeError::Provider(format!(
+            "unsupported MODEL_PROVIDER: {provider}"
+        ))),
+    }
+}
+
 async fn run_deepseek(
     state: &AppState,
     api_key: &str,
@@ -221,12 +242,72 @@ async fn run_deepseek(
 ) -> Result<String, AgentRuntimeError> {
     let client = deepseek::Client::builder()
         .api_key(api_key.to_owned())
-        .base_url(&state.config.deepseek_base_url)
+        .base_url(&state.config.model_base_url)
         .build()
         .map_err(|error| AgentRuntimeError::Provider(error.to_string()))?;
 
     let agent = client
-        .agent(&state.config.deepseek_model)
+        .agent(&state.config.model_name)
+        .name("lifetrace")
+        .description("LifeTrace personal data assistant")
+        .preamble(SYSTEM_PROMPT)
+        .temperature(0.2)
+        .default_max_turns(MAX_AGENT_TURNS)
+        .tool(LifeTraceOverviewTool)
+        .tool(SearchRecordsTool)
+        .tool(SearchMailTool)
+        .tool(ProposeCreateTaskTool)
+        .tool(ProposeUpdateTaskTool)
+        .tool(ProposeCreateCalendarEventTool)
+        .tool(ProposeCreateProjectTool)
+        .tool(ProposeUpdateProjectTool)
+        .tool(ProposeCreateHabitTool)
+        .tool(ProposeUpdateHabitTool)
+        .tool(ProposeCreateMemoTool)
+        .tool(ProposeUpdateMemoTool)
+        .tool(ProposeCreateWaitingItemTool)
+        .tool(ProposeUpdateWaitingItemTool)
+        .tool(ProposeCreateReminderTool)
+        .tool(ProposeUpdateReminderTool)
+        .build();
+
+    let mut tool_context = ToolContext::new();
+    tool_context.insert(invocation);
+    let request = agent
+        .prompt(prompt.to_owned())
+        .history(history)
+        .tool_context(tool_context)
+        .max_turns(MAX_AGENT_TURNS);
+
+    let result = tokio::time::timeout(PROVIDER_TIMEOUT, async move { request.await })
+        .await
+        .map_err(|_| AgentRuntimeError::Provider("provider timeout".to_owned()))?
+        .map_err(|error| AgentRuntimeError::Provider(error.to_string()))?;
+
+    let reply = result.trim();
+    if reply.is_empty() {
+        return Err(AgentRuntimeError::Provider(
+            "provider returned an empty response".to_owned(),
+        ));
+    }
+    Ok(reply.to_owned())
+}
+
+async fn run_openai_compatible(
+    state: &AppState,
+    api_key: &str,
+    prompt: &str,
+    history: Vec<rig::completion::Message>,
+    invocation: AgentInvocationContext,
+) -> Result<String, AgentRuntimeError> {
+    let client = openai::Client::builder()
+        .api_key(api_key.to_owned())
+        .base_url(&state.config.model_base_url)
+        .build()
+        .map_err(|error| AgentRuntimeError::Provider(error.to_string()))?;
+
+    let agent = client
+        .agent(&state.config.model_name)
         .name("lifetrace")
         .description("LifeTrace personal data assistant")
         .preamble(SYSTEM_PROMPT)
@@ -293,12 +374,12 @@ async fn local_fallback(ctx: &AgentInvocationContext, prompt: &str) -> String {
 
     if summary.is_empty() {
         format!(
-            "当前没有配置可用的 AI 模型，我已经保存了这次对话，但暂时只能提供本地兜底响应。你的问题是“{}”。配置 DEEPSEEK_API_KEY 后，Agent 会使用只读工具查询当前客户端已授权的 LifeTrace 数据并进行多轮分析。",
+            "当前没有配置可用的 AI 模型，我已经保存了这次对话，但暂时只能提供本地兜底响应。你的问题是“{}”。配置 MODEL_API_KEY 后，Agent 会使用只读工具查询当前客户端已授权的 LifeTrace 数据并进行多轮分析。",
             truncate(prompt, 160)
         )
     } else {
         format!(
-            "当前没有配置可用的 AI 模型。当前客户端授权范围内的 LifeTrace 数据概览：{}。你的问题是“{}”。配置 DEEPSEEK_API_KEY 后，Agent 会基于这些数据调用只读工具继续分析。",
+            "当前没有配置可用的 AI 模型。当前客户端授权范围内的 LifeTrace 数据概览：{}。你的问题是“{}”。配置 MODEL_API_KEY 后，Agent 会基于这些数据调用只读工具继续分析。",
             summary.join("、"),
             truncate(prompt, 160)
         )

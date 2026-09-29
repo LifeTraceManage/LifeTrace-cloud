@@ -16,7 +16,7 @@ async fn test_state_and_app() -> (AppState, Router) {
         dev_auth_token: TOKEN.to_owned(),
         dev_auth_user_id: USER_ID.to_owned(),
         dev_auth_device_id: "agent-test-device".to_owned(),
-        deepseek_api_key: None,
+        model_api_key: None,
         ..Config::default()
     };
     let state = AppState::new(config);

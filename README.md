@@ -369,15 +369,43 @@ Cloud 内置基于 Rig 的 Agent runtime。会话、消息、Run、工具调用�
 
 每次工具调用都同时绑定当前 `user_id` 和当前认证 Session 的 scopes。旧 Web 客户端仍可发送 `context` 字段，但服务端不再把客户端拼装的 context 当作可信数据源。
 
-可选模型配置：
+模型配置统一使用以下环境变量：
 
 ```text
-DEEPSEEK_API_KEY=...
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
+MODEL_PROVIDER=deepseek
+MODEL_API_KEY=...
+MODEL_BASE_URL=https://api.deepseek.com
+MODEL_NAME=deepseek-chat
 ```
 
-未配置 `DEEPSEEK_API_KEY` 时接口仍可用，会保存会话并返回 local fallback；配置后使用 Rig 的多轮 Agent loop、读取工具与审批提案工具。
+`MODEL_PROVIDER` 当前支持：
+
+- `deepseek`：使用 Rig 原生 DeepSeek provider；
+- `qwen`：通过 DashScope OpenAI-compatible 接口运行；
+- `openai`：使用 OpenAI-compatible client，默认 base URL 为 `https://api.openai.com/v1`，需要显式配置 `MODEL_NAME`；
+- `openai-compatible`：用于其他兼容 Chat Completions 的服务或自建网关，需要显式配置 `MODEL_BASE_URL` 和 `MODEL_NAME`。
+
+Qwen 示例：
+
+```text
+MODEL_PROVIDER=qwen
+MODEL_API_KEY=...
+MODEL_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+MODEL_NAME=qwen-plus
+```
+
+自定义兼容服务示例：
+
+```text
+MODEL_PROVIDER=openai-compatible
+MODEL_API_KEY=...
+MODEL_BASE_URL=https://your-provider.example/v1
+MODEL_NAME=your-model
+```
+
+旧的 `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL` 在 provider 为 `deepseek` 时仍兼容，便于已有服务器平滑升级。新部署优先使用 `MODEL_*`。
+
+未配置 `MODEL_API_KEY`（且没有兼容的旧 DeepSeek Key）时接口仍可用，会保存会话并返回 local fallback；配置后使用 Rig 的多轮 Agent loop、读取工具与审批提案工具。
 
 Agent 的 INFO 日志只记录 run/session/tool call/approval ID、provider、model、状态与错误，不记录 prompt、邮件正文或工具结果正文。排障时可在 `.env.production` 中提高 Agent 模块日志级别。
 
