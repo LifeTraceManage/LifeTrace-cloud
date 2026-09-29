@@ -590,3 +590,297 @@ async fn assistant_approval_creates_and_updates_project_and_habit() {
     assert_eq!(habit.4, "[1,3,5]");
     assert_eq!(habit.5, None);
 }
+
+#[tokio::test]
+async fn assistant_approval_manages_memo_waiting_item_and_reminder() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"准备测试 Memo、Waiting Item 和 Reminder 审批"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+
+    let memo_id = Uuid::new_v4().to_string();
+    let create_memo = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_memo",
+        json!({
+            "entityId": memo_id,
+            "content": "联系导师确认论文计划",
+            "context": "inbox",
+            "isPinned": true
+        }),
+    )
+    .await;
+    let (status, memo_created) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{create_memo}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(memo_created["result"]["entityType"], "execution.memo");
+
+    let memo: (String, String, i64) = sqlx::query_as(
+        "SELECT payload->>'content',payload->>'status',json_extract(payload,'$.isPinned') \
+         FROM sync_entities WHERE entity_type='execution.memo' AND entity_id=$1 AND is_deleted=0",
+    )
+    .bind(&memo_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(memo.0, "联系导师确认论文计划");
+    assert_eq!(memo.1, "active");
+    assert_eq!(memo.2, 1);
+
+    let update_memo = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "update_memo",
+        json!({
+            "memoId": memo_id,
+            "content": "联系导师确认最终论文计划",
+            "context": null,
+            "clearContext": true,
+            "isPinned": false,
+            "status": "archived"
+        }),
+    )
+    .await;
+    let (status, memo_updated) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{update_memo}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(memo_updated["approval"]["status"], "approved");
+
+    let memo: (String, String, Option<String>, i64) = sqlx::query_as(
+        "SELECT payload->>'content',payload->>'status',payload->>'context', \
+                json_extract(payload,'$.isPinned') \
+         FROM sync_entities WHERE entity_type='execution.memo' AND entity_id=$1 AND is_deleted=0",
+    )
+    .bind(&memo_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(memo.0, "联系导师确认最终论文计划");
+    assert_eq!(memo.1, "archived");
+    assert_eq!(memo.2, None);
+    assert_eq!(memo.3, 0);
+
+    let waiting_id = Uuid::new_v4().to_string();
+    let create_waiting = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_waiting_item",
+        json!({
+            "entityId": waiting_id,
+            "title": "等待导师反馈",
+            "description": "论文计划确认",
+            "waitingFor": "导师",
+            "expectedAt": "2026-10-02T12:00:00+08:00",
+            "followUpAt": "2026-10-03T09:00:00+08:00",
+            "sourceTaskId": null
+        }),
+    )
+    .await;
+    let (status, waiting_created) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{create_waiting}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        waiting_created["result"]["entityType"],
+        "execution.waiting_item"
+    );
+
+    let update_waiting = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "update_waiting_item",
+        json!({
+            "waitingItemId": waiting_id,
+            "title": null,
+            "description": null,
+            "clearDescription": false,
+            "waitingFor": null,
+            "expectedAt": null,
+            "clearExpectedAt": false,
+            "followUpAt": null,
+            "clearFollowUpAt": true,
+            "status": "resolved",
+            "resolutionSummary": "导师已确认",
+            "clearResolutionSummary": false
+        }),
+    )
+    .await;
+    let (status, waiting_updated) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{update_waiting}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(waiting_updated["approval"]["status"], "approved");
+
+    let waiting: (String, Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT payload->>'status',payload->>'followUpAt',payload->>'resolutionSummary' \
+         FROM sync_entities WHERE entity_type='execution.waiting_item' AND entity_id=$1 AND is_deleted=0",
+    )
+    .bind(&waiting_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(waiting.0, "resolved");
+    assert_eq!(waiting.1, None);
+    assert_eq!(waiting.2.as_deref(), Some("导师已确认"));
+
+    let reminder_id = Uuid::new_v4().to_string();
+    let create_reminder = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_reminder",
+        json!({
+            "entityId": reminder_id,
+            "subjectType": "memo",
+            "subjectId": memo_id,
+            "triggerAt": "2026-10-01T09:00:00+08:00",
+            "title": "检查论文计划",
+            "body": "确认是否需要继续跟进"
+        }),
+    )
+    .await;
+    let (status, reminder_created) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{create_reminder}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        reminder_created["result"]["entityType"],
+        "execution.reminder"
+    );
+
+    let reminder: (String, String, String) = sqlx::query_as(
+        "SELECT payload->>'subjectType',payload->>'subjectId',payload->>'status' \
+         FROM sync_entities WHERE entity_type='execution.reminder' AND entity_id=$1 AND is_deleted=0",
+    )
+    .bind(&reminder_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(reminder.0, "memo");
+    assert_eq!(reminder.1, memo_id);
+    assert_eq!(reminder.2, "scheduled");
+
+    let update_reminder = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "update_reminder",
+        json!({
+            "reminderId": reminder_id,
+            "triggerAt": "2026-10-01T10:00:00+08:00",
+            "snoozedUntil": null,
+            "clearSnooze": false,
+            "status": "dismissed",
+            "title": "论文计划已处理",
+            "clearTitle": false,
+            "body": null,
+            "clearBody": true
+        }),
+    )
+    .await;
+    let (status, reminder_updated) = send(
+        app,
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{update_reminder}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(reminder_updated["approval"]["status"], "approved");
+
+    let reminder: (String, String, Option<String>, String) = sqlx::query_as(
+        "SELECT payload->>'status',payload->>'title',payload->>'body',payload->>'fireKey' \
+         FROM sync_entities WHERE entity_type='execution.reminder' AND entity_id=$1 AND is_deleted=0",
+    )
+    .bind(&reminder_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(reminder.0, "dismissed");
+    assert_eq!(reminder.1, "论文计划已处理");
+    assert_eq!(reminder.2, None);
+    assert!(reminder.3.contains("2026-10-01T10:00:00+08:00"));
+}
+
+#[tokio::test]
+async fn assistant_reminder_approval_rejects_missing_subject() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"测试不存在目标的提醒"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+    let approval_id = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_reminder",
+        json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "subjectType": "task",
+            "subjectId": Uuid::new_v4().to_string(),
+            "triggerAt": "2026-10-01T09:00:00+08:00",
+            "title": null,
+            "body": null
+        }),
+    )
+    .await;
+
+    let (status, _) = send(
+        app,
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{approval_id}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sync_entities WHERE entity_type='execution.reminder'",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 0);
+}
