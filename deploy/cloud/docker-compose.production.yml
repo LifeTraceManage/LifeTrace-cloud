@@ -25,6 +25,11 @@ services:
       - "8787"
     volumes:
       - lifetrace_data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8787/health/ready"]
       interval: 10s
