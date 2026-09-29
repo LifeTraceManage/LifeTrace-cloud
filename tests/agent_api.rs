@@ -885,7 +885,6 @@ async fn assistant_reminder_approval_rejects_missing_subject() {
     assert_eq!(count, 0);
 }
 
-
 #[tokio::test]
 async fn assistant_can_schedule_and_reopen_cancelled_task_in_planner() {
     let (state, app) = test_state_and_app().await;
@@ -1073,7 +1072,6 @@ async fn assistant_session_delete_cascades_conversation_records() {
     }
 }
 
-
 #[tokio::test]
 async fn assistant_approval_listing_expires_stale_pending_cards() {
     let (state, app) = test_state_and_app().await;
@@ -1108,13 +1106,11 @@ async fn assistant_approval_listing_expires_stale_pending_cards() {
     )
     .await;
 
-    sqlx::query(
-        "UPDATE agent_approvals SET expires_at=datetime('now','-1 minute') WHERE id=$1",
-    )
-    .bind(approval_id)
-    .execute(&state.pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE agent_approvals SET expires_at=datetime('now','-1 minute') WHERE id=$1")
+        .bind(approval_id)
+        .execute(&state.pool)
+        .await
+        .unwrap();
 
     let (status, listed) = send(
         app,
