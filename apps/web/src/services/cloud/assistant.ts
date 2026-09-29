@@ -30,6 +30,24 @@ export interface AssistantMessage {
   createdAt: string;
 }
 
+export interface AssistantApproval {
+  id: string;
+  runId: string;
+  sessionId: string;
+  toolCallId?: string | null;
+  actionName: string;
+  actionJson: Record<string, unknown>;
+  status: "pending" | "approved" | "rejected" | "expired" | "cancelled" | string;
+  requestedAt: string;
+  decidedAt?: string | null;
+  expiresAt?: string | null;
+}
+
+export interface ApprovalDecisionResult {
+  approval: AssistantApproval;
+  result?: unknown;
+}
+
 export class AssistantApi {
   constructor(private readonly fetcher: FetchLike = browserFetch) {}
 
@@ -92,5 +110,48 @@ export class AssistantApi {
       throw new Error(payload.message || payload.error?.message || `消息加载失败 (${response.status})`);
     }
     return payload.items ?? [];
+  }
+
+  async listApprovals(sessionId: string, limit = 50): Promise<AssistantApproval[]> {
+    const response = await this.fetcher(
+      `${API_BASE}/api/v1/assistant/sessions/${encodeURIComponent(sessionId)}/approvals?limit=${encodeURIComponent(String(limit))}`,
+      { credentials: "include" },
+    );
+    const payload = await response.json() as {
+      items?: AssistantApproval[];
+      message?: string;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      throw new Error(payload.message || payload.error?.message || `审批加载失败 (${response.status})`);
+    }
+    return payload.items ?? [];
+  }
+
+  async decideApproval(
+    approvalId: string,
+    decision: "approve" | "reject",
+    csrfToken: string,
+  ): Promise<ApprovalDecisionResult> {
+    const response = await this.fetcher(
+      `${API_BASE}/api/v1/assistant/approvals/${encodeURIComponent(approvalId)}/decision`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ decision }),
+      },
+    );
+    const payload = await response.json() as Partial<ApprovalDecisionResult> & {
+      message?: string;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      throw new Error(payload.message || payload.error?.message || `审批操作失败 (${response.status})`);
+    }
+    if (!payload.approval) {
+      throw new Error("审批服务返回的数据不完整");
+    }
+    return { approval: payload.approval, result: payload.result };
   }
 }
