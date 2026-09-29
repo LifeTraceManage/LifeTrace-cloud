@@ -8,9 +8,12 @@ LifeTrace 的轻量自托管后端与 Web 单仓库。Cloud 运行时只使用 R
 
 ```text
 Browser
+   │ HTTPS / HTTP
+   ▼
+Caddy :443 / :80
    │
    ▼
-LifeTrace Web :80
+LifeTrace Web (Nginx) :80
 ├── React/Vite static assets
 └── Nginx /api + /health proxy
    │
@@ -26,7 +29,7 @@ LifeTrace Cloud :8787
 /data/lifetrace.db
 ```
 
-自托管环境使用两个职责单一的容器：`web` 和 `cloud`，外加一个 Cloud SQLite 数据卷。没有 PostgreSQL、独立 migration container、mail worker container 或 execution worker container。
+自托管环境使用三个职责单一的容器：`caddy` 负责公网 HTTP/HTTPS，`web` 提供静态资源和同源 API 代理，`cloud` 提供 Rust API、后台任务和 SQLite。没有 PostgreSQL、独立 migration container、mail worker container 或 execution worker container。
 
 SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行。
 
@@ -267,6 +270,41 @@ cd deploy/cloud
 ```
 
 也可以直接重新运行一键安装命令，让安装器负责更新源码。
+
+### 日志与排障
+
+Cloud 使用 Rust `tracing` 统一记录结构化运行日志。生产环境默认：
+
+```text
+RUST_LOG=info
+```
+
+实时查看后端：
+
+```bash
+cd ~/lifetrace/source/deploy/cloud
+docker compose --env-file .env.production \
+  -f docker-compose.production.yml \
+  logs -f --tail=200 cloud
+```
+
+默认 `INFO` 会显示 HTTP 请求、邮件实际变更、邮件操作、后台任务异常等有价值事件；健康检查、邮箱轮询无变化等噪声只记录到 `DEBUG`。
+
+临时排查 Mail 时可以在 `.env.production` 中设置：
+
+```text
+RUST_LOG=info,lifetrace::mail=debug
+```
+
+排查 HTTP：
+
+```text
+RUST_LOG=info,lifetrace::http=debug
+```
+
+修改后重新部署 Cloud 即可。生产 Compose 对 Cloud 的 Docker 日志启用了轮转：单文件 20 MiB，最多保留 5 个文件，避免长期运行耗尽磁盘。
+
+邮件操作日志只记录内部 UUID、动作、状态和耗时，不应记录密码、Cookie、Authorization、邮箱授权码或邮件正文。
 
 ### 手动首次部署
 
