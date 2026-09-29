@@ -8,12 +8,12 @@ const workspaceLinks = [
   { to: "/notes", label: "Notes", icon: NotebookPen },
   { to: "/mail", label: "Mail", icon: Mail },
   { to: "/execute/today", label: "Execute", icon: LayoutDashboard },
+  { to: "/finance", label: "Finance", icon: WalletCards },
 ] as const;
 
 const coreLinks = [
   { to: "/app/health", label: "Health", icon: HeartPulse },
   { to: "/app/fitness", label: "Fitness", icon: Dumbbell },
-  { to: "/app/finance", label: "Finance", icon: WalletCards },
   { to: "/app/assistant", label: "Assistant", icon: Bot },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ] as const;
