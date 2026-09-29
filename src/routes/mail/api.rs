@@ -86,7 +86,7 @@ fn map_error(error: MailServiceError) -> ApiError {
             StatusCode::SERVICE_UNAVAILABLE,
             "mail credential store is unavailable",
         ),
-        MailServiceError::Protocol => (StatusCode::BAD_GATEWAY, "mail provider operation failed"),
+        MailServiceError::Protocol(_) => (StatusCode::BAD_GATEWAY, "mail provider operation failed"),
         MailServiceError::Database => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "mail storage operation failed",
@@ -328,13 +328,53 @@ async fn move_message(
     Json(input): Json<MoveInput>,
 ) -> Result<Json<Value>, ApiError> {
     principal.require_scope("mail:write")?;
-    service(&state)
-        .move_message(&principal.user_id, id, input.destination_role.trim())
+    let destination = input.destination_role.trim().to_owned();
+    let account_id = service(&state)
+        .move_message(&principal.user_id, id, &destination)
         .await
         .map_err(map_error)?;
-    Ok(Json(
-        json!({ "ok": true, "destinationRole": input.destination_role }),
-    ))
+
+    // Notify active clients as soon as the local source row changes. Reconcile
+    // the remote destination copy in the background instead of holding the UI
+    // request open for a full account sync.
+    state.mail_realtime.publish_account_updated(
+        principal.user_id.as_str(),
+        account_id,
+        0,
+        "action",
+    );
+    let reconcile = service(&state);
+    let user_id = principal.user_id.clone();
+    tokio::spawn(async move {
+        let started = std::time::Instant::now();
+        match reconcile.sync_account_incremental(&user_id, account_id).await {
+            Ok(messages) if messages > 0 => tracing::info!(
+                target: "lifetrace::mail",
+                account_id = %account_id,
+                messages_synced = messages,
+                duration_ms = started.elapsed().as_millis() as u64,
+                trigger = "move_reconcile",
+                "mail background reconcile completed"
+            ),
+            Ok(_) => tracing::debug!(
+                target: "lifetrace::mail",
+                account_id = %account_id,
+                duration_ms = started.elapsed().as_millis() as u64,
+                trigger = "move_reconcile",
+                "mail background reconcile completed without changes"
+            ),
+            Err(error) => tracing::warn!(
+                target: "lifetrace::mail",
+                account_id = %account_id,
+                duration_ms = started.elapsed().as_millis() as u64,
+                trigger = "move_reconcile",
+                error = %error,
+                "mail background reconcile failed"
+            ),
+        }
+    });
+
+    Ok(Json(json!({ "ok": true, "destinationRole": destination })))
 }
 
 async fn send_mail(
