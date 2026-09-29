@@ -86,7 +86,7 @@ pub async fn list_messages(
         "SELECT m.id,m.session_id,m.run_id,m.role,m.content,m.provider,m.metadata_json,m.created_at \
          FROM agent_messages m JOIN agent_sessions s ON s.id=m.session_id \
          WHERE m.user_id=$1 AND m.session_id=$2 AND s.user_id=$1 \
-         ORDER BY m.created_at DESC,m.id DESC LIMIT $3",
+         ORDER BY m.created_at DESC,m.rowid DESC LIMIT $3",
     )
     .bind(user_id)
     .bind(session_id)
@@ -111,7 +111,7 @@ pub async fn load_history(
     let mut rows = sqlx::query_as::<_, HistoryRow>(
         "SELECT role,content FROM agent_messages \
          WHERE user_id=$1 AND session_id=$2 AND role IN ('user','assistant') \
-         ORDER BY created_at DESC,id DESC LIMIT $3",
+         ORDER BY created_at DESC,rowid DESC LIMIT $3",
     )
     .bind(user_id)
     .bind(session_id)
