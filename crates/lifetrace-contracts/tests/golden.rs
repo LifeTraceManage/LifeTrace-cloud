@@ -110,17 +110,30 @@ fn golden_capabilities_parses() {
 }
 
 #[test]
-fn golden_capabilities_remain_a_supported_registry_subset() {
-    let capabilities: CapabilitiesResponseV1 = serde_json::from_value(fixture("capabilities.json")).unwrap();
+fn golden_capabilities_distinguish_retired_entity_types() {
+    let capabilities: CapabilitiesResponseV1 =
+        serde_json::from_value(fixture("capabilities.json")).unwrap();
     let registered: std::collections::HashSet<&str> = lifetrace_contracts::registry::REGISTRY
         .iter()
         .map(|descriptor| descriptor.entity_type)
         .collect();
+    const RETIRED: [&str; 3] = [
+        "execution.memo",
+        "execution.memo_tag",
+        "execution.memo_tag_relation",
+    ];
     for entity_type in &capabilities.supported_entity_types {
-        assert!(
-            registered.contains(entity_type.as_str()),
-            "frozen capability {entity_type} must remain registered"
-        );
+        if RETIRED.contains(&entity_type.as_str()) {
+            assert!(
+                !registered.contains(entity_type.as_str()),
+                "retired capability {entity_type} must not remain registered"
+            );
+        } else {
+            assert!(
+                registered.contains(entity_type.as_str()),
+                "frozen capability {entity_type} must remain registered"
+            );
+        }
     }
     assert!(registered.contains(EntityType::FINANCE_LEDGER));
     assert!(registered.contains(EntityType::FINANCE_BUDGET));
