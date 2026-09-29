@@ -141,7 +141,7 @@ async fn assistant_rejects_oversized_prompt() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["code"], "invalid_request");
+    assert_eq!(body["code"], "LIFETRACE_INVALID_REQUEST");
 }
 
 #[tokio::test]
