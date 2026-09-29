@@ -884,3 +884,191 @@ async fn assistant_reminder_approval_rejects_missing_subject() {
     .unwrap();
     assert_eq!(count, 0);
 }
+
+
+#[tokio::test]
+async fn assistant_can_schedule_and_reopen_cancelled_task_in_planner() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"测试把取消任务重新安排进 Planner"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+    let task_id = Uuid::new_v4().to_string();
+
+    let create_id = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_task",
+        json!({
+            "entityId": task_id,
+            "title": "Planner scheduling task",
+            "description": null,
+            "projectId": null,
+            "priority": "normal",
+            "dueAt": "2026-09-30T17:00:00+08:00",
+            "scheduledStartAt": null,
+            "scheduledEndAt": null,
+            "timezone": "Asia/Singapore",
+            "context": "inbox"
+        }),
+    )
+    .await;
+    let (status, _) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{create_id}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let cancel_id = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "update_task",
+        json!({
+            "taskId": task_id,
+            "title": null,
+            "status": "cancelled",
+            "priority": null,
+            "dueAt": null,
+            "clearDueAt": false,
+            "scheduledStartAt": null,
+            "scheduledEndAt": null,
+            "clearSchedule": false,
+            "estimatedMinutes": null
+        }),
+    )
+    .await;
+    let (status, _) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{cancel_id}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let schedule_id = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "update_task",
+        json!({
+            "taskId": task_id,
+            "title": null,
+            "status": "todo",
+            "priority": null,
+            "dueAt": null,
+            "clearDueAt": false,
+            "scheduledStartAt": "2026-09-30T09:00:00+08:00",
+            "scheduledEndAt": "2026-09-30T10:00:00+08:00",
+            "clearSchedule": false,
+            "estimatedMinutes": 60
+        }),
+    )
+    .await;
+    let (status, scheduled) = send(
+        app,
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{schedule_id}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(scheduled["approval"]["status"], "approved");
+
+    let stored: (String, Option<String>, String, String, Option<String>, i64) = sqlx::query_as(
+        "SELECT payload->>'status',payload->>'cancelledAt',payload->>'scheduledStartAt', \
+                payload->>'scheduledEndAt',payload->>'context', \
+                json_extract(payload,'$.estimatedMinutes') \
+         FROM sync_entities WHERE entity_type='execution.task' AND entity_id=$1 AND is_deleted=0",
+    )
+    .bind(&task_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(stored.0, "todo");
+    assert_eq!(stored.1, None);
+    assert_eq!(stored.2, "2026-09-30T09:00:00+08:00");
+    assert_eq!(stored.3, "2026-09-30T10:00:00+08:00");
+    assert_eq!(stored.4, None);
+    assert_eq!(stored.5, 60);
+}
+
+#[tokio::test]
+async fn assistant_session_delete_cascades_conversation_records() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"创建一个随后删除的会话"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+    let _approval_id = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_task",
+        json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "title": "pending approval removed with session",
+            "description": null,
+            "projectId": null,
+            "priority": "normal",
+            "dueAt": null,
+            "scheduledStartAt": null,
+            "scheduledEndAt": null,
+            "timezone": "UTC",
+            "context": null
+        }),
+    )
+    .await;
+
+    let (status, _) = send(
+        app,
+        Method::DELETE,
+        &format!("/api/v1/assistant/sessions/{session_id}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    for table in [
+        "agent_sessions",
+        "agent_runs",
+        "agent_messages",
+        "agent_tool_calls",
+        "agent_approvals",
+    ] {
+        let sql = format!("SELECT COUNT(*) FROM {table} WHERE session_id=$1");
+        let count: i64 = if table == "agent_sessions" {
+            sqlx::query_scalar("SELECT COUNT(*) FROM agent_sessions WHERE id=$1")
+                .bind(session_id)
+                .fetch_one(&state.pool)
+                .await
+                .unwrap()
+        } else {
+            sqlx::query_scalar(&sql)
+                .bind(session_id)
+                .fetch_one(&state.pool)
+                .await
+                .unwrap()
+        };
+        assert_eq!(count, 0, "{table} should be deleted with the session");
+    }
+}
