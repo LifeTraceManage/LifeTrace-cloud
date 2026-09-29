@@ -40,6 +40,21 @@ async function installMocks(page: Page) {
   });
 }
 
+test("finance is a first-class portal workspace and legacy routes migrate to it", async ({ page }) => {
+  await installMocks(page);
+
+  await page.goto("/");
+  const financeLink = page.getByRole("link", { name: /Finance/ }).first();
+  await expect(financeLink).toBeVisible();
+  await financeLink.click();
+  await expect(page).toHaveURL(/\/finance\/?$/);
+  await expect(page.getByRole("heading", { name: "BeeCount", level: 1 })).toBeVisible();
+
+  await page.goto("/app/finance/transactions");
+  await expect(page).toHaveURL(/\/finance\/transactions$/);
+  await expect(page.getByRole("heading", { name: "BeeCount", level: 1 })).toBeVisible();
+});
+
 test("finance transactions use BeeCount Cloud Web as the only runtime UI and data source", async ({ page }) => {
   await installMocks(page);
   await page.goto("/finance/transactions");
