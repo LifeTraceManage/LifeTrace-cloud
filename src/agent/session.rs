@@ -4,6 +4,8 @@ use serde::Serialize;
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
+use crate::agent::context::AgentAccessPartition;
+
 const HISTORY_LIMIT: i64 = 24;
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -33,16 +35,19 @@ pub struct AgentMessage {
 pub async fn ensure_session(
     pool: &SqlitePool,
     user_id: Uuid,
+    access: &AgentAccessPartition,
     requested: Option<Uuid>,
     prompt: &str,
 ) -> Result<AgentSession, sqlx::Error> {
     if let Some(session_id) = requested {
         return sqlx::query_as::<_, AgentSession>(
             "SELECT id,title,status,created_at,updated_at,last_message_at \
-             FROM agent_sessions WHERE id=$1 AND user_id=$2 AND status='active'",
+             FROM agent_sessions WHERE id=$1 AND user_id=$2 AND app_id=$3 AND scopes_json=$4 AND status='active'",
         )
         .bind(session_id)
         .bind(user_id)
+        .bind(&access.app_id)
+        .bind(&access.scopes_json)
         .fetch_one(pool)
         .await;
     }
@@ -50,11 +55,14 @@ pub async fn ensure_session(
     let id = Uuid::new_v4();
     let title = title_from_prompt(prompt);
     sqlx::query_as::<_, AgentSession>(
-        "INSERT INTO agent_sessions (id,user_id,title,status) VALUES ($1,$2,$3,'active') \
+        "INSERT INTO agent_sessions (id,user_id,app_id,scopes_json,title,status) \
+         VALUES ($1,$2,$3,$4,$5,'active') \
          RETURNING id,title,status,created_at,updated_at,last_message_at",
     )
     .bind(id)
     .bind(user_id)
+    .bind(&access.app_id)
+    .bind(&access.scopes_json)
     .bind(title)
     .fetch_one(pool)
     .await
@@ -63,14 +71,17 @@ pub async fn ensure_session(
 pub async fn list_sessions(
     pool: &SqlitePool,
     user_id: Uuid,
+    access: &AgentAccessPartition,
     limit: i64,
 ) -> Result<Vec<AgentSession>, sqlx::Error> {
     sqlx::query_as::<_, AgentSession>(
         "SELECT id,title,status,created_at,updated_at,last_message_at \
-         FROM agent_sessions WHERE user_id=$1 AND status='active' \
-         ORDER BY COALESCE(last_message_at,created_at) DESC LIMIT $2",
+         FROM agent_sessions WHERE user_id=$1 AND app_id=$2 AND scopes_json=$3 AND status='active' \
+         ORDER BY COALESCE(last_message_at,created_at) DESC LIMIT $4",
     )
     .bind(user_id)
+    .bind(&access.app_id)
+    .bind(&access.scopes_json)
     .bind(limit.clamp(1, 100))
     .fetch_all(pool)
     .await
@@ -79,6 +90,7 @@ pub async fn list_sessions(
 pub async fn list_messages(
     pool: &SqlitePool,
     user_id: Uuid,
+    access: &AgentAccessPartition,
     session_id: Uuid,
     limit: i64,
 ) -> Result<Vec<AgentMessage>, sqlx::Error> {
@@ -86,10 +98,13 @@ pub async fn list_messages(
         "SELECT m.id,m.session_id,m.run_id,m.role,m.content,m.provider,m.metadata_json,m.created_at \
          FROM agent_messages m JOIN agent_sessions s ON s.id=m.session_id \
          WHERE m.user_id=$1 AND m.session_id=$2 AND s.user_id=$1 \
-         ORDER BY m.created_at DESC,m.rowid DESC LIMIT $3",
+           AND s.app_id=$3 AND s.scopes_json=$4 \
+         ORDER BY m.created_at DESC,m.rowid DESC LIMIT $5",
     )
     .bind(user_id)
     .bind(session_id)
+    .bind(&access.app_id)
+    .bind(&access.scopes_json)
     .bind(limit.clamp(1, 200))
     .fetch_all(pool)
     .await?;
@@ -100,6 +115,7 @@ pub async fn list_messages(
 pub async fn load_history(
     pool: &SqlitePool,
     user_id: Uuid,
+    access: &AgentAccessPartition,
     session_id: Uuid,
 ) -> Result<Vec<Message>, sqlx::Error> {
     #[derive(FromRow)]
@@ -109,12 +125,16 @@ pub async fn load_history(
     }
 
     let mut rows = sqlx::query_as::<_, HistoryRow>(
-        "SELECT role,content FROM agent_messages \
-         WHERE user_id=$1 AND session_id=$2 AND role IN ('user','assistant') \
-         ORDER BY created_at DESC,rowid DESC LIMIT $3",
+        "SELECT m.role,m.content FROM agent_messages m \
+         JOIN agent_sessions s ON s.id=m.session_id \
+         WHERE m.user_id=$1 AND m.session_id=$2 AND s.user_id=$1 \
+           AND s.app_id=$3 AND s.scopes_json=$4 AND m.role IN ('user','assistant') \
+         ORDER BY m.created_at DESC,m.rowid DESC LIMIT $5",
     )
     .bind(user_id)
     .bind(session_id)
+    .bind(&access.app_id)
+    .bind(&access.scopes_json)
     .bind(HISTORY_LIMIT)
     .fetch_all(pool)
     .await?;
