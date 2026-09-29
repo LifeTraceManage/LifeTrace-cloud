@@ -351,7 +351,7 @@ async fn move_message(
     tokio::spawn(async move {
         let started = std::time::Instant::now();
         match reconcile
-            .sync_account_incremental(&user_id, account_id)
+            .sync_folder_role_incremental(&user_id, account_id, &destination)
             .await
         {
             Ok(messages) => {
@@ -368,7 +368,8 @@ async fn move_message(
                         messages_synced = messages,
                         duration_ms = started.elapsed().as_millis() as u64,
                         trigger = "move_reconcile",
-                        "mail background reconcile completed"
+                        destination = %destination,
+                        "mail destination reconcile completed"
                     );
                 } else {
                     tracing::debug!(
@@ -376,7 +377,8 @@ async fn move_message(
                         account_id = %account_id,
                         duration_ms = started.elapsed().as_millis() as u64,
                         trigger = "move_reconcile",
-                        "mail background reconcile completed without changes"
+                        destination = %destination,
+                        "mail destination reconcile completed without changes"
                     );
                 }
             }
@@ -385,8 +387,9 @@ async fn move_message(
                 account_id = %account_id,
                 duration_ms = started.elapsed().as_millis() as u64,
                 trigger = "move_reconcile",
+                destination = %destination,
                 error = %error,
-                "mail background reconcile failed"
+                "mail destination reconcile failed"
             ),
         }
     });
