@@ -212,32 +212,6 @@ pub struct UpdateHabitArgs {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateMemoArgs {
-    pub content: String,
-    #[serde(default)]
-    pub context: Option<String>,
-    #[serde(default)]
-    pub is_pinned: bool,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateMemoArgs {
-    pub memo_id: String,
-    #[serde(default)]
-    pub content: Option<String>,
-    #[serde(default)]
-    pub context: Option<String>,
-    #[serde(default)]
-    pub clear_context: bool,
-    #[serde(default)]
-    pub is_pinned: Option<bool>,
-    #[serde(default)]
-    pub status: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CreateWaitingItemArgs {
     pub title: String,
     #[serde(default)]
@@ -413,26 +387,6 @@ struct UpdateHabitAction {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateMemoAction {
-    entity_id: String,
-    content: String,
-    context: Option<String>,
-    is_pinned: bool,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct UpdateMemoAction {
-    memo_id: String,
-    content: Option<String>,
-    context: Option<String>,
-    clear_context: bool,
-    is_pinned: Option<bool>,
-    status: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct CreateWaitingItemAction {
     entity_id: String,
     title: String,
@@ -492,8 +446,6 @@ pub struct ProposeCreateProjectTool;
 pub struct ProposeUpdateProjectTool;
 pub struct ProposeCreateHabitTool;
 pub struct ProposeUpdateHabitTool;
-pub struct ProposeCreateMemoTool;
-pub struct ProposeUpdateMemoTool;
 pub struct ProposeCreateWaitingItemTool;
 pub struct ProposeUpdateWaitingItemTool;
 pub struct ProposeCreateReminderTool;
@@ -1147,133 +1099,6 @@ impl Tool for ProposeUpdateHabitTool {
     }
 }
 
-impl Tool for ProposeCreateMemoTool {
-    const NAME: &'static str = "lifetrace_propose_create_memo";
-    type Args = CreateMemoArgs;
-    type Output = Value;
-    type Error = ApprovalError;
-
-    fn description(&self) -> String {
-        "提出创建 LifeTrace Memo 的写操作。适合把临时想法或待整理信息放入收集箱；不会直接执行，必须由用户批准。".to_owned()
-    }
-
-    fn parameters(&self) -> Value {
-        json!({
-            "type":"object",
-            "properties":{
-                "content":{"type":"string"},
-                "context":{"type":"string"},
-                "isPinned":{"type":"boolean","default":false}
-            },
-            "required":["content"],
-            "additionalProperties":false
-        })
-    }
-
-    async fn call(
-        &self,
-        tool_context: &mut ToolContext,
-        args: Self::Args,
-    ) -> Result<Self::Output, Self::Error> {
-        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
-        require_execution_write(&ctx)?;
-        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
-        let content = bounded_required(&args.content, "content", 8_000)?;
-        let action = json!({
-            "entityId": Uuid::new_v4().to_string(),
-            "content": content,
-            "context": bounded_optional(args.context.as_deref(), 200),
-            "isPinned": args.is_pinned
-        });
-        propose(
-            &ctx,
-            Self::NAME,
-            "create_memo",
-            arguments_json,
-            action,
-            json!({"content": content.chars().take(120).collect::<String>()}),
-        )
-        .await
-    }
-}
-
-impl Tool for ProposeUpdateMemoTool {
-    const NAME: &'static str = "lifetrace_propose_update_memo";
-    type Args = UpdateMemoArgs;
-    type Output = Value;
-    type Error = ApprovalError;
-
-    fn description(&self) -> String {
-        "提出修改已有 Memo 的写操作。可修改内容、上下文、置顶或 active/archived 状态；修改前先查询确认 memoId。".to_owned()
-    }
-
-    fn parameters(&self) -> Value {
-        json!({
-            "type":"object",
-            "properties":{
-                "memoId":{"type":"string"},
-                "content":{"type":"string"},
-                "context":{"type":"string"},
-                "clearContext":{"type":"boolean","default":false},
-                "isPinned":{"type":"boolean"},
-                "status":{"type":"string","enum":["active","archived"]}
-            },
-            "required":["memoId"],
-            "additionalProperties":false
-        })
-    }
-
-    async fn call(
-        &self,
-        tool_context: &mut ToolContext,
-        args: Self::Args,
-    ) -> Result<Self::Output, Self::Error> {
-        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
-        require_execution_write(&ctx)?;
-        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
-        let memo_id = bounded_required(&args.memo_id, "memoId", 200)?;
-        let content = match args.content.as_deref() {
-            Some(value) => Some(bounded_required(value, "content", 8_000)?),
-            None => None,
-        };
-        if args.context.is_some() && args.clear_context {
-            return Err(ApprovalError::Invalid(
-                "context and clearContext cannot be used together".to_owned(),
-            ));
-        }
-        if let Some(status) = args.status.as_deref() {
-            validate_one_of(status, "status", &["active", "archived"])?;
-        }
-        if content.is_none()
-            && args.context.is_none()
-            && !args.clear_context
-            && args.is_pinned.is_none()
-            && args.status.is_none()
-        {
-            return Err(ApprovalError::Invalid(
-                "at least one memo field must be changed".to_owned(),
-            ));
-        }
-        let action = json!({
-            "memoId": memo_id,
-            "content": content,
-            "context": bounded_optional(args.context.as_deref(), 200),
-            "clearContext": args.clear_context,
-            "isPinned": args.is_pinned,
-            "status": args.status
-        });
-        propose(
-            &ctx,
-            Self::NAME,
-            "update_memo",
-            arguments_json,
-            action,
-            json!({"memoId": memo_id}),
-        )
-        .await
-    }
-}
-
 impl Tool for ProposeCreateWaitingItemTool {
     const NAME: &'static str = "lifetrace_propose_create_waiting_item";
     type Args = CreateWaitingItemArgs;
@@ -1456,14 +1281,14 @@ impl Tool for ProposeCreateReminderTool {
     type Error = ApprovalError;
 
     fn description(&self) -> String {
-        "提出为已有任务、日程、Waiting Item 或 Memo 创建提醒。必须先查询确认 subjectId；提醒时间不明确时先询问用户。".to_owned()
+        "提出为已有任务、日程或 Waiting Item 创建提醒。必须先查询确认 subjectId；提醒时间不明确时先询问用户。".to_owned()
     }
 
     fn parameters(&self) -> Value {
         json!({
             "type":"object",
             "properties":{
-                "subjectType":{"type":"string","enum":["task","calendar_event","waiting_item","memo"]},
+                "subjectType":{"type":"string","enum":["task","calendar_event","waiting_item"]},
                 "subjectId":{"type":"string"},
                 "triggerAt":{"type":"string","description":"RFC3339 timestamp"},
                 "title":{"type":"string"},
@@ -1485,7 +1310,7 @@ impl Tool for ProposeCreateReminderTool {
         validate_one_of(
             &args.subject_type,
             "subjectType",
-            &["task", "calendar_event", "waiting_item", "memo"],
+            &["task", "calendar_event", "waiting_item"],
         )?;
         let subject_id = bounded_required(&args.subject_id, "subjectId", 200)?;
         validate_optional_timestamp(Some(args.trigger_at.as_str()), "triggerAt")?;
@@ -1965,16 +1790,6 @@ async fn execute_action(
             let action: UpdateHabitAction = serde_json::from_value(approval.action_json.clone())
                 .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
             execute_update_habit(state, principal, approval, action).await
-        }
-        "create_memo" => {
-            let action: CreateMemoAction = serde_json::from_value(approval.action_json.clone())
-                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
-            execute_create_memo(state, principal, approval, action).await
-        }
-        "update_memo" => {
-            let action: UpdateMemoAction = serde_json::from_value(approval.action_json.clone())
-                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
-            execute_update_memo(state, principal, approval, action).await
         }
         "create_waiting_item" => {
             let action: CreateWaitingItemAction =
@@ -2524,131 +2339,6 @@ async fn execute_update_habit(
     .await
 }
 
-async fn execute_create_memo(
-    state: &AppState,
-    principal: &AuthenticatedPrincipal,
-    approval: &AgentApproval,
-    action: CreateMemoAction,
-) -> Result<Value, ApprovalError> {
-    if let Some(existing) = state
-        .store
-        .entity(
-            &principal.user_id,
-            EntityType::EXECUTION_MEMO,
-            &action.entity_id,
-        )
-        .await
-        .map_err(|error| ApprovalError::Execution(error.to_string()))?
-    {
-        if !existing.deleted {
-            return Ok(json!({
-                "action":"create_memo",
-                "entityType":EntityType::EXECUTION_MEMO,
-                "entityId":action.entity_id,
-                "serverVersion":existing.server_version.to_string(),
-                "alreadySatisfied":true
-            }));
-        }
-    }
-
-    let payload = json!({
-        "meta": base_meta(principal, &action.entity_id, approval.requested_at),
-        "content": action.content,
-        "plainText": action.content,
-        "isPinned": action.is_pinned,
-        "status": "active",
-        "archivedAt": null,
-        "context": action.context,
-        "tags": []
-    });
-    push_upsert(
-        state,
-        principal,
-        approval,
-        SyncUpsertAction {
-            entity_type: EntityType::EXECUTION_MEMO,
-            entity_id: action.entity_id,
-            base_server_version: ServerVersion::zero(),
-            payload,
-            change_id: format!("agent-approval-{}", approval.id),
-        },
-    )
-    .await
-}
-
-async fn execute_update_memo(
-    state: &AppState,
-    principal: &AuthenticatedPrincipal,
-    approval: &AgentApproval,
-    action: UpdateMemoAction,
-) -> Result<Value, ApprovalError> {
-    let current = state
-        .store
-        .entity(
-            &principal.user_id,
-            EntityType::EXECUTION_MEMO,
-            &action.memo_id,
-        )
-        .await
-        .map_err(|error| ApprovalError::Execution(error.to_string()))?
-        .filter(|record| !record.deleted)
-        .ok_or(ApprovalError::NotFound)?;
-    let mut payload: Value = current.payload.clone().into();
-    let object = payload.as_object_mut().ok_or_else(|| {
-        ApprovalError::Invalid("stored memo payload is not a JSON object".to_owned())
-    })?;
-
-    let mut changed = false;
-    if let Some(content) = action.content.as_ref() {
-        changed |= set_if_changed(object, "content", Value::String(content.clone()));
-        changed |= set_if_changed(object, "plainText", Value::String(content.clone()));
-    }
-    if action.clear_context {
-        changed |= set_if_changed(object, "context", Value::Null);
-    } else if let Some(context) = action.context.as_ref() {
-        changed |= set_if_changed(object, "context", Value::String(context.clone()));
-    }
-    if let Some(is_pinned) = action.is_pinned {
-        changed |= set_if_changed(object, "isPinned", Value::Bool(is_pinned));
-    }
-    if let Some(status) = action.status.as_ref() {
-        changed |= set_if_changed(object, "status", Value::String(status.clone()));
-        if status == "archived" {
-            changed |= set_if_changed(
-                object,
-                "archivedAt",
-                serde_json::to_value(approval.requested_at).unwrap_or(Value::Null),
-            );
-        } else {
-            changed |= set_if_changed(object, "archivedAt", Value::Null);
-        }
-    }
-
-    if !changed {
-        return Ok(json!({
-            "action":"update_memo",
-            "entityType":EntityType::EXECUTION_MEMO,
-            "entityId":action.memo_id,
-            "serverVersion":current.server_version.to_string(),
-            "alreadySatisfied":true
-        }));
-    }
-    update_meta_for_server_edit(&mut payload, approval.requested_at)?;
-    push_upsert(
-        state,
-        principal,
-        approval,
-        SyncUpsertAction {
-            entity_type: EntityType::EXECUTION_MEMO,
-            entity_id: action.memo_id,
-            base_server_version: ServerVersion::from_u64(current.server_version),
-            payload,
-            change_id: format!("agent-approval-{}-v{}", approval.id, current.server_version),
-        },
-    )
-    .await
-}
-
 async fn execute_create_waiting_item(
     state: &AppState,
     principal: &AuthenticatedPrincipal,
@@ -2982,7 +2672,6 @@ fn reminder_subject_entity_type(subject_type: &str) -> Result<&'static str, Appr
         "task" => Ok(EntityType::EXECUTION_TASK),
         "calendar_event" => Ok(EntityType::EXECUTION_CALENDAR_EVENT),
         "waiting_item" => Ok(EntityType::EXECUTION_WAITING_ITEM),
-        "memo" => Ok(EntityType::EXECUTION_MEMO),
         _ => Err(ApprovalError::Invalid(
             "reminder subjectType is unsupported".to_owned(),
         )),
@@ -3131,8 +2820,6 @@ fn require_principal_action_write(
         | "create_calendar_event"
         | "create_project"
         | "update_project"
-        | "create_memo"
-        | "update_memo"
         | "create_waiting_item"
         | "update_waiting_item"
         | "create_reminder"
