@@ -11,9 +11,13 @@ describe("navigation contract",()=>{
     expect(canonical(undefined)).toBe("/execute/today");
     expect(canonical("unknown")).toBe("/execute/today");
   });
-  it("keeps core app destinations outside workspace namespace",()=>{
-    const core=["/app/health","/app/fitness","/app/finance","/app/assistant","/app/settings"];
-    expect(core.every(path=>path.startsWith("/app/"))).toBe(true);
+  it("keeps first-class workspaces outside the core app namespace",()=>{
+    const workspaces=["/notes","/mail","/execute/today","/finance"];
+    expect(workspaces.every(path=>!path.startsWith("/app/"))).toBe(true);
     expect(executeViews).toContain("habits");
+  });
+  it("keeps remaining core destinations under app",()=>{
+    const core=["/app/health","/app/fitness","/app/assistant","/app/settings"];
+    expect(core.every(path=>path.startsWith("/app/"))).toBe(true);
   });
 });
