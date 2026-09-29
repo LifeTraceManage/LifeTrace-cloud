@@ -54,14 +54,9 @@ pub async fn run(
 ) -> Result<AgentRunOutput, AgentRuntimeError> {
     let user_id = ensure_cloud_user(&state.pool, &principal.user_id).await?;
     let access = AgentAccessPartition::from_principal(principal);
-    let conversation = session::ensure_session(
-        &state.pool,
-        user_id,
-        &access,
-        requested_session_id,
-        prompt,
-    )
-    .await?;
+    let conversation =
+        session::ensure_session(&state.pool, user_id, &access, requested_session_id, prompt)
+            .await?;
     let history = session::load_history(&state.pool, user_id, &access, conversation.id).await?;
 
     let configured_provider = if state.config.deepseek_api_key.is_some() {
