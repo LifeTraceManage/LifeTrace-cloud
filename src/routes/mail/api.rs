@@ -378,7 +378,7 @@ async fn move_message(
                         account_id = %account_id,
                         duration_ms = started.elapsed().as_millis() as u64,
                         trigger = "move_reconcile",
-                        destination = %destination,
+                        destination = %reconcile_destination,
                         "mail destination reconcile completed without changes"
                     );
                 }
@@ -388,7 +388,7 @@ async fn move_message(
                 account_id = %account_id,
                 duration_ms = started.elapsed().as_millis() as u64,
                 trigger = "move_reconcile",
-                destination = %destination,
+                destination = %reconcile_destination,
                 error = %error,
                 "mail destination reconcile failed"
             ),
