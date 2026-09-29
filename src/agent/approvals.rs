@@ -8,7 +8,7 @@ use lifetrace_contracts::{ChangeId, DeviceId, EntityId, EntityType, RequestId, S
 use rig::tool::{MissingToolContext, Tool, ToolContext};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, Row, SqlitePool};
 use uuid::Uuid;
 
 use crate::agent::context::{AgentAccessPartition, AgentInvocationContext};
@@ -1659,6 +1659,26 @@ pub async fn list_for_session(
     session_id: Uuid,
     limit: i64,
 ) -> Result<Vec<AgentApproval>, ApprovalError> {
+    let expired = sqlx::query(
+        "UPDATE agent_approvals SET status='expired',decided_at=CURRENT_TIMESTAMP          WHERE user_id=$1 AND session_id=$2 AND status='pending'            AND expires_at IS NOT NULL AND expires_at<=CURRENT_TIMESTAMP          RETURNING tool_call_id",
+    )
+    .bind(user_id)
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    for row in expired {
+        let tool_call_id: Option<Uuid> = row.try_get("tool_call_id")?;
+        if let Some(tool_call_id) = tool_call_id {
+            sqlx::query(
+                "UPDATE agent_tool_calls SET status='denied',error_message='approval expired',                  finished_at=CURRENT_TIMESTAMP WHERE id=$1 AND user_id=$2                    AND status='awaiting_approval'",
+            )
+            .bind(tool_call_id)
+            .bind(user_id)
+            .execute(pool)
+            .await?;
+        }
+    }
+
     let items = sqlx::query_as::<_, AgentApproval>(
         "SELECT a.id,a.run_id,a.session_id,a.tool_call_id,a.action_name,a.action_json, \
                 a.status,a.requested_at,a.decided_at,a.expires_at \
