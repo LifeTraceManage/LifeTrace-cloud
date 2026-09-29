@@ -555,10 +555,7 @@ impl Tool for ProposeCreateTaskTool {
                 "scheduledStartAt and scheduledEndAt must be provided together".to_owned(),
             ));
         }
-        if args.due_at.is_some()
-            && args.scheduled_start_at.is_none()
-            && !args.leave_unscheduled
-        {
+        if args.due_at.is_some() && args.scheduled_start_at.is_none() && !args.leave_unscheduled {
             return Err(ApprovalError::Invalid(
                 "deadline tasks require a Planner schedule; inspect existing tasks/calendar and retry with scheduledStartAt/scheduledEndAt, or set leaveUnscheduled=true only when the user explicitly asked to leave it unplanned".to_owned(),
             ));
