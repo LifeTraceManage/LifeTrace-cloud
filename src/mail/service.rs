@@ -1652,12 +1652,19 @@ impl MailService {
                 }
                 Ok(message_id)
             }
-            Err(_) => {
+            Err(error) => {
                 sqlx::query("UPDATE mail_outbox SET state='retry_wait',next_retry_at=datetime('now','+3 minutes'),updated_at=CURRENT_TIMESTAMP,last_error_code='MAIL_SEND_FAILED' WHERE id=$1")
                     .bind(existing.0)
                     .execute(&self.pool)
                     .await?;
-                Err(MailServiceError::Protocol)
+                tracing::warn!(
+                    target: "lifetrace::mail",
+                    account_id = %account_id,
+                    outbox_id = %existing.0,
+                    error = %error,
+                    "mail send failed"
+                );
+                Err(error.into())
             }
         }
     }
