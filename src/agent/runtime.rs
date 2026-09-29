@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::agent::context::{ensure_cloud_user, AgentInvocationContext};
 use crate::agent::session;
 use crate::agent::tools::{
-    load_overview, LifeTraceOverviewTool, SearchMailTool, SearchRecordsTool,
+    fail_open_tool_calls, load_overview, LifeTraceOverviewTool, SearchMailTool, SearchRecordsTool,
 };
 use crate::auth::AuthenticatedPrincipal;
 use crate::state::AppState;
@@ -107,6 +107,13 @@ pub async fn run(
         run_id,
         session_id: conversation.id,
     };
+    tracing::info!(
+        run_id = %run_id,
+        session_id = %conversation.id,
+        provider = configured_provider,
+        model = configured_model.unwrap_or(""),
+        "agent run started"
+    );
 
     let (reply, provider, model, fallback_error) = match state.config.deepseek_api_key.as_deref() {
         Some(api_key) => {
@@ -118,6 +125,8 @@ pub async fn run(
                     None,
                 ),
                 Err(error) => {
+                    let cleanup_message = format!("run interrupted: {error}");
+                    let _ = fail_open_tool_calls(&invocation, &cleanup_message).await;
                     tracing::warn!(
                         run_id = %run_id,
                         session_id = %conversation.id,
@@ -171,6 +180,14 @@ pub async fn run(
         fallback_error.as_deref(),
     )
     .await?;
+    tracing::info!(
+        run_id = %run_id,
+        session_id = %conversation.id,
+        provider = %provider,
+        model = model.as_deref().unwrap_or(""),
+        fallback = fallback_error.is_some(),
+        "agent run completed"
+    );
 
     Ok(AgentRunOutput {
         session_id: conversation.id,
