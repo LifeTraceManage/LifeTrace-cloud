@@ -17,6 +17,30 @@ const WEEKDAYS = [
   { value: 7, label: "日" },
 ] as const;
 
+type HabitScheduleFormType = "daily" | "weekdays" | "weekends" | "weekly" | "interval" | "monthly";
+
+const WEEKDAY_VALUES = [1, 2, 3, 4, 5];
+const WEEKEND_VALUES = [6, 7];
+
+function dateKeyParts(dateKey: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isInteger(year) || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year, month, day };
+}
+
+function daysBetween(startDate: string, dateKey: string): number | null {
+  const start = dateKeyParts(startDate);
+  const target = dateKeyParts(dateKey);
+  if (!start || !target) return null;
+  const startUtc = Date.UTC(start.year, start.month - 1, start.day);
+  const targetUtc = Date.UTC(target.year, target.month - 1, target.day);
+  return Math.round((targetUtc - startUtc) / 86_400_000);
+}
+
 function weekday(dateKey: string): number {
   const date = new Date(`${dateKey}T12:00:00`);
   const day = date.getDay();
@@ -26,10 +50,30 @@ function weekday(dateKey: string): number {
 export function habitScheduledOnDate(activity: JsonEntity, dateKey: string): boolean {
   const startDate = text(activity, "startDate");
   if (startDate && dateKey < startDate) return false;
-  const targetDays = Array.isArray(activity.targetDays)
-    ? activity.targetDays.map(Number).filter((day) => day >= 1 && day <= 7)
+
+  const scheduleType = text(activity, "scheduleType", "daily");
+  const rawTargetDays = Array.isArray(activity.targetDays)
+    ? activity.targetDays.map(Number).filter(Number.isFinite)
     : [];
-  if (targetDays.length) return targetDays.includes(weekday(dateKey));
+
+  if (scheduleType === "interval") {
+    const intervalDays = Math.max(1, Math.round(rawTargetDays[0] ?? 1));
+    if (!startDate) return true;
+    const elapsedDays = daysBetween(startDate, dateKey);
+    return elapsedDays !== null && elapsedDays >= 0 && elapsedDays % intervalDays === 0;
+  }
+
+  if (scheduleType === "monthly") {
+    const targetDay = Math.min(31, Math.max(1, Math.round(rawTargetDays[0] ?? Number(startDate.slice(8, 10)) || 1)));
+    const parts = dateKeyParts(dateKey);
+    return Boolean(parts && parts.day === targetDay);
+  }
+
+  const weekdayTargets = rawTargetDays.filter((day) => day >= 1 && day <= 7);
+  if (scheduleType === "weekly" || scheduleType === "custom" || weekdayTargets.length) {
+    return weekdayTargets.length ? weekdayTargets.includes(weekday(dateKey)) : true;
+  }
+
   return true;
 }
 
@@ -64,9 +108,25 @@ function targetLabel(activity: JsonEntity): string {
 }
 
 function scheduleLabel(activity: JsonEntity): string {
-  const targetDays = Array.isArray(activity.targetDays) ? activity.targetDays.map(Number) : [];
-  if (!targetDays.length) return "每天";
-  const labels = WEEKDAYS.filter((day) => targetDays.includes(day.value)).map((day) => `周${day.label}`);
+  const scheduleType = text(activity, "scheduleType", "daily");
+  const targetDays = Array.isArray(activity.targetDays) ? activity.targetDays.map(Number).filter(Number.isFinite) : [];
+
+  if (scheduleType === "interval") {
+    const intervalDays = Math.max(1, Math.round(targetDays[0] ?? 1));
+    return intervalDays === 1 ? "每天" : `每 ${intervalDays} 天`;
+  }
+
+  if (scheduleType === "monthly") {
+    const targetDay = Math.min(31, Math.max(1, Math.round(targetDays[0] ?? Number(text(activity, "startDate").slice(8, 10)) || 1)));
+    return `每月 ${targetDay} 日`;
+  }
+
+  const weekdayTargets = targetDays.filter((day) => day >= 1 && day <= 7);
+  if (!weekdayTargets.length) return "每天";
+  if (WEEKDAY_VALUES.every((day) => weekdayTargets.includes(day)) && weekdayTargets.length === WEEKDAY_VALUES.length) return "工作日";
+  if (WEEKEND_VALUES.every((day) => weekdayTargets.includes(day)) && weekdayTargets.length === WEEKEND_VALUES.length) return "周末";
+
+  const labels = WEEKDAYS.filter((day) => weekdayTargets.includes(day.value)).map((day) => `周${day.label}`);
   return labels.join("、");
 }
 
@@ -80,8 +140,10 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
   const [normalTarget, setNormalTarget] = useState("1");
   const [minimumTarget, setMinimumTarget] = useState("");
   const [unit, setUnit] = useState("次");
-  const [scheduleType, setScheduleType] = useState<"daily" | "custom">("daily");
+  const [scheduleType, setScheduleType] = useState<HabitScheduleFormType>("daily");
   const [targetDays, setTargetDays] = useState<number[]>([]);
+  const [intervalDays, setIntervalDays] = useState("2");
+  const [monthDay, setMonthDay] = useState(String(Number(todayKey().slice(8, 10))));
   const [startDate, setStartDate] = useState(todayKey());
   const [description, setDescription] = useState("");
 
@@ -99,6 +161,8 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
     setUnit("次");
     setScheduleType("daily");
     setTargetDays([]);
+    setIntervalDays("2");
+    setMonthDay(String(Number(todayKey().slice(8, 10))));
     setStartDate(todayKey());
     setDescription("");
   }
@@ -126,19 +190,34 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
   async function add(event: FormEvent) {
     event.preventDefault();
     if (!session) return;
-    if (scheduleType === "custom" && targetDays.length === 0) return;
+    if (scheduleType === "weekly" && targetDays.length === 0) return;
 
     const target = Math.max(0.01, Number(normalTarget) || 1);
     const minimum = minimumTarget.trim() ? Math.max(0, Number(minimumTarget) || 0) : null;
+    const resolvedIntervalDays = Math.min(365, Math.max(1, Math.round(Number(intervalDays) || 1)));
+    const resolvedMonthDay = Math.min(31, Math.max(1, Math.round(Number(monthDay) || 1)));
+
+    const persistedSchedule = scheduleType === "weekdays"
+      ? { scheduleType: "weekly", targetPeriod: "daily", targetDays: WEEKDAY_VALUES }
+      : scheduleType === "weekends"
+        ? { scheduleType: "weekly", targetPeriod: "daily", targetDays: WEEKEND_VALUES }
+        : scheduleType === "weekly"
+          ? { scheduleType: "weekly", targetPeriod: "daily", targetDays }
+          : scheduleType === "interval"
+            ? { scheduleType: "interval", targetPeriod: "daily", targetDays: [resolvedIntervalDays] }
+            : scheduleType === "monthly"
+              ? { scheduleType: "monthly", targetPeriod: "monthly", targetDays: [resolvedMonthDay] }
+              : { scheduleType: "daily", targetPeriod: "daily", targetDays: [] as number[] };
+
     await upsert("habit.activity", createHabitActivity(session.user.id, session.session.deviceId, {
       name,
       activityType,
       unit,
       minimumTarget: minimum,
       normalTarget: target,
-      targetPeriod: "daily",
-      targetDays: scheduleType === "custom" ? targetDays : [],
-      scheduleType,
+      targetPeriod: persistedSchedule.targetPeriod,
+      targetDays: persistedSchedule.targetDays,
+      scheduleType: persistedSchedule.scheduleType,
       startDate,
       checkinMethod: "manual",
       description,
@@ -239,32 +318,64 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
             <label className="space-y-1.5 text-sm">
               <span className="font-medium">执行频率</span>
               <Select value={scheduleType} onChange={(event) => {
-                const next = event.target.value as "daily" | "custom";
+                const next = event.target.value as HabitScheduleFormType;
                 setScheduleType(next);
-                if (next === "daily") setTargetDays([]);
+                if (next !== "weekly") setTargetDays([]);
               }}>
                 <option value="daily">每天</option>
-                <option value="custom">指定星期</option>
+                <option value="weekdays">工作日（周一至周五）</option>
+                <option value="weekends">周末（周六、周日）</option>
+                <option value="weekly">指定星期</option>
+                <option value="interval">每 N 天</option>
+                <option value="monthly">每月指定日期</option>
               </Select>
             </label>
 
             <div className="space-y-1.5 text-sm">
-              <span className="font-medium">执行日</span>
+              <span className="font-medium">循环设置</span>
               <div className="flex min-h-10 flex-wrap items-center gap-2">
-                {scheduleType === "daily"
-                  ? <span className="text-sm text-muted-foreground">每天执行</span>
-                  : WEEKDAYS.map((day) => <button
-                    key={day.value}
-                    type="button"
-                    onClick={() => toggleTargetDay(day.value)}
-                    className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-xs",
-                      targetDays.includes(day.value) ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
-                    )}
-                  >{day.label}</button>)}
+                {scheduleType === "daily" ? <span className="text-sm text-muted-foreground">每天执行</span> : null}
+                {scheduleType === "weekdays" ? <span className="text-sm text-muted-foreground">周一至周五执行</span> : null}
+                {scheduleType === "weekends" ? <span className="text-sm text-muted-foreground">周六、周日执行</span> : null}
+                {scheduleType === "weekly" ? WEEKDAYS.map((day) => <button
+                  key={day.value}
+                  type="button"
+                  onClick={() => toggleTargetDay(day.value)}
+                  className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-xs",
+                    targetDays.includes(day.value) ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
+                  )}
+                >{day.label}</button>) : null}
+                {scheduleType === "interval" ? <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">每</span>
+                  <Input
+                    className="w-24"
+                    type="number"
+                    min="1"
+                    max="365"
+                    step="1"
+                    value={intervalDays}
+                    onChange={(event) => setIntervalDays(event.target.value)}
+                    aria-label="间隔天数"
+                  />
+                  <span className="text-muted-foreground">天执行一次</span>
+                </div> : null}
+                {scheduleType === "monthly" ? <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">每月</span>
+                  <Select className="w-28" value={monthDay} onChange={(event) => setMonthDay(event.target.value)} aria-label="每月执行日期">
+                    {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <option key={day} value={day}>{day} 日</option>)}
+                  </Select>
+                  <span className="text-muted-foreground">执行</span>
+                </div> : null}
               </div>
-              {scheduleType === "custom" && targetDays.length === 0
+              {scheduleType === "weekly" && targetDays.length === 0
                 ? <div className="text-xs text-destructive">至少选择一个执行日</div>
+                : null}
+              {scheduleType === "interval"
+                ? <div className="text-xs text-muted-foreground">从开始日期起按固定天数间隔循环。</div>
+                : null}
+              {scheduleType === "monthly"
+                ? <div className="text-xs text-muted-foreground">若当月没有该日期（例如 2 月 30 日），当月跳过。</div>
                 : null}
             </div>
 
@@ -281,7 +392,7 @@ export function HabitsPanel({ embedded = false }: { embedded?: boolean }) {
 
         <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
           <Button variant="ghost" onClick={() => { resetForm(); setShowNew(false); }}>取消</Button>
-          <Button type="submit" disabled={!name.trim() || (scheduleType === "custom" && targetDays.length === 0)}>创建习惯</Button>
+          <Button type="submit" disabled={!name.trim() || (scheduleType === "weekly" && targetDays.length === 0)}>创建习惯</Button>
         </div>
       </form>
     </Dialog>
