@@ -11,7 +11,6 @@ const HealthPage = lazy(() => import("../features/health/HealthPage").then((modu
 const NotesPage = lazy(() => import("../features/notes/NotesPage").then((module) => ({ default: module.NotesPage })));
 const MailPage = lazy(() => import("../features/mail/MailPage").then((module) => ({ default: module.MailPage })));
 const FinanceWorkspace = lazy(() => import("../features/finance/FinanceWorkspace").then((module) => ({ default: module.FinanceWorkspace })));
-const FinanceTransactionsPage = lazy(() => import("../features/finance/FinanceTransactionsPage").then((module) => ({ default: module.FinanceTransactionsPage })));
 const AssistantPage = lazy(() => import("../features/assistant/AssistantPage").then((module) => ({ default: module.AssistantPage })));
 const SearchPage = lazy(() => import("../features/search/SearchPage").then((module) => ({ default: module.SearchPage })));
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
@@ -55,11 +54,18 @@ function ProtectedShell() {
   return <RequireAuth><AppShell /></RequireAuth>;
 }
 
+function LegacyFinanceRedirect() {
+  const location = useLocation();
+  const pathname = location.pathname.replace(/^\/app\/finance/, "/finance");
+  return <Navigate to={`${pathname || "/finance"}${location.search}${location.hash}`} replace />;
+}
+
 export const router = createBrowserRouter([
   { path: "/", element: <RequireAuth>{withSuspense(<PortalPage />)}</RequireAuth> },
   { path: "/login", element: withSuspense(<LoginPage />) },
   { path: "/notes/*", element: <RequireAuth>{withSuspense(<NotesPage />)}</RequireAuth> },
   { path: "/mail/*", element: <RequireAuth>{withSuspense(<MailPage />)}</RequireAuth> },
+  { path: "/finance/*", element: <RequireAuth>{withSuspense(<FinanceWorkspace />)}</RequireAuth> },
   { path: "/execute", element: <Navigate to="/execute/today" replace /> },
   { path: "/execute/:view", element: <RequireAuth>{withSuspense(<ExecutionWorkspace />)}</RequireAuth> },
   { path: "/execute/*", element: <Navigate to="/execute/today" replace /> },
@@ -76,8 +82,7 @@ export const router = createBrowserRouter([
       { path: "health", element: withSuspense(<HealthPage />) },
       { path: "notes", element: <Navigate to="/notes" replace /> },
       { path: "review", element: <Navigate to="/execute/review" replace /> },
-      { path: "finance/transactions", element: withSuspense(<FinanceTransactionsPage />) },
-      { path: "finance/*", element: withSuspense(<FinanceWorkspace />) },
+      { path: "finance/*", element: <LegacyFinanceRedirect /> },
       { path: "assistant", element: withSuspense(<AssistantPage />) },
       { path: "search", element: withSuspense(<SearchPage />) },
       { path: "settings/*", element: withSuspense(<SettingsPage />) },
