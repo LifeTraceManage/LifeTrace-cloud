@@ -14,6 +14,12 @@ function approvalLabel(approval: AssistantApproval): string {
   if (approval.actionName === "update_project") return "修改 Project";
   if (approval.actionName === "create_habit") return "创建习惯";
   if (approval.actionName === "update_habit") return "修改习惯";
+  if (approval.actionName === "create_memo") return "创建 Memo";
+  if (approval.actionName === "update_memo") return "修改 Memo";
+  if (approval.actionName === "create_waiting_item") return "创建 Waiting Item";
+  if (approval.actionName === "update_waiting_item") return "修改 Waiting Item";
+  if (approval.actionName === "create_reminder") return "创建提醒";
+  if (approval.actionName === "update_reminder") return "修改提醒";
   return approval.actionName;
 }
 
@@ -71,6 +77,47 @@ function approvalSummary(approval: AssistantApproval): string {
       action.isArchived === true ? "归档" : action.isArchived === false ? "取消归档" : "",
     ].filter(Boolean);
     return parts.length ? parts.join(" · ") : `习惯 ${String(action.habitId ?? "")}`;
+  }
+  if (approval.actionName === "create_memo") {
+    const content = typeof action.content === "string" ? action.content : "空 Memo";
+    return content.length > 100 ? `${content.slice(0, 100)}…` : content;
+  }
+  if (approval.actionName === "update_memo") {
+    const parts = [
+      typeof action.content === "string" ? "修改内容" : "",
+      action.isPinned === true ? "置顶" : action.isPinned === false ? "取消置顶" : "",
+      typeof action.status === "string" ? `状态 → ${action.status}` : "",
+      action.clearContext === true ? "清除上下文" : "",
+    ].filter(Boolean);
+    return parts.length ? parts.join(" · ") : `Memo ${String(action.memoId ?? "")}`;
+  }
+  if (approval.actionName === "create_waiting_item") {
+    const titleValue = typeof action.title === "string" ? action.title : "未命名等待事项";
+    const waitingFor = typeof action.waitingFor === "string" ? ` · 等待 ${action.waitingFor}` : "";
+    return `${titleValue}${waitingFor}`;
+  }
+  if (approval.actionName === "update_waiting_item") {
+    const parts = [
+      typeof action.title === "string" ? `标题 → ${action.title}` : "",
+      typeof action.waitingFor === "string" ? `等待 → ${action.waitingFor}` : "",
+      typeof action.status === "string" ? `状态 → ${action.status}` : "",
+      typeof action.followUpAt === "string" ? `跟进 → ${new Date(action.followUpAt).toLocaleString()}` : "",
+    ].filter(Boolean);
+    return parts.length ? parts.join(" · ") : `Waiting Item ${String(action.waitingItemId ?? "")}`;
+  }
+  if (approval.actionName === "create_reminder") {
+    const subject = `${String(action.subjectType ?? "对象")} ${String(action.subjectId ?? "")}`;
+    const trigger = typeof action.triggerAt === "string" ? new Date(action.triggerAt).toLocaleString() : "";
+    return `${subject}${trigger ? ` · ${trigger}` : ""}`;
+  }
+  if (approval.actionName === "update_reminder") {
+    const parts = [
+      typeof action.triggerAt === "string" ? `提醒时间 → ${new Date(action.triggerAt).toLocaleString()}` : "",
+      typeof action.snoozedUntil === "string" ? `稍后提醒 → ${new Date(action.snoozedUntil).toLocaleString()}` : "",
+      typeof action.status === "string" ? `状态 → ${action.status}` : "",
+      action.clearSnooze === true ? "清除稍后提醒" : "",
+    ].filter(Boolean);
+    return parts.length ? parts.join(" · ") : `Reminder ${String(action.reminderId ?? "")}`;
   }
   return "待确认写操作";
 }
