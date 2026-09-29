@@ -203,6 +203,12 @@ impl Tool for ProposeCreateTaskTool {
     ) -> Result<Self::Output, Self::Error> {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
+        let arguments_json =
+            serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let arguments_json =
+            serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let arguments_json =
+            serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
 
         let title = bounded_required(&args.title, "title", 300)?;
         let priority = args.priority.unwrap_or_else(|| "normal".to_owned());
@@ -233,7 +239,7 @@ impl Tool for ProposeCreateTaskTool {
             &ctx,
             Self::NAME,
             "create_task",
-            &args,
+            arguments_json,
             action,
             json!({"title": title, "priority": priority}),
         )
@@ -319,7 +325,7 @@ impl Tool for ProposeUpdateTaskTool {
             &ctx,
             Self::NAME,
             "update_task",
-            &args,
+            arguments_json,
             action,
             json!({"taskId": task_id}),
         )
@@ -399,7 +405,7 @@ impl Tool for ProposeCreateCalendarEventTool {
             &ctx,
             Self::NAME,
             "create_calendar_event",
-            &args,
+            arguments_json,
             action,
             json!({"title": title, "isAllDay": args.is_all_day}),
         )
@@ -407,17 +413,16 @@ impl Tool for ProposeCreateCalendarEventTool {
     }
 }
 
-async fn propose<T: Serialize>(
+async fn propose(
     ctx: &AgentInvocationContext,
     tool_name: &str,
     action_name: &str,
-    args: &T,
+    arguments_json: String,
     action: Value,
     preview: Value,
 ) -> Result<Value, ApprovalError> {
     let tool_call_id = Uuid::new_v4();
     let approval_id = Uuid::new_v4();
-    let arguments = serde_json::to_string(args).unwrap_or_else(|_| "{}".to_owned());
     let action_json = serde_json::to_string(&action).unwrap_or_else(|_| "{}".to_owned());
     let mut tx = ctx.pool.begin().await?;
 
@@ -431,7 +436,7 @@ async fn propose<T: Serialize>(
     .bind(ctx.session_id)
     .bind(ctx.user_id)
     .bind(tool_name)
-    .bind(arguments)
+    .bind(arguments_json)
     .execute(&mut *tx)
     .await?;
 
