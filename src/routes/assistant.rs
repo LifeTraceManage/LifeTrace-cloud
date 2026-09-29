@@ -120,10 +120,15 @@ async fn list_messages(
         .await
         .map_err(map_database_error)?;
     let access = context::AgentAccessPartition::from_principal(&principal);
-    let items =
-        session::list_messages(&state.pool, user_id, &access, session_id, query.limit.unwrap_or(100))
-            .await
-            .map_err(map_database_error)?;
+    let items = session::list_messages(
+        &state.pool,
+        user_id,
+        &access,
+        session_id,
+        query.limit.unwrap_or(100),
+    )
+    .await
+    .map_err(map_database_error)?;
     Ok(Json(Items { items }))
 }
 
