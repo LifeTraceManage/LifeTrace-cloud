@@ -4,6 +4,7 @@
 //! defined by `lifetrace-contracts`; domain-specific HTTP adapters are grouped
 //! behind explicit modules.
 
+pub mod agent;
 pub mod auth;
 pub mod beecount;
 
