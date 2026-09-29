@@ -304,7 +304,7 @@ async fn database_section(
                 state,
                 principal,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',id,'title',title,'status',status,'appId',app_id,'scopes',json(scopes_json),
+                    'id',CASE WHEN typeof(id)='blob' THEN lower(hex(id)) ELSE id END,'title',title,'status',status,'appId',app_id,'scopes',json(scopes_json),
                     'createdAt',created_at,'updatedAt',updated_at,'lastMessageAt',last_message_at
                 )), '[]') FROM agent_sessions
                 WHERE user_id=$1 AND app_id=$2 AND scopes_json=$3
@@ -316,7 +316,9 @@ async fn database_section(
                 state,
                 principal,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',m.id,'sessionId',m.session_id,'runId',m.run_id,'role',m.role,'content',m.content,
+                    'id',CASE WHEN typeof(m.id)='blob' THEN lower(hex(m.id)) ELSE m.id END,
+                    'sessionId',CASE WHEN typeof(m.session_id)='blob' THEN lower(hex(m.session_id)) ELSE m.session_id END,
+                    'runId',CASE WHEN m.run_id IS NULL THEN NULL WHEN typeof(m.run_id)='blob' THEN lower(hex(m.run_id)) ELSE m.run_id END,'role',m.role,'content',m.content,
                     'provider',m.provider,'metadata',json(m.metadata_json),'createdAt',m.created_at
                 )), '[]') FROM agent_messages m
                 JOIN agent_sessions s ON s.id=m.session_id
@@ -329,7 +331,8 @@ async fn database_section(
                 state,
                 principal,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',r.id,'sessionId',r.session_id,'status',r.status,'provider',r.provider,'model',r.model,
+                    'id',CASE WHEN typeof(r.id)='blob' THEN lower(hex(r.id)) ELSE r.id END,
+                    'sessionId',CASE WHEN typeof(r.session_id)='blob' THEN lower(hex(r.session_id)) ELSE r.session_id END,'status',r.status,'provider',r.provider,'model',r.model,
                     'prompt',r.prompt,'errorCode',r.error_code,'errorMessage',r.error_message,
                     'createdAt',r.created_at,'startedAt',r.started_at,'finishedAt',r.finished_at
                 )), '[]') FROM agent_runs r
@@ -343,7 +346,9 @@ async fn database_section(
                 state,
                 principal,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',t.id,'runId',t.run_id,'sessionId',t.session_id,'toolName',t.tool_name,
+                    'id',CASE WHEN typeof(t.id)='blob' THEN lower(hex(t.id)) ELSE t.id END,
+                    'runId',CASE WHEN typeof(t.run_id)='blob' THEN lower(hex(t.run_id)) ELSE t.run_id END,
+                    'sessionId',CASE WHEN typeof(t.session_id)='blob' THEN lower(hex(t.session_id)) ELSE t.session_id END,'toolName',t.tool_name,
                     'arguments',json(t.arguments_json),'status',t.status,'result',json(t.result_json),
                     'errorMessage',t.error_message,'requiresApproval',t.requires_approval,
                     'startedAt',t.started_at,'finishedAt',t.finished_at
@@ -358,7 +363,10 @@ async fn database_section(
                 state,
                 principal,
                 "SELECT COALESCE(json_group_array(json_object(
-                    'id',a.id,'runId',a.run_id,'sessionId',a.session_id,'toolCallId',a.tool_call_id,
+                    'id',CASE WHEN typeof(a.id)='blob' THEN lower(hex(a.id)) ELSE a.id END,
+                    'runId',CASE WHEN typeof(a.run_id)='blob' THEN lower(hex(a.run_id)) ELSE a.run_id END,
+                    'sessionId',CASE WHEN typeof(a.session_id)='blob' THEN lower(hex(a.session_id)) ELSE a.session_id END,
+                    'toolCallId',CASE WHEN a.tool_call_id IS NULL THEN NULL WHEN typeof(a.tool_call_id)='blob' THEN lower(hex(a.tool_call_id)) ELSE a.tool_call_id END,
                     'actionName',a.action_name,'action',json(a.action_json),'status',a.status,
                     'requestedAt',a.requested_at,'decidedAt',a.decided_at,'expiresAt',a.expires_at
                 )), '[]') FROM agent_approvals a
