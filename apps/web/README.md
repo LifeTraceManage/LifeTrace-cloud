@@ -18,6 +18,18 @@ npm test
 npm run build
 ```
 
+## Workspace routes
+
+Web 使用统一账号和会话，但复杂业务采用独立 Workspace 路由：
+
+- `/notes`：Notes
+- `/mail`：Mail
+- `/execute/*`：Execute
+- `/finance/*`：Finance（BeeCount Cloud Web）
+- `/app/*`：仍由 LifeTrace Core 承载的健康、健身、Assistant、设置等功能
+
+Finance 不再挂载在 Core AppShell 下；旧的 `/app/finance/*` 地址仅作为兼容入口并重定向到 `/finance/*`。
+
 ## Production
 
 Web 使用独立镜像：
