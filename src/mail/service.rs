@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
+use std::time::Instant;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::{Duration, Utc};
@@ -42,8 +43,8 @@ pub enum MailServiceError {
     DestinationUnavailable,
     #[error("mail credential is unavailable")]
     Credential,
-    #[error("mail protocol operation failed")]
-    Protocol,
+    #[error("mail protocol operation failed: {0}")]
+    Protocol(MailProtocolError),
     #[error("mail database operation failed")]
     Database,
     #[error("mail message parse failed")]
@@ -65,9 +66,17 @@ impl From<CredentialError> for MailServiceError {
 }
 
 impl From<MailProtocolError> for MailServiceError {
-    fn from(_: MailProtocolError) -> Self {
-        Self::Protocol
+    fn from(error: MailProtocolError) -> Self {
+        Self::Protocol(error)
     }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct MailSyncStats {
+    pub attempted: usize,
+    pub succeeded: usize,
+    pub failed: usize,
+    pub messages_synced: usize,
 }
 
 #[derive(Clone)]
@@ -464,7 +473,7 @@ impl MailService {
             .await
     }
 
-    pub async fn sync_due_accounts(&self, limit: i64) -> Result<usize, MailServiceError> {
+    pub async fn sync_due_accounts(&self, limit: i64) -> Result<MailSyncStats, MailServiceError> {
         let accounts = sqlx::query_as::<_, (Uuid, Uuid)>(
             r#"
             SELECT user_id,id FROM mail_accounts
@@ -476,13 +485,29 @@ impl MailService {
         .bind(limit.clamp(1, 100))
         .fetch_all(&self.pool)
         .await?;
-        let mut synced = 0;
+        let mut stats = MailSyncStats {
+            attempted: accounts.len(),
+            ..MailSyncStats::default()
+        };
         for (user_id, account_id) in accounts {
-            if self.sync_account_uuid(user_id, account_id, false).await.is_ok() {
-                synced += 1;
+            match self.sync_account_uuid(user_id, account_id, false).await {
+                Ok(messages) => {
+                    stats.succeeded += 1;
+                    stats.messages_synced += messages;
+                }
+                Err(error) => {
+                    stats.failed += 1;
+                    tracing::warn!(
+                        target: "lifetrace::mail",
+                        account_id = %account_id,
+                        user_id = %user_id,
+                        error = %error,
+                        "mail polling account sync failed"
+                    );
+                }
             }
         }
-        Ok(synced)
+        Ok(stats)
     }
 
     async fn sync_account_uuid(
@@ -511,6 +536,7 @@ impl MailService {
         }
 
         let mut total = 0;
+        let mut failed_folders = 0usize;
         let initial_since = Utc::now() - Duration::days(30);
         for folder in folders {
             let job_id = Uuid::new_v4();
@@ -557,6 +583,15 @@ impl MailService {
                     .await?;
                 }
                 Err(error) => {
+                    failed_folders += 1;
+                    tracing::warn!(
+                        target: "lifetrace::mail",
+                        account_id = %account_id,
+                        folder_id = %folder.id,
+                        folder_role = %folder.normalized_role,
+                        error = %error,
+                        "mail folder sync failed"
+                    );
                     sqlx::query("UPDATE mail_sync_jobs SET state='retry_wait',attempt=attempt+1,finished_at=CURRENT_TIMESTAMP,next_retry_at=datetime('now','+3 minutes'),error_code='MAIL_SYNC_FAILED',error_detail_redacted=$2 WHERE id=$1")
                         .bind(job_id)
                         .bind(error.to_string())
@@ -570,6 +605,15 @@ impl MailService {
             .bind(account_id)
             .execute(&self.pool)
             .await?;
+        if failed_folders > 0 {
+            tracing::warn!(
+                target: "lifetrace::mail",
+                account_id = %account_id,
+                failed_folders,
+                messages_synced = total,
+                "mail account sync completed with folder failures"
+            );
+        }
         Ok(total)
     }
 
@@ -788,7 +832,7 @@ impl MailService {
         user_id: &UserId,
         message_id: Uuid,
         destination_role: &str,
-    ) -> Result<(), MailServiceError> {
+    ) -> Result<Uuid, MailServiceError> {
         if !matches!(destination_role, "archive" | "trash" | "inbox") {
             return Err(MailServiceError::DestinationUnavailable);
         }
@@ -810,28 +854,59 @@ impl MailService {
             }
         })?;
 
-        let account = self.account_secret(user_id, remote.account_id).await?;
+        let account_id = remote.account_id;
+        let started = Instant::now();
+        tracing::info!(
+            target: "lifetrace::mail",
+            action = "move",
+            message_id = %message_id,
+            account_id = %account_id,
+            destination = destination_role,
+            "mail move started"
+        );
+        let account = self.account_secret(user_id, account_id).await?;
         let secret = self.decrypt_secret(&account)?;
-        protocol::move_message(
+        if let Err(error) = protocol::move_message(
             account,
             secret,
             remote.folder_name,
             remote.uid as u32,
             destination_name,
         )
-        .await?;
+        .await
+        {
+            tracing::warn!(
+                target: "lifetrace::mail",
+                action = "move",
+                message_id = %message_id,
+                account_id = %account_id,
+                destination = destination_role,
+                duration_ms = started.elapsed().as_millis() as u64,
+                error = %error,
+                "mail move failed"
+            );
+            return Err(error.into());
+        }
 
-        // A remote MOVE may allocate a new UID in the destination folder. Remove
-        // the stale local row and immediately reconcile the account so we never
-        // keep a row with an invalid (folder, UID) tuple.
+        // The remote MOVE may allocate a new destination UID. Remove the stale
+        // source row immediately. Destination reconciliation runs asynchronously
+        // at the route layer so the user action is not blocked by a full account sync.
         sqlx::query("DELETE FROM mail_messages WHERE user_id=$1 AND id=$2")
             .bind(user_id)
             .bind(message_id)
             .execute(&self.pool)
             .await?;
         refresh_thread_pool(&self.pool, remote.thread_id).await?;
-        let _ = self.sync_account_uuid(user_id, remote.account_id, false).await;
-        Ok(())
+        tracing::info!(
+            target: "lifetrace::mail",
+            action = "move",
+            message_id = %message_id,
+            account_id = %account_id,
+            destination = destination_role,
+            duration_ms = started.elapsed().as_millis() as u64,
+            "mail move completed"
+        );
+        Ok(account_id)
     }
 
     pub async fn archive_message(
@@ -839,7 +914,9 @@ impl MailService {
         user_id: &UserId,
         message_id: Uuid,
     ) -> Result<(), MailServiceError> {
-        self.move_message(user_id, message_id, "archive").await
+        self.move_message(user_id, message_id, "archive")
+            .await
+            .map(|_| ())
     }
 
     async fn remote_message_ref(
