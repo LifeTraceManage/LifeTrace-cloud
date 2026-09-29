@@ -357,7 +357,9 @@ impl Config {
         }
         if self.model_api_key.is_some() {
             if self.model_name.trim().is_empty() {
-                return Err("MODEL_NAME must not be empty when MODEL_API_KEY is configured".to_owned());
+                return Err(
+                    "MODEL_NAME must not be empty when MODEL_API_KEY is configured".to_owned(),
+                );
             }
             let base_url = self.model_base_url.trim();
             if base_url.is_empty()
