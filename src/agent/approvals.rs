@@ -1882,6 +1882,38 @@ async fn execute_action(
                 .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
             execute_update_habit(state, principal, approval, action).await
         }
+        "create_memo" => {
+            let action: CreateMemoAction = serde_json::from_value(approval.action_json.clone())
+                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_create_memo(state, principal, approval, action).await
+        }
+        "update_memo" => {
+            let action: UpdateMemoAction = serde_json::from_value(approval.action_json.clone())
+                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_update_memo(state, principal, approval, action).await
+        }
+        "create_waiting_item" => {
+            let action: CreateWaitingItemAction =
+                serde_json::from_value(approval.action_json.clone())
+                    .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_create_waiting_item(state, principal, approval, action).await
+        }
+        "update_waiting_item" => {
+            let action: UpdateWaitingItemAction =
+                serde_json::from_value(approval.action_json.clone())
+                    .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_update_waiting_item(state, principal, approval, action).await
+        }
+        "create_reminder" => {
+            let action: CreateReminderAction = serde_json::from_value(approval.action_json.clone())
+                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_create_reminder(state, principal, approval, action).await
+        }
+        "update_reminder" => {
+            let action: UpdateReminderAction = serde_json::from_value(approval.action_json.clone())
+                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_update_reminder(state, principal, approval, action).await
+        }
         other => Err(ApprovalError::Invalid(format!(
             "unsupported action name: {other}"
         ))),
@@ -2394,6 +2426,475 @@ async fn execute_update_habit(
     .await
 }
 
+
+async fn execute_create_memo(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: CreateMemoAction,
+) -> Result<Value, ApprovalError> {
+    if let Some(existing) = state
+        .store
+        .entity(
+            &principal.user_id,
+            EntityType::EXECUTION_MEMO,
+            &action.entity_id,
+        )
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+    {
+        if !existing.deleted {
+            return Ok(json!({
+                "action":"create_memo",
+                "entityType":EntityType::EXECUTION_MEMO,
+                "entityId":action.entity_id,
+                "serverVersion":existing.server_version.to_string(),
+                "alreadySatisfied":true
+            }));
+        }
+    }
+
+    let payload = json!({
+        "meta": base_meta(principal, &action.entity_id, approval.requested_at),
+        "content": action.content,
+        "plainText": action.content,
+        "isPinned": action.is_pinned,
+        "status": "active",
+        "archivedAt": null,
+        "context": action.context,
+        "tags": []
+    });
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_MEMO,
+            entity_id: action.entity_id,
+            base_server_version: ServerVersion::zero(),
+            payload,
+            change_id: format!("agent-approval-{}", approval.id),
+        },
+    )
+    .await
+}
+
+async fn execute_update_memo(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: UpdateMemoAction,
+) -> Result<Value, ApprovalError> {
+    let current = state
+        .store
+        .entity(
+            &principal.user_id,
+            EntityType::EXECUTION_MEMO,
+            &action.memo_id,
+        )
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+        .filter(|record| !record.deleted)
+        .ok_or(ApprovalError::NotFound)?;
+    let mut payload: Value = current.payload.clone().into();
+    let object = payload.as_object_mut().ok_or_else(|| {
+        ApprovalError::Invalid("stored memo payload is not a JSON object".to_owned())
+    })?;
+
+    let mut changed = false;
+    if let Some(content) = action.content.as_ref() {
+        changed |= set_if_changed(object, "content", Value::String(content.clone()));
+        changed |= set_if_changed(object, "plainText", Value::String(content.clone()));
+    }
+    if action.clear_context {
+        changed |= set_if_changed(object, "context", Value::Null);
+    } else if let Some(context) = action.context.as_ref() {
+        changed |= set_if_changed(object, "context", Value::String(context.clone()));
+    }
+    if let Some(is_pinned) = action.is_pinned {
+        changed |= set_if_changed(object, "isPinned", Value::Bool(is_pinned));
+    }
+    if let Some(status) = action.status.as_ref() {
+        changed |= set_if_changed(object, "status", Value::String(status.clone()));
+        if status == "archived" {
+            changed |= set_if_changed(
+                object,
+                "archivedAt",
+                serde_json::to_value(approval.requested_at).unwrap_or(Value::Null),
+            );
+        } else {
+            changed |= set_if_changed(object, "archivedAt", Value::Null);
+        }
+    }
+
+    if !changed {
+        return Ok(json!({
+            "action":"update_memo",
+            "entityType":EntityType::EXECUTION_MEMO,
+            "entityId":action.memo_id,
+            "serverVersion":current.server_version.to_string(),
+            "alreadySatisfied":true
+        }));
+    }
+    update_meta_for_server_edit(&mut payload, approval.requested_at)?;
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_MEMO,
+            entity_id: action.memo_id,
+            base_server_version: ServerVersion::from_u64(current.server_version),
+            payload,
+            change_id: format!("agent-approval-{}-v{}", approval.id, current.server_version),
+        },
+    )
+    .await
+}
+
+async fn execute_create_waiting_item(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: CreateWaitingItemAction,
+) -> Result<Value, ApprovalError> {
+    if let Some(existing) = state
+        .store
+        .entity(
+            &principal.user_id,
+            EntityType::EXECUTION_WAITING_ITEM,
+            &action.entity_id,
+        )
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+    {
+        if !existing.deleted {
+            return Ok(json!({
+                "action":"create_waiting_item",
+                "entityType":EntityType::EXECUTION_WAITING_ITEM,
+                "entityId":action.entity_id,
+                "serverVersion":existing.server_version.to_string(),
+                "alreadySatisfied":true
+            }));
+        }
+    }
+
+    let payload = json!({
+        "meta": base_meta(principal, &action.entity_id, approval.requested_at),
+        "title": action.title,
+        "description": action.description,
+        "status": "open",
+        "waitingFor": action.waiting_for,
+        "expectedAt": action.expected_at,
+        "followUpAt": action.follow_up_at,
+        "resolvedAt": null,
+        "resolutionSummary": null,
+        "sourceTaskId": action.source_task_id
+    });
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_WAITING_ITEM,
+            entity_id: action.entity_id,
+            base_server_version: ServerVersion::zero(),
+            payload,
+            change_id: format!("agent-approval-{}", approval.id),
+        },
+    )
+    .await
+}
+
+async fn execute_update_waiting_item(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: UpdateWaitingItemAction,
+) -> Result<Value, ApprovalError> {
+    let current = state
+        .store
+        .entity(
+            &principal.user_id,
+            EntityType::EXECUTION_WAITING_ITEM,
+            &action.waiting_item_id,
+        )
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+        .filter(|record| !record.deleted)
+        .ok_or(ApprovalError::NotFound)?;
+    let mut payload: Value = current.payload.clone().into();
+    let object = payload.as_object_mut().ok_or_else(|| {
+        ApprovalError::Invalid("stored waiting item payload is not a JSON object".to_owned())
+    })?;
+
+    let mut changed = false;
+    if let Some(title) = action.title.as_ref() {
+        changed |= set_if_changed(object, "title", Value::String(title.clone()));
+    }
+    if action.clear_description {
+        changed |= set_if_changed(object, "description", Value::Null);
+    } else if let Some(description) = action.description.as_ref() {
+        changed |= set_if_changed(object, "description", Value::String(description.clone()));
+    }
+    if let Some(waiting_for) = action.waiting_for.as_ref() {
+        changed |= set_if_changed(object, "waitingFor", Value::String(waiting_for.clone()));
+    }
+    if action.clear_expected_at {
+        changed |= set_if_changed(object, "expectedAt", Value::Null);
+    } else if let Some(expected_at) = action.expected_at.as_ref() {
+        changed |= set_if_changed(object, "expectedAt", Value::String(expected_at.clone()));
+    }
+    if action.clear_follow_up_at {
+        changed |= set_if_changed(object, "followUpAt", Value::Null);
+    } else if let Some(follow_up_at) = action.follow_up_at.as_ref() {
+        changed |= set_if_changed(object, "followUpAt", Value::String(follow_up_at.clone()));
+    }
+    if action.clear_resolution_summary {
+        changed |= set_if_changed(object, "resolutionSummary", Value::Null);
+    } else if let Some(summary) = action.resolution_summary.as_ref() {
+        changed |= set_if_changed(object, "resolutionSummary", Value::String(summary.clone()));
+    }
+    if let Some(status) = action.status.as_ref() {
+        changed |= set_if_changed(object, "status", Value::String(status.clone()));
+        if status == "resolved" {
+            changed |= set_if_changed(
+                object,
+                "resolvedAt",
+                serde_json::to_value(approval.requested_at).unwrap_or(Value::Null),
+            );
+        } else {
+            changed |= set_if_changed(object, "resolvedAt", Value::Null);
+            if action.resolution_summary.is_none() {
+                changed |= set_if_changed(object, "resolutionSummary", Value::Null);
+            }
+        }
+    }
+
+    if !changed {
+        return Ok(json!({
+            "action":"update_waiting_item",
+            "entityType":EntityType::EXECUTION_WAITING_ITEM,
+            "entityId":action.waiting_item_id,
+            "serverVersion":current.server_version.to_string(),
+            "alreadySatisfied":true
+        }));
+    }
+    update_meta_for_server_edit(&mut payload, approval.requested_at)?;
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_WAITING_ITEM,
+            entity_id: action.waiting_item_id,
+            base_server_version: ServerVersion::from_u64(current.server_version),
+            payload,
+            change_id: format!("agent-approval-{}-v{}", approval.id, current.server_version),
+        },
+    )
+    .await
+}
+
+async fn execute_create_reminder(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: CreateReminderAction,
+) -> Result<Value, ApprovalError> {
+    ensure_reminder_subject_exists(state, principal, &action.subject_type, &action.subject_id).await?;
+    if let Some(existing) = state
+        .store
+        .entity(
+            &principal.user_id,
+            EntityType::EXECUTION_REMINDER,
+            &action.entity_id,
+        )
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+    {
+        if !existing.deleted {
+            return Ok(json!({
+                "action":"create_reminder",
+                "entityType":EntityType::EXECUTION_REMINDER,
+                "entityId":action.entity_id,
+                "serverVersion":existing.server_version.to_string(),
+                "alreadySatisfied":true
+            }));
+        }
+    }
+
+    let fire_key = format!(
+        "{}:{}:{}",
+        action.subject_type, action.subject_id, action.trigger_at
+    );
+    let payload = json!({
+        "meta": base_meta(principal, &action.entity_id, approval.requested_at),
+        "subjectType": action.subject_type,
+        "subjectId": action.subject_id,
+        "triggerAt": action.trigger_at,
+        "status": "scheduled",
+        "fireKey": fire_key,
+        "snoozedUntil": null,
+        "lastFiredAt": null,
+        "title": action.title,
+        "body": action.body
+    });
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_REMINDER,
+            entity_id: action.entity_id,
+            base_server_version: ServerVersion::zero(),
+            payload,
+            change_id: format!("agent-approval-{}", approval.id),
+        },
+    )
+    .await
+}
+
+async fn execute_update_reminder(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: UpdateReminderAction,
+) -> Result<Value, ApprovalError> {
+    let current = state
+        .store
+        .entity(
+            &principal.user_id,
+            EntityType::EXECUTION_REMINDER,
+            &action.reminder_id,
+        )
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+        .filter(|record| !record.deleted)
+        .ok_or(ApprovalError::NotFound)?;
+    let mut payload: Value = current.payload.clone().into();
+    let object = payload.as_object_mut().ok_or_else(|| {
+        ApprovalError::Invalid("stored reminder payload is not a JSON object".to_owned())
+    })?;
+    let subject_type = object
+        .get("subjectType")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ApprovalError::Invalid("reminder subjectType is invalid".to_owned()))?
+        .to_owned();
+    let subject_id = object
+        .get("subjectId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ApprovalError::Invalid("reminder subjectId is invalid".to_owned()))?
+        .to_owned();
+    ensure_reminder_subject_exists(state, principal, &subject_type, &subject_id).await?;
+
+    let mut changed = false;
+    if let Some(trigger_at) = action.trigger_at.as_ref() {
+        changed |= set_if_changed(object, "triggerAt", Value::String(trigger_at.clone()));
+        changed |= set_if_changed(
+            object,
+            "fireKey",
+            Value::String(format!("{subject_type}:{subject_id}:{trigger_at}")),
+        );
+    }
+    if action.clear_snooze {
+        changed |= set_if_changed(object, "snoozedUntil", Value::Null);
+    } else if let Some(snoozed_until) = action.snoozed_until.as_ref() {
+        changed |= set_if_changed(
+            object,
+            "snoozedUntil",
+            Value::String(snoozed_until.clone()),
+        );
+    }
+    if action.clear_title {
+        changed |= set_if_changed(object, "title", Value::Null);
+    } else if let Some(title) = action.title.as_ref() {
+        changed |= set_if_changed(object, "title", Value::String(title.clone()));
+    }
+    if action.clear_body {
+        changed |= set_if_changed(object, "body", Value::Null);
+    } else if let Some(body) = action.body.as_ref() {
+        changed |= set_if_changed(object, "body", Value::String(body.clone()));
+    }
+    if let Some(status) = action.status.as_ref() {
+        changed |= set_if_changed(object, "status", Value::String(status.clone()));
+        if status == "scheduled" {
+            changed |= set_if_changed(object, "lastFiredAt", Value::Null);
+        } else {
+            changed |= set_if_changed(object, "snoozedUntil", Value::Null);
+        }
+    }
+    let status = object
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("scheduled");
+    if status != "scheduled"
+        && object
+            .get("snoozedUntil")
+            .is_some_and(|value| !value.is_null())
+    {
+        return Err(ApprovalError::Invalid(
+            "only scheduled reminders may have snoozedUntil".to_owned(),
+        ));
+    }
+
+    if !changed {
+        return Ok(json!({
+            "action":"update_reminder",
+            "entityType":EntityType::EXECUTION_REMINDER,
+            "entityId":action.reminder_id,
+            "serverVersion":current.server_version.to_string(),
+            "alreadySatisfied":true
+        }));
+    }
+    update_meta_for_server_edit(&mut payload, approval.requested_at)?;
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_REMINDER,
+            entity_id: action.reminder_id,
+            base_server_version: ServerVersion::from_u64(current.server_version),
+            payload,
+            change_id: format!("agent-approval-{}-v{}", approval.id, current.server_version),
+        },
+    )
+    .await
+}
+
+async fn ensure_reminder_subject_exists(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    subject_type: &str,
+    subject_id: &str,
+) -> Result<(), ApprovalError> {
+    let entity_type = reminder_subject_entity_type(subject_type)?;
+    let exists = state
+        .store
+        .entity(&principal.user_id, entity_type, subject_id)
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+        .is_some_and(|record| !record.deleted);
+    if exists {
+        Ok(())
+    } else {
+        Err(ApprovalError::NotFound)
+    }
+}
+
+fn reminder_subject_entity_type(subject_type: &str) -> Result<&'static str, ApprovalError> {
+    match subject_type {
+        "task" => Ok(EntityType::EXECUTION_TASK),
+        "calendar_event" => Ok(EntityType::EXECUTION_CALENDAR_EVENT),
+        "waiting_item" => Ok(EntityType::EXECUTION_WAITING_ITEM),
+        "memo" => Ok(EntityType::EXECUTION_MEMO),
+        _ => Err(ApprovalError::Invalid(
+            "reminder subjectType is unsupported".to_owned(),
+        )),
+    }
+}
+
 struct SyncUpsertAction {
     entity_type: &'static str,
     entity_id: String,
@@ -2535,7 +3036,13 @@ fn require_principal_action_write(
         | "update_task"
         | "create_calendar_event"
         | "create_project"
-        | "update_project" => &["sync:write", "execution:write"],
+        | "update_project"
+        | "create_memo"
+        | "update_memo"
+        | "create_waiting_item"
+        | "update_waiting_item"
+        | "create_reminder"
+        | "update_reminder" => &["sync:write", "execution:write"],
         "create_habit" | "update_habit" => &["sync:write", "habits:write"],
         other => {
             return Err(ApprovalError::Invalid(format!(
