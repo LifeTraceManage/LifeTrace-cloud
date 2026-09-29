@@ -1,10 +1,55 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Bot, Plus, Send } from "lucide-react";
+import { Bot, Check, Plus, Send, X } from "lucide-react";
 import { useApp } from "../../app/AppContext";
 import { Badge, Button, Card, CardContent, EmptyState, PageHeader, Textarea } from "../../components/ui";
-import { AssistantApi, type AssistantSession } from "../../services/core";
+import { AssistantApi, type AssistantApproval, type AssistantSession } from "../../services/core";
 
 type Message = { role: "user" | "assistant"; content: string; provider?: string };
+
+function approvalLabel(approval: AssistantApproval): string {
+  if (approval.actionName === "create_task") return "创建任务";
+  if (approval.actionName === "update_task") return "修改任务";
+  if (approval.actionName === "create_calendar_event") return "创建日程";
+  return approval.actionName;
+}
+
+function approvalSummary(approval: AssistantApproval): string {
+  const action = approval.actionJson;
+  const title = typeof action.title === "string" ? action.title : "";
+  if (approval.actionName === "create_task") {
+    const due = typeof action.dueAt === "string" ? ` · 截止 ${new Date(action.dueAt).toLocaleString()}` : "";
+    return `${title || "未命名任务"}${due}`;
+  }
+  if (approval.actionName === "update_task") {
+    const parts = [
+      typeof action.title === "string" ? `标题 → ${action.title}` : "",
+      typeof action.status === "string" ? `状态 → ${action.status}` : "",
+      typeof action.priority === "string" ? `优先级 → ${action.priority}` : "",
+      typeof action.dueAt === "string" ? `截止 → ${new Date(action.dueAt).toLocaleString()}` : "",
+      action.clearDueAt === true ? "清除截止时间" : "",
+    ].filter(Boolean);
+    return parts.length ? parts.join(" · ") : `任务 ${String(action.taskId ?? "")}`;
+  }
+  if (approval.actionName === "create_calendar_event") {
+    const when =
+      typeof action.startAt === "string"
+        ? new Date(action.startAt).toLocaleString()
+        : typeof action.startLocalDate === "string"
+          ? action.startLocalDate
+          : "";
+    return `${title || "未命名日程"}${when ? ` · ${when}` : ""}`;
+  }
+  return "待确认写操作";
+}
+
+function statusLabel(status: string): string {
+  if (status === "pending") return "待确认";
+  if (status === "approved") return "已执行";
+  if (status === "rejected") return "已拒绝";
+  if (status === "expired") return "已过期";
+  if (status === "cancelled") return "已取消";
+  return status;
+}
 
 export function AssistantPage() {
   const { session } = useApp();
@@ -13,8 +58,10 @@ export function AssistantPage() {
   const [sessions, setSessions] = useState<AssistantSession[]>([]);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [approvals, setApprovals] = useState<AssistantApproval[]>([]);
   const [asking, setAsking] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [decidingApprovalId, setDecidingApprovalId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -47,8 +94,12 @@ export function AssistantPage() {
     setLoadingHistory(true);
     setError("");
     try {
-      const items = await api.listMessages(id);
+      const [items, approvalItems] = await Promise.all([
+        api.listMessages(id),
+        api.listApprovals(id),
+      ]);
       setSessionId(id);
+      setApprovals(approvalItems);
       setMessages(
         items
           .filter((item) => item.role === "user" || item.role === "assistant")
@@ -69,6 +120,7 @@ export function AssistantPage() {
     if (asking) return;
     setSessionId(null);
     setMessages([]);
+    setApprovals([]);
     setPrompt("");
     setError("");
   }
@@ -92,11 +144,36 @@ export function AssistantPage() {
           provider: reply.model ? `${reply.provider} · ${reply.model}` : reply.provider,
         },
       ]);
+      const approvalItems = await api.listApprovals(reply.sessionId);
+      setApprovals(approvalItems);
       await refreshSessions();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "AI 请求失败");
     } finally {
       setAsking(false);
+    }
+  }
+
+  async function decideApproval(approvalId: string, decision: "approve" | "reject") {
+    if (!session || decidingApprovalId) return;
+    setDecidingApprovalId(approvalId);
+    setError("");
+    try {
+      const result = await api.decideApproval(approvalId, decision, session.csrfToken);
+      setApprovals((items) =>
+        items.map((item) => (item.id === approvalId ? result.approval : item)),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "审批操作失败");
+      if (sessionId) {
+        try {
+          setApprovals(await api.listApprovals(sessionId));
+        } catch {
+          // Keep the existing approval card if refresh also fails.
+        }
+      }
+    } finally {
+      setDecidingApprovalId(null);
     }
   }
 
@@ -143,7 +220,7 @@ export function AssistantPage() {
                 <EmptyState
                   icon={<Bot size={26} />}
                   title="问问 LifeTrace"
-                  description="可以直接询问任务、日程、笔记、邮件等已同步数据；第一阶段仅开放只读分析。"
+                  description="可以查询已同步数据；创建/修改任务和创建日程会先生成审批，只有你确认后才执行。"
                 />
               ) : (
                 messages.map((message, index) => (
@@ -162,6 +239,42 @@ export function AssistantPage() {
                   </div>
                 ))
               )}
+              {approvals.length ? (
+                <div className="space-y-3 border-t pt-4">
+                  {approvals.map((approval) => (
+                    <div key={approval.id} className="rounded-lg border bg-card px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-medium">{approvalLabel(approval)}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">{approvalSummary(approval)}</div>
+                        </div>
+                        <Badge>{statusLabel(approval.status)}</Badge>
+                      </div>
+                      {approval.status === "pending" ? (
+                        <div className="mt-3 flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => void decideApproval(approval.id, "approve")}
+                            disabled={Boolean(decidingApprovalId)}
+                          >
+                            <Check size={14} />
+                            批准并执行
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void decideApproval(approval.id, "reject")}
+                            disabled={Boolean(decidingApprovalId)}
+                          >
+                            <X size={14} />
+                            拒绝
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               {asking ? <div className="text-sm text-muted-foreground">正在查询并分析云端记录…</div> : null}
               {error ? <div className="text-sm text-destructive">{error}</div> : null}
             </div>
