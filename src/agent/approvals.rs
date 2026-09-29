@@ -789,11 +789,13 @@ async fn execute_create_task(
         state,
         principal,
         approval,
-        EntityType::EXECUTION_TASK,
-        &action.entity_id,
-        ServerVersion::zero(),
-        payload,
-        format!("agent-approval-{}", approval.id),
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_TASK,
+            entity_id: action.entity_id,
+            base_server_version: ServerVersion::zero(),
+            payload,
+            change_id: format!("agent-approval-{}", approval.id),
+        },
     )
     .await
 }
@@ -870,11 +872,13 @@ async fn execute_update_task(
         state,
         principal,
         approval,
-        EntityType::EXECUTION_TASK,
-        &action.task_id,
-        ServerVersion::from_u64(current.server_version),
-        payload,
-        format!("agent-approval-{}-v{}", approval.id, current.server_version),
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_TASK,
+            entity_id: action.task_id,
+            base_server_version: ServerVersion::from_u64(current.server_version),
+            payload,
+            change_id: format!("agent-approval-{}-v{}", approval.id, current.server_version),
+        },
     )
     .await
 }
@@ -924,24 +928,30 @@ async fn execute_create_calendar_event(
         state,
         principal,
         approval,
-        EntityType::EXECUTION_CALENDAR_EVENT,
-        &action.entity_id,
-        ServerVersion::zero(),
-        payload,
-        format!("agent-approval-{}", approval.id),
+        SyncUpsertAction {
+            entity_type: EntityType::EXECUTION_CALENDAR_EVENT,
+            entity_id: action.entity_id,
+            base_server_version: ServerVersion::zero(),
+            payload,
+            change_id: format!("agent-approval-{}", approval.id),
+        },
     )
     .await
+}
+
+struct SyncUpsertAction {
+    entity_type: &'static str,
+    entity_id: String,
+    base_server_version: ServerVersion,
+    payload: Value,
+    change_id: String,
 }
 
 async fn push_upsert(
     state: &AppState,
     principal: &AuthenticatedPrincipal,
     approval: &AgentApproval,
-    entity_type: &str,
-    entity_id: &str,
-    base_server_version: ServerVersion,
-    payload: Value,
-    change_id: String,
+    upsert: SyncUpsertAction,
 ) -> Result<Value, ApprovalError> {
     let request = PushRequestV1 {
         request_id: RequestId::new(format!("agent-{}", Uuid::new_v4())),
@@ -954,14 +964,14 @@ async fn push_upsert(
             device_id: DeviceId::new(principal.device_id.as_str()),
         },
         changes: vec![SyncChangeV1 {
-            change_id: ChangeId::new(change_id),
-            entity_type: EntityType::new(entity_type),
-            entity_id: EntityId::new(entity_id),
+            change_id: ChangeId::new(upsert.change_id),
+            entity_type: EntityType::new(upsert.entity_type),
+            entity_id: EntityId::new(&upsert.entity_id),
             operation: ChangeOperation::new(ChangeOperation::UPSERT),
-            base_server_version,
+            base_server_version: upsert.base_server_version,
             entity_schema_version: 1,
             client_modified_at: approval.requested_at,
-            payload: Some(JsonValue(payload)),
+            payload: Some(JsonValue(upsert.payload)),
             atomic_group_id: None,
             dependencies: vec![],
         }],
@@ -983,8 +993,8 @@ async fn push_upsert(
                 .map_err(|error| ApprovalError::Execution(error.to_string()))?;
             Ok(json!({
                 "action": approval.action_name,
-                "entityType": entity_type,
-                "entityId": entity_id,
+                "entityType": upsert.entity_type,
+                "entityId": upsert.entity_id,
                 "syncResult": sync_result
             }))
         }
