@@ -25,12 +25,18 @@ const modules = [
     icon: LayoutDashboard,
     accent: "text-warning",
   },
+  {
+    to: "/finance",
+    name: "Finance",
+    description: "基于 BeeCount 的账本、交易、账户、预算与统计。",
+    icon: WalletCards,
+    accent: "text-primary",
+  },
 ] as const;
 
 const coreModules = [
   { to: "/app/health", name: "Health", icon: HeartPulse },
   { to: "/app/fitness", name: "Fitness", icon: Dumbbell },
-  { to: "/app/finance", name: "Finance", icon: WalletCards },
   { to: "/app/assistant", name: "Assistant", icon: Bot },
   { to: "/app/settings", name: "Settings", icon: Settings },
 ] as const;
@@ -63,7 +69,7 @@ export function PortalPage() {
         </div>
       </div>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {modules.map(({ to, name, description, icon: Icon, accent }) => <Link key={to} to={to} className="group block">
           <Card className="h-full transition-colors group-hover:border-primary/35 group-hover:bg-accent/25">
             <CardContent className="flex h-full flex-col pt-5">
