@@ -1,13 +1,15 @@
 use axum::body::{to_bytes, Body};
 use axum::http::{Method, Request, StatusCode};
 use axum::Router;
+use lifetrace_cloud::agent::{context::AgentAccessPartition, session as agent_session};
 use lifetrace_cloud::{app, AppState, Config};
 use serde_json::{json, Value};
 use tower::ServiceExt;
+use uuid::Uuid;
 
 const TOKEN: &str = "agent-test-token";
 
-async fn test_app() -> Router {
+async fn test_state_and_app() -> (AppState, Router) {
     let config = Config {
         database_path: ":memory:".to_owned(),
         dev_auth_token: TOKEN.to_owned(),
@@ -18,7 +20,12 @@ async fn test_app() -> Router {
     };
     let state = AppState::new(config);
     state.initialize().await.unwrap();
-    app(state)
+    let router = app(state.clone());
+    (state, router)
+}
+
+async fn test_app() -> Router {
+    test_state_and_app().await.1
 }
 
 async fn send(app: Router, method: Method, uri: &str, body: Value) -> (StatusCode, Value) {
@@ -134,4 +141,59 @@ async fn assistant_rejects_oversized_prompt() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["code"], "invalid_request");
+}
+
+
+#[tokio::test]
+async fn assistant_history_is_partitioned_by_app_and_scopes() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app,
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"读取我的数据"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let user_id_raw: String =
+        sqlx::query_scalar("SELECT user_id FROM agent_sessions WHERE id=$1")
+            .bind(session_id)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+    let user_id = Uuid::parse_str(&user_id_raw).unwrap();
+
+    let wrong_scope_partition = AgentAccessPartition {
+        app_id: "lifetrace-desktop".to_owned(),
+        scopes_json: "[]".to_owned(),
+    };
+
+    let sessions =
+        agent_session::list_sessions(&state.pool, user_id, &wrong_scope_partition, 10)
+            .await
+            .unwrap();
+    assert!(sessions.is_empty());
+
+    let messages = agent_session::list_messages(
+        &state.pool,
+        user_id,
+        &wrong_scope_partition,
+        session_id,
+        20,
+    )
+    .await
+    .unwrap();
+    assert!(messages.is_empty());
+
+    let resumed = agent_session::ensure_session(
+        &state.pool,
+        user_id,
+        &wrong_scope_partition,
+        Some(session_id),
+        "继续",
+    )
+    .await;
+    assert!(matches!(resumed, Err(sqlx::Error::RowNotFound)));
 }
