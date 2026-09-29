@@ -544,7 +544,6 @@ impl Tool for ProposeCreateCalendarEventTool {
     }
 }
 
-
 impl Tool for ProposeCreateProjectTool {
     const NAME: &'static str = "lifetrace_propose_create_project";
     type Args = CreateProjectArgs;
@@ -719,7 +718,9 @@ impl Tool for ProposeCreateHabitTool {
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
 
         let name = bounded_required(&args.name, "name", 300)?;
-        let activity_type = args.activity_type.unwrap_or_else(|| "completion".to_owned());
+        let activity_type = args
+            .activity_type
+            .unwrap_or_else(|| "completion".to_owned());
         validate_one_of(
             &activity_type,
             "activityType",
@@ -1447,7 +1448,6 @@ async fn execute_create_calendar_event(
     .await
 }
 
-
 async fn execute_create_project(
     state: &AppState,
     principal: &AuthenticatedPrincipal,
@@ -1677,14 +1677,14 @@ async fn execute_update_habit(
         changed |= set_if_changed(object, "normalTarget", json!(normal_target));
     }
     if let Some(target_days) = action.target_days {
-        changed |= set_if_changed(object, "targetDays", json!(normalize_target_days(target_days)?));
-    }
-    if let Some(schedule_type) = action.schedule_type.as_ref() {
         changed |= set_if_changed(
             object,
-            "scheduleType",
-            Value::String(schedule_type.clone()),
+            "targetDays",
+            json!(normalize_target_days(target_days)?),
         );
+    }
+    if let Some(schedule_type) = action.schedule_type.as_ref() {
+        changed |= set_if_changed(object, "scheduleType", Value::String(schedule_type.clone()));
         if schedule_type == "daily" {
             changed |= set_if_changed(object, "targetDays", json!([]));
         }
@@ -1891,7 +1891,10 @@ fn require_principal_action_write(
     action_name: &str,
 ) -> Result<(), ApprovalError> {
     let required_scopes: &[&str] = match action_name {
-        "create_task" | "update_task" | "create_calendar_event" | "create_project"
+        "create_task"
+        | "update_task"
+        | "create_calendar_event"
+        | "create_project"
         | "update_project" => &["sync:write", "execution:write"],
         "create_habit" | "update_habit" => &["sync:write", "habits:write"],
         other => {
