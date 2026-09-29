@@ -8,12 +8,13 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 const TOKEN: &str = "agent-test-token";
+const USER_ID: &str = "11111111-1111-4111-8111-111111111111";
 
 async fn test_state_and_app() -> (AppState, Router) {
     let config = Config {
         database_path: ":memory:".to_owned(),
         dev_auth_token: TOKEN.to_owned(),
-        dev_auth_user_id: "agent-test-user".to_owned(),
+        dev_auth_user_id: USER_ID.to_owned(),
         dev_auth_device_id: "agent-test-device".to_owned(),
         deepseek_api_key: None,
         ..Config::default()
@@ -188,4 +189,33 @@ async fn assistant_history_is_partitioned_by_app_and_scopes() {
     )
     .await;
     assert!(matches!(resumed, Err(sqlx::Error::RowNotFound)));
+}
+
+
+#[tokio::test]
+async fn assistant_privacy_export_contains_current_access_partition() {
+    let (_state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"给我一个数据概览"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, exported) = send(
+        app,
+        Method::GET,
+        "/api/v1/privacy/export/agent",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let agent = &exported["sections"]["agent"];
+    assert_eq!(agent["sessions"].as_array().unwrap().len(), 1);
+    assert_eq!(agent["messages"].as_array().unwrap().len(), 2);
+    assert_eq!(agent["runs"].as_array().unwrap().len(), 1);
+    assert_eq!(agent["sessions"][0]["id"], first["sessionId"]);
 }
