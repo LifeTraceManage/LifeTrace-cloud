@@ -75,7 +75,11 @@ impl LogFilter {
     fn parse(raw: &str) -> Self {
         let mut default = LogLevel::Info;
         let mut directives = Vec::new();
-        for directive in raw.split(',').map(str::trim).filter(|value| !value.is_empty()) {
+        for directive in raw
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
             if let Some((target, level)) = directive.rsplit_once('=') {
                 if let Some(level) = LogLevel::parse(level) {
                     let target = target.trim();
