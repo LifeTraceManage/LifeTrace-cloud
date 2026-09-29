@@ -337,6 +337,7 @@ struct UpdateTaskAction {
     clear_due_at: bool,
     scheduled_start_at: Option<String>,
     scheduled_end_at: Option<String>,
+    #[serde(default)]
     clear_schedule: bool,
     estimated_minutes: Option<i64>,
 }
