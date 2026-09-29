@@ -131,7 +131,8 @@ pub async fn run(
 
     let (reply, provider, model, fallback_error) = match state.config.model_api_key.as_deref() {
         Some(api_key) => {
-            match run_configured_provider(state, api_key, prompt, history, invocation.clone()).await {
+            match run_configured_provider(state, api_key, prompt, history, invocation.clone()).await
+            {
                 Ok(reply) => (
                     reply,
                     state.config.model_provider.clone(),
