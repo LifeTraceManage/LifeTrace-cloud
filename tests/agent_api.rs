@@ -51,7 +51,6 @@ async fn send(app: Router, method: Method, uri: &str, body: Value) -> (StatusCod
     (status, body)
 }
 
-
 async fn seed_approval(
     state: &AppState,
     session_id: Uuid,
@@ -267,7 +266,6 @@ async fn assistant_privacy_export_contains_current_access_partition() {
     assert_eq!(agent["sessions"][0]["id"], exported_session_id);
 }
 
-
 #[tokio::test]
 async fn assistant_approval_executes_task_once_and_is_idempotent() {
     let (state, app) = test_state_and_app().await;
@@ -303,23 +301,13 @@ async fn assistant_approval_executes_task_once_and_is_idempotent() {
     )
     .await;
 
-    let approvals_uri = format!(
-        "/api/v1/assistant/sessions/{session_id}/approvals?limit=10"
-    );
-    let (status, listed) = send(
-        app.clone(),
-        Method::GET,
-        &approvals_uri,
-        Value::Null,
-    )
-    .await;
+    let approvals_uri = format!("/api/v1/assistant/sessions/{session_id}/approvals?limit=10");
+    let (status, listed) = send(app.clone(), Method::GET, &approvals_uri, Value::Null).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(listed["items"].as_array().unwrap().len(), 1);
     assert_eq!(listed["items"][0]["status"], "pending");
 
-    let decision_uri = format!(
-        "/api/v1/assistant/approvals/{approval_id}/decision"
-    );
+    let decision_uri = format!("/api/v1/assistant/approvals/{approval_id}/decision");
     let (status, approved) = send(
         app.clone(),
         Method::POST,
