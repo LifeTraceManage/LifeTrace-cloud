@@ -17,13 +17,22 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send
     let credential_cipher = CredentialCipher::from_config(&state.config)?;
 
     let service = MailService::new(state.pool.clone(), state.config.clone());
-    println!("[lifetrace-mail-worker] started");
+    tracing::info!(
+        target: "lifetrace::mail",
+        idle_window_seconds = IDLE_WINDOW.as_secs(),
+        poll_account_limit = MAX_POLL_ACCOUNTS,
+        "mail worker started"
+    );
 
     loop {
         let idle_accounts = match load_idle_accounts(&state, MAX_IDLE_ACCOUNTS).await {
             Ok(accounts) => accounts,
             Err(error) => {
-                eprintln!("[lifetrace-mail-worker] account scan failed error={error}");
+                tracing::error!(
+                    target: "lifetrace::mail",
+                    error = %error,
+                    "mail worker account scan failed"
+                );
                 tokio::time::sleep(EMPTY_IDLE_SLEEP).await;
                 continue;
             }
@@ -48,17 +57,35 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send
                 match service.sync_account_incremental(&user, account_id).await {
                     Ok(synced_messages) => {
                         if synced_messages > 0 {
+                            tracing::info!(
+                                target: "lifetrace::mail",
+                                account_id = %account_id,
+                                messages_synced = synced_messages,
+                                trigger = "idle",
+                                "mail inbox changes synchronized"
+                            );
                             state.mail_realtime.publish_account_updated(
                                 user.as_str(),
                                 account_id,
                                 synced_messages,
                                 "idle",
                             );
+                        } else {
+                            tracing::debug!(
+                                target: "lifetrace::mail",
+                                account_id = %account_id,
+                                trigger = "idle",
+                                "mail idle sync completed without persisted changes"
+                            );
                         }
                     }
                     Err(error) => {
-                        eprintln!(
-                            "[lifetrace-mail-worker] idle-triggered sync failed account_id={account_id} error={error}"
+                        tracing::warn!(
+                            target: "lifetrace::mail",
+                            account_id = %account_id,
+                            error = %error,
+                            trigger = "idle",
+                            "mail idle-triggered sync failed"
                         );
                     }
                 }
@@ -66,13 +93,44 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send
         }
 
         match service.sync_due_accounts(MAX_POLL_ACCOUNTS).await {
-            Ok(count) if count > 0 => {
-                println!("[lifetrace-mail-worker] polling sync completed accounts={count}");
+            Ok(stats) if stats.messages_synced > 0 => {
+                tracing::info!(
+                    target: "lifetrace::mail",
+                    attempted = stats.attempted,
+                    succeeded = stats.succeeded,
+                    failed = stats.failed,
+                    messages_synced = stats.messages_synced,
+                    trigger = "poll",
+                    "mail polling synchronized changes"
+                );
                 state.mail_realtime.publish_global_updated("poll");
             }
-            Ok(_) => {}
+            Ok(stats) if stats.failed > 0 => {
+                tracing::warn!(
+                    target: "lifetrace::mail",
+                    attempted = stats.attempted,
+                    succeeded = stats.succeeded,
+                    failed = stats.failed,
+                    trigger = "poll",
+                    "mail polling completed with failures"
+                );
+            }
+            Ok(stats) => {
+                tracing::debug!(
+                    target: "lifetrace::mail",
+                    attempted = stats.attempted,
+                    succeeded = stats.succeeded,
+                    trigger = "poll",
+                    "mail polling completed without changes"
+                );
+            }
             Err(error) => {
-                eprintln!("[lifetrace-mail-worker] polling sync failed error={error}");
+                tracing::error!(
+                    target: "lifetrace::mail",
+                    error = %error,
+                    trigger = "poll",
+                    "mail polling sync failed"
+                );
             }
         }
 
