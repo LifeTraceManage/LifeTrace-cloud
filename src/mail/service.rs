@@ -510,6 +510,82 @@ impl MailService {
         Ok(stats)
     }
 
+    pub async fn sync_folder_role_incremental(
+        &self,
+        user_id: &UserId,
+        account_id: Uuid,
+        role: &str,
+    ) -> Result<usize, MailServiceError> {
+        let user_id = Self::user_uuid(user_id)?;
+        let account = self.account_secret(user_id, account_id).await?;
+        let secret = self.decrypt_secret(&account)?;
+        let folder = sqlx::query_as::<_, MailFolder>(
+            r#"
+            SELECT id,account_id,remote_name,normalized_role,uidvalidity,uidnext,last_seen_uid,last_sync_at,sync_enabled
+            FROM mail_folders
+            WHERE user_id=$1 AND account_id=$2 AND normalized_role=$3 AND sync_enabled=TRUE
+            LIMIT 1
+            "#,
+        )
+        .bind(user_id)
+        .bind(account_id)
+        .bind(role)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(MailServiceError::DestinationUnavailable)?;
+
+        let job_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO mail_sync_jobs (id,account_id,folder_id,kind,state,started_at,created_at) VALUES ($1,$2,$3,$4,'running',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+        )
+        .bind(job_id)
+        .bind(account_id)
+        .bind(folder.id)
+        .bind(if folder.last_sync_at.is_none() {
+            "initial"
+        } else {
+            "incremental"
+        })
+        .execute(&self.pool)
+        .await?;
+
+        let initial_since = Utc::now() - Duration::days(30);
+        let snapshot = protocol::fetch_folder(
+            account,
+            secret,
+            folder.remote_name.clone(),
+            folder.uidvalidity,
+            folder.last_seen_uid,
+            folder.last_sync_at.is_none().then_some(initial_since),
+        )
+        .await;
+
+        match snapshot {
+            Ok(snapshot) => {
+                let count = self
+                    .persist_folder_snapshot(user_id, &folder, snapshot)
+                    .await?;
+                sqlx::query(
+                    "UPDATE mail_sync_jobs SET state='success',finished_at=CURRENT_TIMESTAMP WHERE id=$1",
+                )
+                .bind(job_id)
+                .execute(&self.pool)
+                .await?;
+                Ok(count)
+            }
+            Err(error) => {
+                sqlx::query(
+                    "UPDATE mail_sync_jobs SET state='retry_wait',attempt=attempt+1,finished_at=CURRENT_TIMESTAMP,next_retry_at=datetime('now','+3 minutes'),error_code='MAIL_SYNC_FAILED',error_detail_redacted=$2 WHERE id=$1",
+                )
+                .bind(job_id)
+                .bind(error.to_string())
+                .execute(&self.pool)
+                .await?;
+                Err(error.into())
+            }
+        }
+    }
+
     async fn sync_account_uuid(
         &self,
         user_id: Uuid,
