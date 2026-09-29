@@ -183,26 +183,60 @@ export function useMailWorkspace(mailboxRole: string, query: string, accountId: 
   }, [api, loadBootstrap, loadMessages]);
 
   const markRead = useCallback(async (messageId: string, isRead: boolean) => {
-    await api.markRead(messageId, isRead);
+    setError("");
     setMessages((items) => items.map((item) => item.id === messageId ? { ...item, isRead } : item));
     setSelectedMessage((item) => item?.id === messageId ? { ...item, isRead } : item);
+    try {
+      await api.markRead(messageId, isRead);
+    } catch (cause) {
+      setMessages((items) => items.map((item) => item.id === messageId ? { ...item, isRead: !isRead } : item));
+      setSelectedMessage((item) => item?.id === messageId ? { ...item, isRead: !isRead } : item);
+      setError(cause instanceof Error ? cause.message : "更新邮件已读状态失败");
+    }
   }, [api]);
 
   const setStarred = useCallback(async (messageId: string, isStarred: boolean) => {
-    await api.setStarred(messageId, isStarred);
+    setError("");
     setMessages((items) => items.map((item) => item.id === messageId ? { ...item, isStarred } : item));
     setSelectedMessage((item) => item?.id === messageId ? { ...item, isStarred } : item);
+    try {
+      await api.setStarred(messageId, isStarred);
+    } catch (cause) {
+      setMessages((items) => items.map((item) => item.id === messageId ? { ...item, isStarred: !isStarred } : item));
+      setSelectedMessage((item) => item?.id === messageId ? { ...item, isStarred: !isStarred } : item);
+      setError(cause instanceof Error ? cause.message : "更新邮件星标失败");
+    }
   }, [api]);
 
   const move = useCallback(async (
     messageId: string,
     destination: "archive" | "trash" | "inbox",
   ) => {
-    await api.move(messageId, destination);
-    setSelectedMessage(null);
-    setSelectedId(null);
-    await loadMessages();
-  }, [api, loadMessages]);
+    setError("");
+    const previousMessages = messages;
+    const previousSelectedId = selectedId;
+    const previousSelectedMessage = selectedMessage;
+    const removedIndex = previousMessages.findIndex((item) => item.id === messageId);
+    const nextMessages = previousMessages.filter((item) => item.id !== messageId);
+    const nextSelectedId = previousSelectedId === messageId
+      ? nextMessages[Math.min(Math.max(removedIndex, 0), Math.max(nextMessages.length - 1, 0))]?.id ?? null
+      : previousSelectedId;
+
+    // Optimistic update: the UI reacts immediately while the IMAP MOVE happens
+    // in the background. The previous state is restored if the server rejects it.
+    setMessages(nextMessages);
+    setSelectedId(nextSelectedId);
+    if (previousSelectedId === messageId) setSelectedMessage(null);
+
+    try {
+      await api.move(messageId, destination);
+    } catch (cause) {
+      setMessages(previousMessages);
+      setSelectedId(previousSelectedId);
+      setSelectedMessage(previousSelectedMessage);
+      setError(cause instanceof Error ? cause.message : "移动邮件失败");
+    }
+  }, [api, messages, selectedId, selectedMessage]);
 
   const connectAccount = useCallback(async (input: MailAccountInput) => {
     const created = await api.createAccount(input);
