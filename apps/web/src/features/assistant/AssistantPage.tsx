@@ -10,6 +10,10 @@ function approvalLabel(approval: AssistantApproval): string {
   if (approval.actionName === "create_task") return "创建任务";
   if (approval.actionName === "update_task") return "修改任务";
   if (approval.actionName === "create_calendar_event") return "创建日程";
+  if (approval.actionName === "create_project") return "创建 Project";
+  if (approval.actionName === "update_project") return "修改 Project";
+  if (approval.actionName === "create_habit") return "创建习惯";
+  if (approval.actionName === "update_habit") return "修改习惯";
   return approval.actionName;
 }
 
@@ -38,6 +42,35 @@ function approvalSummary(approval: AssistantApproval): string {
           ? action.startLocalDate
           : "";
     return `${title || "未命名日程"}${when ? ` · ${when}` : ""}`;
+  }
+  if (approval.actionName === "create_project") {
+    return typeof action.name === "string" ? action.name : "未命名 Project";
+  }
+  if (approval.actionName === "update_project") {
+    const parts = [
+      typeof action.name === "string" ? `名称 → ${action.name}` : "",
+      typeof action.status === "string" ? `状态 → ${action.status}` : "",
+      action.clearDescription === true ? "清除说明" : "",
+    ].filter(Boolean);
+    return parts.length ? parts.join(" · ") : `Project ${String(action.projectId ?? "")}`;
+  }
+  if (approval.actionName === "create_habit") {
+    const schedule = action.scheduleType === "custom" && Array.isArray(action.targetDays)
+      ? `周 ${action.targetDays.join("、")}`
+      : "每天";
+    const target = typeof action.normalTarget === "number"
+      ? ` · 目标 ${action.normalTarget} ${String(action.unit ?? "")}`
+      : "";
+    return `${String(action.name ?? "未命名习惯")} · ${schedule}${target}`;
+  }
+  if (approval.actionName === "update_habit") {
+    const parts = [
+      typeof action.name === "string" ? `名称 → ${action.name}` : "",
+      typeof action.normalTarget === "number" ? `目标 → ${action.normalTarget}` : "",
+      typeof action.scheduleType === "string" ? `频率 → ${action.scheduleType}` : "",
+      action.isArchived === true ? "归档" : action.isArchived === false ? "取消归档" : "",
+    ].filter(Boolean);
+    return parts.length ? parts.join(" · ") : `习惯 ${String(action.habitId ?? "")}`;
   }
   return "待确认写操作";
 }
