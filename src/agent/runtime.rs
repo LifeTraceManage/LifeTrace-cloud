@@ -5,13 +5,12 @@ use rig::prelude::*;
 use rig::providers::deepseek;
 use rig::tool::ToolContext;
 use serde::Serialize;
-use sqlx::Row;
 use uuid::Uuid;
 
 use crate::agent::context::{ensure_cloud_user, AgentInvocationContext};
 use crate::agent::session;
 use crate::agent::tools::{
-    LifeTraceOverviewTool, SearchMailTool, SearchRecordsTool,
+    load_overview, LifeTraceOverviewTool, SearchMailTool, SearchRecordsTool,
 };
 use crate::auth::AuthenticatedPrincipal;
 use crate::state::AppState;
@@ -144,7 +143,7 @@ pub async fn run(
             ),
         };
 
-    session::insert_message(
+    if let Err(error) = session::insert_message(
         &state.pool,
         user_id,
         conversation.id,
@@ -153,7 +152,18 @@ pub async fn run(
         &reply,
         Some(&provider),
     )
-    .await?;
+    .await
+    {
+        let _ = session::fail_run(
+            &state.pool,
+            run_id,
+            user_id,
+            "message_persist_failed",
+            &error.to_string(),
+        )
+        .await;
+        return Err(error.into());
+    }
     session::complete_run(
         &state.pool,
         run_id,
@@ -221,33 +231,30 @@ async fn run_deepseek(
 }
 
 async fn local_fallback(ctx: &AgentInvocationContext, prompt: &str) -> String {
-    let rows = sqlx::query(
-        "SELECT entity_type,COUNT(*) AS item_count FROM sync_entities \
-         WHERE user_id=$1 AND is_deleted=0 GROUP BY entity_type ORDER BY item_count DESC LIMIT 8",
-    )
-    .bind(ctx.user_id)
-    .fetch_all(&ctx.pool)
-    .await;
-
-    let summary = rows
-        .ok()
-        .into_iter()
-        .flatten()
-        .filter_map(|row| {
-            let entity_type = row.try_get::<String, _>("entity_type").ok()?;
-            let count = row.try_get::<i64, _>("item_count").ok()?;
-            Some(format!("{entity_type} {count} 条"))
+    let overview = load_overview(ctx).await.ok();
+    let summary = overview
+        .as_ref()
+        .and_then(|value| value.get("entityCounts"))
+        .and_then(serde_json::Value::as_object)
+        .map(|counts| {
+            counts
+                .iter()
+                .filter_map(|(entity_type, count)| {
+                    count.as_i64().map(|count| format!("{entity_type} {count} 条"))
+                })
+                .take(8)
+                .collect::<Vec<_>>()
         })
-        .collect::<Vec<_>>();
+        .unwrap_or_default();
 
     if summary.is_empty() {
         format!(
-            "当前没有配置可用的 AI 模型，我已经保存了这次对话，但暂时只能提供本地兜底响应。你的问题是“{}”。配置 DEEPSEEK_API_KEY 后，Agent 会使用只读工具查询 LifeTrace 数据并进行多轮分析。",
+            "当前没有配置可用的 AI 模型，我已经保存了这次对话，但暂时只能提供本地兜底响应。你的问题是“{}”。配置 DEEPSEEK_API_KEY 后，Agent 会使用只读工具查询当前客户端已授权的 LifeTrace 数据并进行多轮分析。",
             truncate(prompt, 160)
         )
     } else {
         format!(
-            "当前没有配置可用的 AI 模型。LifeTrace 中目前可见的数据概览：{}。你的问题是“{}”。配置 DEEPSEEK_API_KEY 后，Agent 会基于这些数据调用只读工具继续分析。",
+            "当前没有配置可用的 AI 模型。当前客户端授权范围内的 LifeTrace 数据概览：{}。你的问题是“{}”。配置 DEEPSEEK_API_KEY 后，Agent 会基于这些数据调用只读工具继续分析。",
             summary.join("、"),
             truncate(prompt, 160)
         )
