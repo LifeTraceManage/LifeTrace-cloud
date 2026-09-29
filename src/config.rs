@@ -277,7 +277,11 @@ impl Config {
             .trim()
             .to_ascii_lowercase();
         let (default_base_url, default_model) = model_provider_defaults(&c.model_provider);
-        c.model_api_key = env_var("MODEL_API_KEY").or(legacy_deepseek_api_key);
+        c.model_api_key = env_var("MODEL_API_KEY").or_else(|| {
+            (c.model_provider == "deepseek")
+                .then_some(legacy_deepseek_api_key)
+                .flatten()
+        });
         c.model_base_url = env_var("MODEL_BASE_URL")
             .or_else(|| {
                 (c.model_provider == "deepseek")
