@@ -344,25 +344,37 @@ async fn move_message(
         "action",
     );
     let reconcile = service(&state);
+    let realtime = state.mail_realtime.clone();
     let user_id = principal.user_id.clone();
     tokio::spawn(async move {
         let started = std::time::Instant::now();
         match reconcile.sync_account_incremental(&user_id, account_id).await {
-            Ok(messages) if messages > 0 => tracing::info!(
-                target: "lifetrace::mail",
-                account_id = %account_id,
-                messages_synced = messages,
-                duration_ms = started.elapsed().as_millis() as u64,
-                trigger = "move_reconcile",
-                "mail background reconcile completed"
-            ),
-            Ok(_) => tracing::debug!(
-                target: "lifetrace::mail",
-                account_id = %account_id,
-                duration_ms = started.elapsed().as_millis() as u64,
-                trigger = "move_reconcile",
-                "mail background reconcile completed without changes"
-            ),
+            Ok(messages) => {
+                realtime.publish_account_updated(
+                    user_id.as_str(),
+                    account_id,
+                    messages,
+                    "move_reconcile",
+                );
+                if messages > 0 {
+                    tracing::info!(
+                        target: "lifetrace::mail",
+                        account_id = %account_id,
+                        messages_synced = messages,
+                        duration_ms = started.elapsed().as_millis() as u64,
+                        trigger = "move_reconcile",
+                        "mail background reconcile completed"
+                    );
+                } else {
+                    tracing::debug!(
+                        target: "lifetrace::mail",
+                        account_id = %account_id,
+                        duration_ms = started.elapsed().as_millis() as u64,
+                        trigger = "move_reconcile",
+                        "mail background reconcile completed without changes"
+                    );
+                }
+            }
             Err(error) => tracing::warn!(
                 target: "lifetrace::mail",
                 account_id = %account_id,
