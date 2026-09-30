@@ -20,7 +20,6 @@ export function TodayPage() {
   const todayHabitLogs = habitLogs.filter((item) => text(item, "logDate") === today && text(item, "status") === "completed");
   const workouts = entities(state, "workout.workout");
   const finance = entities(state, "finance.transaction");
-  const english = entities(state, "english.learning_record");
   const reviews = entities(state, "review.daily");
 
   const days = recentDays(7);
@@ -28,9 +27,8 @@ export function TodayPage() {
     day: day.slice(5),
     actions: tasks.filter((item) => text(item, "completedAt").slice(0, 10) === day).length
       + habitLogs.filter((item) => text(item, "logDate") === day && text(item, "status") === "completed").length
-      + workouts.filter((item) => text(item, "localDate") === day).length
-      + english.filter((item) => text(item, "recordDate") === day).length,
-  })), [days.join("|"), english, habitLogs, tasks, workouts]);
+      + workouts.filter((item) => text(item, "localDate") === day).length,
+  })), [days.join("|"), habitLogs, tasks, workouts]);
 
   const month = today.slice(0, 7);
   const monthTx = finance.filter((item) => text(item, "localDate").startsWith(month) && text(item, "status", "confirmed") === "confirmed");

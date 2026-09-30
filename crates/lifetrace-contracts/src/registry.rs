@@ -115,13 +115,6 @@ pub const REGISTRY: &[EntityDescriptor] = &[
     user_owned(EntityType::NOTE_TAG_RELATION, false),
     user_owned(EntityType::NOTE_RELATION, false),
     user_owned(EntityType::NOTE_REVISION, false),
-    shared_catalog(EntityType::ENGLISH_ARTICLE),
-    user_owned(EntityType::ENGLISH_LEARNING_RECORD, false),
-    user_owned(EntityType::ENGLISH_HIGHLIGHT, false),
-    user_owned(EntityType::ENGLISH_NOTE, false),
-    user_owned(EntityType::ENGLISH_VOCABULARY, false),
-    user_owned(EntityType::ENGLISH_VOCABULARY_OCCURRENCE, false),
-    user_owned(EntityType::ENGLISH_VOCABULARY_REVIEW_STATE, false),
     user_owned(EntityType::WORKOUT_IMPORT, false),
     user_owned(EntityType::WORKOUT_WORKOUT, false),
     user_owned(EntityType::WORKOUT_EXERCISE, false),
@@ -182,13 +175,6 @@ impl EntityType {
     pub const NOTE_TAG_RELATION: &'static str = "note.tag_relation";
     pub const NOTE_RELATION: &'static str = "note.relation";
     pub const NOTE_REVISION: &'static str = "note.revision";
-    pub const ENGLISH_ARTICLE: &'static str = "english.article";
-    pub const ENGLISH_LEARNING_RECORD: &'static str = "english.learning_record";
-    pub const ENGLISH_HIGHLIGHT: &'static str = "english.highlight";
-    pub const ENGLISH_NOTE: &'static str = "english.note";
-    pub const ENGLISH_VOCABULARY: &'static str = "english.vocabulary";
-    pub const ENGLISH_VOCABULARY_OCCURRENCE: &'static str = "english.vocabulary_occurrence";
-    pub const ENGLISH_VOCABULARY_REVIEW_STATE: &'static str = "english.vocabulary_review_state";
     pub const WORKOUT_IMPORT: &'static str = "workout.import";
     pub const WORKOUT_WORKOUT: &'static str = "workout.workout";
     pub const WORKOUT_EXERCISE: &'static str = "workout.exercise";
@@ -241,13 +227,6 @@ impl EntityType {
             Self::NOTE_TAG_RELATION,
             Self::NOTE_RELATION,
             Self::NOTE_REVISION,
-            Self::ENGLISH_ARTICLE,
-            Self::ENGLISH_LEARNING_RECORD,
-            Self::ENGLISH_HIGHLIGHT,
-            Self::ENGLISH_NOTE,
-            Self::ENGLISH_VOCABULARY,
-            Self::ENGLISH_VOCABULARY_OCCURRENCE,
-            Self::ENGLISH_VOCABULARY_REVIEW_STATE,
             Self::WORKOUT_IMPORT,
             Self::WORKOUT_WORKOUT,
             Self::WORKOUT_EXERCISE,

@@ -100,7 +100,7 @@ fn pull_body() -> Value {
         },
         "afterCursor": null,
         "limit": 10,
-        "entityTypes": ["english.article"]
+        "entityTypes": ["note.note"]
     })
 }
 
@@ -144,7 +144,7 @@ async fn web_cookie_sync_requires_valid_csrf_and_origin() {
                     json!({
                         "email": email,
                         "password": password,
-                        "requestedScopes": ["sync:read", "english:read"],
+                        "requestedScopes": ["sync:read", "notes:read"],
                         "publicDevice": false
                     })
                     .to_string(),

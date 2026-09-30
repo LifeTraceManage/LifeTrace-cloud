@@ -18,9 +18,6 @@ export function searchEntities(state: CloudState, query: string): SearchHit[] {
   for (const entity of Object.values(state.entities["finance.transaction"] ?? {})) add("finance.transaction", entity, entityText(entity, "merchant") || entityText(entity, "item") || entityText(entity, "note") || "财务流水", `${entityText(entity, "localDate")} ${entityText(entity, "counterparty")}`, "/finance/transactions");
   for (const entity of Object.values(state.entities["finance.account"] ?? {})) add("finance.account", entity, entityText(entity, "name") || "资金账户", `${entityText(entity, "accountType")} ${entityText(entity, "last4")}`, "/finance/accounts");
   for (const entity of Object.values(state.entities["note.note"] ?? {})) add("note.note", entity, entityText(entity, "title") || "无标题笔记", entityText(entity, "contentText") || entityText(entity, "summary"), "/notes");
-  for (const entity of Object.values(state.entities["english.article"] ?? {})) add("english.article", entity, entityText(entity, "title") || "English article", entityText(entity, "summary") || entityText(entity, "content"), "/english/articles");
-  for (const entity of Object.values(state.entities["english.vocabulary"] ?? {})) add("english.vocabulary", entity, entityText(entity, "displayWord"), `${entityText(entity, "definition")} ${entityText(entity, "notes")}`, "/english/vocabulary");
-  for (const entity of Object.values(state.entities["english.learning_record"] ?? {})) add("english.learning_record", entity, `英语阅读 ${entityText(entity, "recordDate")}`, entityText(entity, "summary"), "/english/stats");
   for (const entity of Object.values(state.entities["review.daily"] ?? {})) add("review.daily", entity, `每日复盘 ${entityText(entity, "reviewDate")}`, `${entityText(entity, "bestThing")} ${entityText(entity, "problem")} ${entityText(entity, "tomorrowPriority")} ${entityText(entity, "note")}`, "/review");
   return hits.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 80);
 }

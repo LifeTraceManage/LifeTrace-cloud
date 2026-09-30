@@ -22,7 +22,6 @@ function snapshotItems(empty = false) {
     ["habit.log", "habit-log-1", { meta: meta("habit-log-1"), activityId: "habit-1", logDate: "2026-08-19", status: "completed", value: 1 }],
     ["workout.workout", "workout-1", { meta: meta("workout-1"), name: "Upper body", localDate: "2026-08-19", occurredAt: now, durationSeconds: 3600, volumeKg: 6200 }],
     ["note.note", "note-1", { meta: meta("note-1"), title: "Architecture", contentText: "Independent apps/web", summary: "Independent apps/web", isArchived: false }],
-    ["english.article", "article-1", { meta: meta("article-1"), title: "Sample Article", summary: "A short reading sample.", contentText: "Daily practice improves fluency.\n\nFocused reading also builds vocabulary." }],
     ["finance.account", "account-1", { meta: meta("account-1"), name: "Cash", accountType: "cash", currency: "CNY", openingBalanceCents: 100000 }],
     ["finance.category", "category-1", { meta: meta("category-1"), name: "Food", categoryType: "expense" }],
     ["finance.transaction", "tx-1", { meta: meta("tx-1"), transactionType: "expense", amountCents: 2300, currency: "CNY", merchant: "Coffee Shop", note: "breakfast", localDate: "2026-08-19", occurredAt: now, status: "confirmed" }],
@@ -192,40 +191,6 @@ test("calendar exposes Month Week Day and Agenda", async ({ page }) => {
     await button.click();
   }
   await expect(page.getByText("Design review")).toBeVisible();
-});
-
-test("English reader supports visual highlights quick notes and read completion", async ({ page }) => {
-  await installMocks(page);
-  await page.goto("/app/english/articles");
-  await page.getByRole("button", { name: /Sample Article/ }).click();
-  await expect(page.getByRole("heading", { name: "Sample Article", level: 1 })).toBeVisible();
-
-  const article = page.locator("article").filter({ hasText: "Daily practice improves fluency." });
-  await expect(article).toBeVisible();
-  await expect(article.locator("mark")).toHaveCount(0);
-
-  const phrase = article.getByText("Daily practice improves fluency.", { exact: true });
-  await expect(phrase).toBeVisible();
-  await phrase.evaluate((node) => {
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    const range = document.createRange();
-    range.selectNodeContents(node);
-    selection?.addRange(range);
-    node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-  });
-
-  const saveHighlight = page.getByRole("button", { name: "保存高亮" });
-  await expect(saveHighlight).toBeEnabled();
-  await saveHighlight.click();
-  await expect(article.locator("mark")).toHaveCount(1);
-
-  await page.getByPlaceholder("只记录你的想法…").fill("Remember this phrase");
-  await page.getByRole("button", { name: "保存笔记" }).click();
-  await expect(page.getByText("Remember this phrase")).toBeVisible();
-
-  await page.getByRole("button", { name: "标记已读" }).click();
-  await expect(page.getByText("已读", { exact: true }).first()).toBeVisible();
 });
 
 test("UI showcase keeps dialog accessible and reduced-motion compatible", async ({ page }) => {
