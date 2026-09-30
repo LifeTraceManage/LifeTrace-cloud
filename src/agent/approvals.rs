@@ -2348,9 +2348,11 @@ async fn execute_create_note(
             .await
             .map_err(|error| ApprovalError::Execution(error.to_string()))?
             .filter(|record| !record.deleted)
-            .ok_or_else(|| ApprovalError::Invalid(
-                "folderId no longer references an existing note.folder".to_owned(),
-            ))?;
+            .ok_or_else(|| {
+                ApprovalError::Invalid(
+                    "folderId no longer references an existing note.folder".to_owned(),
+                )
+            })?;
     }
 
     let content_markdown = action.content_markdown.clone();
