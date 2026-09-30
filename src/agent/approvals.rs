@@ -2342,7 +2342,7 @@ async fn execute_create_note(
     }
 
     if let Some(folder_id) = action.folder_id.as_deref() {
-        let folder = state
+        state
             .store
             .entity(&principal.user_id, EntityType::NOTE_FOLDER, folder_id)
             .await
@@ -2351,12 +2351,10 @@ async fn execute_create_note(
             .ok_or_else(|| ApprovalError::Invalid(
                 "folderId no longer references an existing note.folder".to_owned(),
             ))?;
-        if folder.entity_id != folder_id {
-            return Err(ApprovalError::Invalid("folderId is invalid".to_owned()));
-        }
     }
 
-    let content_text = action.content_markdown.clone();
+    let content_markdown = action.content_markdown.clone();
+    let content_text = content_markdown.clone();
     let summary = content_text.chars().take(160).collect::<String>();
     let payload = json!({
         "meta": base_meta(principal, &action.entity_id, approval.requested_at),
@@ -2365,7 +2363,7 @@ async fn execute_create_note(
         "folderId": action.folder_id,
         "contentJson": {
             "type": "markdown",
-            "source": action.content_markdown,
+            "source": content_markdown,
             "editor": "codemirror",
             "properties": {
                 "status": "",
@@ -2375,7 +2373,7 @@ async fn execute_create_note(
         },
         "contentHtml": "",
         "contentText": content_text,
-        "contentMarkdown": action.content_markdown,
+        "contentMarkdown": content_markdown,
         "summary": summary,
         "isPinned": false,
         "isFavorite": false,
