@@ -763,4 +763,66 @@ mod tests {
             .components()
             .any(|component| !matches!(component, Component::Normal(_))));
     }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn executes_registered_job_with_json_file_contract() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!("lifetrace-sandbox-{}", Uuid::new_v4()));
+        let jobs_dir = root.join("jobs");
+        let runs_dir = root.join("runs");
+        std::fs::create_dir_all(jobs_dir.join("bin")).unwrap();
+
+        let script_path = jobs_dir.join("bin/echo-json.sh");
+        std::fs::write(
+            &script_path,
+            "#!/bin/sh\nset -eu\ncp \"$LIFETRACE_SANDBOX_INPUT\" \"$LIFETRACE_SANDBOX_OUTPUT\"\nprintf 'ok\\n'\n",
+        )
+        .unwrap();
+        let mut permissions = std::fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script_path, permissions).unwrap();
+
+        std::fs::write(
+            jobs_dir.join("echo_json.json"),
+            r#"{
+              "id":"echo_json",
+              "description":"Echo JSON input",
+              "entrypoint":"bin/echo-json.sh",
+              "timeoutSeconds":5,
+              "inputSchema":{"type":"object"}
+            }"#,
+        )
+        .unwrap();
+
+        let settings = SandboxSettings {
+            enabled: true,
+            jobs_dir,
+            runs_dir,
+            max_timeout_seconds: 10,
+            max_input_bytes: 4096,
+            max_output_bytes: 4096,
+        };
+        let job = load_job(&settings, "echo_json").unwrap();
+        let execution_id = Uuid::new_v4();
+        let result = execute_job_inner(
+            &settings,
+            execution_id,
+            RunSandboxJobAction {
+                job_id: "echo_json".to_owned(),
+                input: json!({"value":42}),
+                revision: job.revision,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result["jobId"], "echo_json");
+        assert_eq!(result["output"]["value"], 42);
+        assert_eq!(result["stdout"], "ok\n");
+        assert!(!settings.runs_dir.join(execution_id.to_string()).exists());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
