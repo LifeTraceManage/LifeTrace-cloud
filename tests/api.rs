@@ -844,15 +844,6 @@ async fn execution_two_devices_create_update_delete_and_tombstone() {
         ),
         execution_change(
             user,
-            "exec-core-memo-c1",
-            "execution.memo",
-            "memo-core",
-            0,
-            "upsert",
-            json!({"content":"Remember sync","plainText":"Remember sync","isPinned":false,"status":"active"}),
-        ),
-        execution_change(
-            user,
             "exec-core-reminder-c1",
             "execution.reminder",
             "reminder-core",
@@ -880,12 +871,11 @@ async fn execution_two_devices_create_update_delete_and_tombstone() {
         execution_pull(app_b.clone(), TOKEN_A, "execution-device-b", None).await;
     assert_eq!(status, StatusCode::OK);
     let changes = first_pull["changes"].as_array().unwrap();
-    assert_eq!(changes.len(), 5);
+    assert_eq!(changes.len(), 4);
     for expected in [
         "execution.task",
         "execution.calendar_event",
         "execution.waiting_item",
-        "execution.memo",
         "execution.reminder",
     ] {
         assert!(changes
@@ -942,9 +932,9 @@ async fn execution_two_devices_create_update_delete_and_tombstone() {
             "execution-device-a",
             vec![execution_change(
                 user,
-                "exec-core-memo-c2",
-                "execution.memo",
-                "memo-core",
+                "exec-core-waiting-c2",
+                "execution.waiting_item",
+                "waiting-core",
                 1,
                 "delete",
                 Value::Null,
@@ -963,7 +953,10 @@ async fn execution_two_devices_create_update_delete_and_tombstone() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(delete_pull["changes"].as_array().unwrap().len(), 1);
-    assert_eq!(delete_pull["changes"][0]["entityType"], "execution.memo");
+    assert_eq!(
+        delete_pull["changes"][0]["entityType"],
+        "execution.waiting_item"
+    );
     assert_eq!(delete_pull["changes"][0]["operation"], "delete");
     assert_eq!(delete_pull["changes"][0]["tombstone"]["serverVersion"], "2");
 }
@@ -974,16 +967,16 @@ async fn execution_duplicate_and_domain_conflicts_are_not_silent() {
     let app_a = test_app_for(TOKEN_A, user, "execution-auth-device").await;
     let app_b = app_a.clone();
 
-    let memo_create = execution_push_request(
+    let waiting_create = execution_push_request(
         "execution-conflict-a",
         vec![execution_change(
             user,
-            "exec-conflict-memo-c1",
-            "execution.memo",
-            "memo-conflict",
+            "exec-conflict-waiting-c1",
+            "execution.waiting_item",
+            "waiting-conflict",
             0,
             "upsert",
-            json!({"content":"Base memo","plainText":"Base memo","isPinned":false,"status":"active"}),
+            json!({"title":"Base waiting item","status":"open","waitingFor":"Alice"}),
         )],
     );
     let (_, first) = send(
@@ -991,7 +984,7 @@ async fn execution_duplicate_and_domain_conflicts_are_not_silent() {
         Method::POST,
         "/api/v1/sync/push",
         TOKEN_A,
-        memo_create.clone(),
+        waiting_create.clone(),
     )
     .await;
     assert_eq!(first["results"][0]["status"], "accepted");
@@ -1000,23 +993,41 @@ async fn execution_duplicate_and_domain_conflicts_are_not_silent() {
         Method::POST,
         "/api/v1/sync/push",
         TOKEN_A,
-        memo_create,
+        waiting_create,
     )
     .await;
     assert_eq!(duplicate["results"][0]["status"], "duplicate");
     assert_eq!(duplicate["results"][0]["serverVersion"], "1");
 
-    let (_, archive) = send(app_a.clone(), Method::POST, "/api/v1/sync/push", TOKEN_A, execution_push_request("execution-conflict-a", vec![execution_change(user, "exec-conflict-memo-c2", "execution.memo", "memo-conflict", 1, "upsert", json!({"content":"Base memo","plainText":"Base memo","isPinned":false,"status":"archived","archivedAt":"2026-08-09T01:00:00Z"}))])).await;
+    let (_, archive) = send(app_a.clone(), Method::POST, "/api/v1/sync/push", TOKEN_A, execution_push_request("execution-conflict-a", vec![execution_change(user, "exec-conflict-waiting-c2", "execution.waiting_item", "waiting-conflict", 1, "upsert", json!({"title":"Base waiting item","status":"resolved","waitingFor":"Alice","resolvedAt":"2026-08-09T01:00:00Z"}))])).await;
     assert_eq!(archive["results"][0]["status"], "accepted");
-    let (_, stale_edit) = send(app_b.clone(), Method::POST, "/api/v1/sync/push", TOKEN_A, execution_push_request("execution-conflict-b", vec![execution_change(user, "exec-conflict-memo-c3", "execution.memo", "memo-conflict", 1, "upsert", json!({"content":"Edited on B","plainText":"Edited on B","isPinned":false,"status":"active"}))])).await;
+    let (_, stale_edit) = send(
+        app_b.clone(),
+        Method::POST,
+        "/api/v1/sync/push",
+        TOKEN_A,
+        execution_push_request(
+            "execution-conflict-b",
+            vec![execution_change(
+                user,
+                "exec-conflict-waiting-c3",
+                "execution.waiting_item",
+                "waiting-conflict",
+                1,
+                "upsert",
+                json!({"title":"Edited on B","status":"open","waitingFor":"Alice"}),
+            )],
+        ),
+    )
+    .await;
     assert_eq!(stale_edit["results"][0]["status"], "conflict");
     assert_eq!(stale_edit["results"][0]["reason"], "base_version_mismatch");
     assert_eq!(
         stale_edit["results"][0]["serverEntity"]["status"],
-        "archived"
+        "resolved"
     );
 
-    let (_, memo_text_create) = send(
+    let (_, waiting_text_create) = send(
         app_a.clone(),
         Method::POST,
         "/api/v1/sync/push",
@@ -1026,17 +1037,17 @@ async fn execution_duplicate_and_domain_conflicts_are_not_silent() {
             vec![execution_change(
                 user,
                 "exec-text-c1",
-                "execution.memo",
-                "memo-text",
+                "execution.waiting_item",
+                "waiting-text",
                 0,
                 "upsert",
-                json!({"content":"Start","plainText":"Start","isPinned":false,"status":"active"}),
+                json!({"title":"Start","status":"open","waitingFor":"Alice"}),
             )],
         ),
     )
     .await;
-    assert_eq!(memo_text_create["results"][0]["status"], "accepted");
-    let (_, memo_a) = send(
+    assert_eq!(waiting_text_create["results"][0]["status"], "accepted");
+    let (_, waiting_a) = send(
         app_a.clone(),
         Method::POST,
         "/api/v1/sync/push",
@@ -1046,17 +1057,17 @@ async fn execution_duplicate_and_domain_conflicts_are_not_silent() {
             vec![execution_change(
                 user,
                 "exec-text-c2",
-                "execution.memo",
-                "memo-text",
+                "execution.waiting_item",
+                "waiting-text",
                 1,
                 "upsert",
-                json!({"content":"A text","plainText":"A text","isPinned":false,"status":"active"}),
+                json!({"title":"A text","status":"open","waitingFor":"Alice"}),
             )],
         ),
     )
     .await;
-    assert_eq!(memo_a["results"][0]["status"], "accepted");
-    let (_, memo_b) = send(
+    assert_eq!(waiting_a["results"][0]["status"], "accepted");
+    let (_, waiting_b) = send(
         app_b.clone(),
         Method::POST,
         "/api/v1/sync/push",
@@ -1066,17 +1077,17 @@ async fn execution_duplicate_and_domain_conflicts_are_not_silent() {
             vec![execution_change(
                 user,
                 "exec-text-c3",
-                "execution.memo",
-                "memo-text",
+                "execution.waiting_item",
+                "waiting-text",
                 1,
                 "upsert",
-                json!({"content":"B text","plainText":"B text","isPinned":false,"status":"active"}),
+                json!({"title":"B text","status":"open","waitingFor":"Alice"}),
             )],
         ),
     )
     .await;
-    assert_eq!(memo_b["results"][0]["status"], "conflict");
-    assert_eq!(memo_b["results"][0]["serverEntity"]["content"], "A text");
+    assert_eq!(waiting_b["results"][0]["status"], "conflict");
+    assert_eq!(waiting_b["results"][0]["serverEntity"]["title"], "A text");
 
     let (_, task_create) = send(
         app_a.clone(),

@@ -434,11 +434,6 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
                 parse::<FocusSession>(&value, EntityType::EXECUTION_FOCUS_SESSION)
                     .map(EntityPayload::FocusSession)
             }
-            EntityType::EXECUTION_MEMO => registered(value, EntityType::EXECUTION_MEMO),
-            EntityType::EXECUTION_MEMO_TAG => registered(value, EntityType::EXECUTION_MEMO_TAG),
-            EntityType::EXECUTION_MEMO_TAG_RELATION => {
-                registered(value, EntityType::EXECUTION_MEMO_TAG_RELATION)
-            }
             EntityType::EXECUTION_REMINDER => {
                 parse::<Reminder>(&value, EntityType::EXECUTION_REMINDER)
                     .map(EntityPayload::Reminder)
