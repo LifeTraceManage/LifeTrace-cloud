@@ -486,8 +486,8 @@ export function MailPage() {
         <div className="mt-4 hidden min-h-0 flex-1 border-t pt-4 lg:flex lg:flex-col">
           <div className="mb-2 shrink-0 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Accounts</div>
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pr-1">
-          <button onClick={() => setAccountId(null)} className={cn("mb-1 flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs text-muted-foreground hover:bg-muted", accountId === null && "bg-accent font-medium text-accent-foreground")}><Inbox size={14} /><span className="flex-1">所有邮箱</span></button>
-          {accounts.map((item) => <button key={item.id} onClick={() => setAccountId(item.id)} className={cn("mb-1 flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-muted-foreground hover:bg-muted", accountId === item.id && "bg-accent font-medium text-accent-foreground")}>
+          <button onClick={() => { setAccountId(null); setSelectedSourceKey(null); setSelectedId(null); }} className={cn("mb-1 flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs text-muted-foreground hover:bg-muted", accountId === null && "bg-accent font-medium text-accent-foreground")}><Inbox size={14} /><span className="flex-1">所有邮箱</span></button>
+          {accounts.map((item) => <button key={item.id} onClick={() => { setAccountId(item.id); setSelectedSourceKey(null); setSelectedId(null); }} className={cn("mb-1 flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-muted-foreground hover:bg-muted", accountId === item.id && "bg-accent font-medium text-accent-foreground")}>
             <span className={cn("h-2 w-2 shrink-0 rounded-full", item.status === "active" ? "bg-success" : item.status === "degraded" || item.status === "validating" ? "bg-warning" : "bg-muted-foreground")} />
             <span className="min-w-0 flex-1"><span className="block truncate">{item.displayName || item.email}</span><span className="block truncate text-[10px] opacity-75">{item.email}</span></span>
           </button>)}
