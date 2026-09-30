@@ -172,12 +172,12 @@ async fn list_messages(
                 "mail message list query failed"
             );
 
-            let category_storage_missing = error
-                .to_string()
-                .to_ascii_lowercase()
-                .contains("mail_message_categories");
+            let error_text = error.to_string().to_ascii_lowercase();
+            let category_metadata_unavailable = error_text.contains("mail_message_categories")
+                || error_text.contains("json_group_array")
+                || error_text.contains("category_ids_json");
 
-            if query.category_id.is_some() || !category_storage_missing {
+            if query.category_id.is_some() || !category_metadata_unavailable {
                 return Err(ApiError::new(
                     ErrorCode::TemporarilyUnavailable,
                     "mail storage operation failed",
@@ -196,7 +196,7 @@ async fn list_messages(
                        m.sent_at,m.received_at,m.is_read,m.is_archived,
                        CASE WHEN lower(m.flags_json) LIKE '%flagged%' THEN 1 ELSE 0 END AS is_starred,
                        m.snippet,m.has_attachments,
-                       json('[]') AS category_ids_json
+                       '[]' AS category_ids_json
                 FROM mail_messages m
                 JOIN mail_folders f ON f.id=m.folder_id
                 WHERE m.user_id=$1
