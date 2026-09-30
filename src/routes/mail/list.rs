@@ -99,7 +99,19 @@ async fn list_messages(
                CASE WHEN lower(m.flags_json) LIKE '%flagged%' THEN 1 ELSE 0 END AS is_starred,
                m.snippet,m.has_attachments,
                COALESCE((
-                   SELECT json_group_array(mc.category_id)
+                   SELECT json_group_array(
+                       CASE
+                           WHEN typeof(mc.category_id)='blob' AND length(mc.category_id)=16 THEN
+                               lower(
+                                   substr(hex(mc.category_id),1,8) || '-' ||
+                                   substr(hex(mc.category_id),9,4) || '-' ||
+                                   substr(hex(mc.category_id),13,4) || '-' ||
+                                   substr(hex(mc.category_id),17,4) || '-' ||
+                                   substr(hex(mc.category_id),21,12)
+                               )
+                           ELSE CAST(mc.category_id AS TEXT)
+                       END
+                   )
                    FROM mail_message_categories mc
                    WHERE mc.user_id=m.user_id
                      AND mc.account_id=m.account_id
@@ -175,6 +187,7 @@ async fn list_messages(
             let error_text = error.to_string().to_ascii_lowercase();
             let category_metadata_unavailable = error_text.contains("mail_message_categories")
                 || error_text.contains("json_group_array")
+                || error_text.contains("json cannot hold blob")
                 || error_text.contains("category_ids_json");
 
             if query.category_id.is_some() || !category_metadata_unavailable {
@@ -262,4 +275,52 @@ async fn list_messages(
         "hasMore": has_more,
         "nextOffset": offset + items.len() as i64
     })))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::Row;
+
+    #[tokio::test]
+    async fn category_uuid_blob_is_safe_for_json_aggregation() {
+        let pool = sqlx::SqlitePool::connect(":memory:").await.expect("sqlite");
+        sqlx::query("CREATE TABLE t (category_id TEXT NOT NULL)")
+            .execute(&pool)
+            .await
+            .expect("table");
+
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        sqlx::query("INSERT INTO t(category_id) VALUES ($1)")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .expect("insert");
+
+        let row = sqlx::query(
+            r#"
+            SELECT json_group_array(
+                CASE
+                    WHEN typeof(category_id)='blob' AND length(category_id)=16 THEN
+                        lower(
+                            substr(hex(category_id),1,8) || '-' ||
+                            substr(hex(category_id),9,4) || '-' ||
+                            substr(hex(category_id),13,4) || '-' ||
+                            substr(hex(category_id),17,4) || '-' ||
+                            substr(hex(category_id),21,12)
+                        )
+                    ELSE CAST(category_id AS TEXT)
+                END
+            ) AS ids
+            FROM t
+            "#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("aggregate");
+
+        let ids: String = row.try_get("ids").expect("ids");
+        assert_eq!(ids, r#"["550e8400-e29b-41d4-a716-446655440000"]"#);
+    }
 }
