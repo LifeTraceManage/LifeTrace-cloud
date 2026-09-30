@@ -5,7 +5,7 @@ use std::process::Stdio;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use rig::tool::{Tool, ToolContext};
+use rig::tool::{MissingToolContext, Tool, ToolContext};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -115,6 +115,8 @@ struct RunSandboxJobAction {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SandboxError {
+    #[error("missing agent invocation context: {0}")]
+    Context(#[from] MissingToolContext),
     #[error("agent sandbox is disabled")]
     Disabled,
     #[error("sandbox job not found: {0}")]
@@ -151,9 +153,7 @@ impl Tool for ListSandboxJobsTool {
         tool_context: &mut ToolContext,
         _args: Self::Args,
     ) -> Result<Self::Output, Self::Error> {
-        let ctx = tool_context
-            .get::<AgentInvocationContext>()
-            .ok_or_else(|| SandboxError::Invalid("missing agent invocation context".to_owned()))?;
+        let ctx = tool_context.require::<AgentInvocationContext>()?;
         if !ctx.scopes.contains("execution:read") {
             return Err(SandboxError::Invalid(
                 "execution:read scope is required".to_owned(),
@@ -216,10 +216,7 @@ impl Tool for ProposeRunSandboxJobTool {
         tool_context: &mut ToolContext,
         args: Self::Args,
     ) -> Result<Self::Output, Self::Error> {
-        let ctx = tool_context
-            .get::<AgentInvocationContext>()
-            .ok_or_else(|| ApprovalError::Invalid("missing agent invocation context".to_owned()))?
-            .clone();
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         if !ctx.scopes.contains("execution:write") {
             return Err(ApprovalError::Permission("execution:write".to_owned()));
         }
