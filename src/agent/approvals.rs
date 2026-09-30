@@ -558,7 +558,7 @@ impl Tool for ProposeCreateTaskTool {
             arguments_json,
             action,
             json!({"title": title, "priority": priority}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -687,7 +687,7 @@ impl Tool for ProposeUpdateTaskTool {
             arguments_json,
             action,
             json!({"taskId": task_id}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -771,7 +771,7 @@ impl Tool for ProposeCreateCalendarEventTool {
             arguments_json,
             action,
             json!({"title": title, "isAllDay": args.is_all_day}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -827,7 +827,7 @@ impl Tool for ProposeCreateProjectTool {
             arguments_json,
             action,
             json!({"name": name}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -912,7 +912,7 @@ impl Tool for ProposeUpdateProjectTool {
             arguments_json,
             action,
             json!({"projectId": project_id}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1010,7 +1010,7 @@ impl Tool for ProposeCreateHabitTool {
             arguments_json,
             action,
             json!({"name": name, "scheduleType": schedule_type}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1138,7 +1138,7 @@ impl Tool for ProposeUpdateHabitTool {
             arguments_json,
             action,
             json!({"habitId": habit_id}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1200,7 +1200,7 @@ impl Tool for ProposeCreateWaitingItemTool {
             arguments_json,
             action,
             json!({"title": title, "waitingFor": waiting_for}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1319,7 +1319,7 @@ impl Tool for ProposeUpdateWaitingItemTool {
             arguments_json,
             action,
             json!({"waitingItemId": waiting_item_id}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1382,7 +1382,7 @@ impl Tool for ProposeCreateReminderTool {
             arguments_json,
             action,
             json!({"subjectType": args.subject_type, "subjectId": subject_id, "triggerAt": args.trigger_at}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1479,7 +1479,7 @@ impl Tool for ProposeUpdateReminderTool {
             arguments_json,
             action,
             json!({"reminderId": reminder_id}),
-            supersedes_approval_id.as_deref()
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1499,8 +1499,9 @@ async fn propose(
     let action_json = serde_json::to_string(&action).unwrap_or_else(|_| "{}".to_owned());
     let supersedes_approval_id = supersedes_approval_id
         .map(|value| {
-            Uuid::parse_str(value)
-                .map_err(|_| ApprovalError::Invalid("supersedesApprovalId must be a UUID".to_owned()))
+            Uuid::parse_str(value).map_err(|_| {
+                ApprovalError::Invalid("supersedesApprovalId must be a UUID".to_owned())
+            })
         })
         .transpose()?;
     let mut tx = ctx.pool.begin().await?;
