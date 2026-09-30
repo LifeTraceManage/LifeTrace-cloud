@@ -406,7 +406,7 @@ export class MailApi {
       ),
       this.request<{ items: RawCategory[] }>(
         `/api/v1/mail/messages/${encodeURIComponent(messageId)}/categories`
-      ),
+      ).catch(() => ({ items: [] })),
     ]);
     const base = {
       ...summary(raw),

@@ -53,7 +53,7 @@ export function useMailWorkspace(
         api.accounts(),
         api.identities(),
         api.drafts(),
-        api.categories(),
+        api.categories().catch(() => []),
       ]);
       const folderGroups = await Promise.all(nextAccounts.map((item) => api.mailboxes(item.id)));
       setRuntime({
