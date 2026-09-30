@@ -33,14 +33,16 @@ RUN sed -i \
     && apt-get install -y --no-install-recommends ca-certificates curl libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 lifetrace \
-    && mkdir -p /data/photo-staging \
+    && mkdir -p /data/photo-staging /data/agent-jobs /data/agent-sandbox-runs \
     && chown -R lifetrace:lifetrace /data
 
 WORKDIR /app
 COPY --from=rust-builder /build/target/release/lifetrace-cloud /app/lifetrace-cloud
 
 ENV LIFETRACE_DATABASE_PATH=/data/lifetrace.db \
-    PHOTO_STAGING_DIR=/data/photo-staging
+    PHOTO_STAGING_DIR=/data/photo-staging \
+    AGENT_SANDBOX_JOBS_DIR=/data/agent-jobs \
+    AGENT_SANDBOX_RUNS_DIR=/data/agent-sandbox-runs
 
 USER lifetrace
 EXPOSE 8787 8869
