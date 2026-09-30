@@ -202,6 +202,13 @@ export function MailPage() {
     if (sourceOverview && selectedId) setSelectedId(null);
   }, [selectedId, setSelectedId, sourceOverview]);
 
+  useEffect(() => {
+    if (!activeSource) return;
+    if (!selectedId || !activeSource.messages.some((item) => item.id === selectedId)) {
+      setSelectedId(activeSource.messages[0]?.id ?? null);
+    }
+  }, [activeSource, selectedId, setSelectedId]);
+
   function changeMailbox(next: MailboxId) {
     setSelectedCategoryId(null);
     setSelectedSourceKey(null);
