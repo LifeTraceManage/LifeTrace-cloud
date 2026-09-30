@@ -286,6 +286,8 @@ pub struct SendMailInput {
     pub subject: String,
     pub body_text: String,
     pub in_reply_to_message_id: Option<Uuid>,
+    #[serde(default)]
+    pub in_reply_to_header: Option<String>,
     pub idempotency_key: String,
 }
 
