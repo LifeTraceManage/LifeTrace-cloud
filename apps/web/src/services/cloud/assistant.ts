@@ -1,7 +1,33 @@
 import { API_BASE } from "./base";
 import { browserFetch } from "./http";
 import type { FetchLike } from "./types";
-import type { AgentPageContext } from "../../features/assistant/AgentSidebarContext";
+
+export interface AgentSelectedEntityContext {
+  entityType: string;
+  entityId: string;
+}
+
+export interface AgentTemporalContext {
+  date?: string;
+  rangeStart?: string;
+  rangeEnd?: string;
+}
+
+export interface AgentSearchContext {
+  query?: string;
+  folderId?: string;
+  projectId?: string;
+  mailbox?: string;
+}
+
+export interface AgentPageContext {
+  workspace: string;
+  view?: string;
+  label?: string;
+  selectedEntity?: AgentSelectedEntityContext;
+  temporalContext?: AgentTemporalContext;
+  searchContext?: AgentSearchContext;
+}
 
 export interface AssistantReply {
   reply: string;
