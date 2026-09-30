@@ -2244,6 +2244,11 @@ async fn execute_action(
     approval: &AgentApproval,
 ) -> Result<Value, ApprovalError> {
     match approval.action_name.as_str() {
+        "create_note" => {
+            let action: CreateNoteAction = serde_json::from_value(approval.action_json.clone())
+                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_create_note(state, principal, approval, action).await
+        }
         "send_mail" | "reply_mail" => {
             let action: SendMailAction = serde_json::from_value(approval.action_json.clone())
                 .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
@@ -2311,6 +2316,89 @@ async fn execute_action(
             "unsupported action name: {other}"
         ))),
     }
+}
+
+async fn execute_create_note(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: CreateNoteAction,
+) -> Result<Value, ApprovalError> {
+    if let Some(existing) = state
+        .store
+        .entity(&principal.user_id, EntityType::NOTE_NOTE, &action.entity_id)
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+    {
+        if !existing.deleted {
+            return Ok(json!({
+                "action":"create_note",
+                "entityType":EntityType::NOTE_NOTE,
+                "entityId":action.entity_id,
+                "serverVersion":existing.server_version.to_string(),
+                "alreadySatisfied":true
+            }));
+        }
+    }
+
+    if let Some(folder_id) = action.folder_id.as_deref() {
+        let folder = state
+            .store
+            .entity(&principal.user_id, EntityType::NOTE_FOLDER, folder_id)
+            .await
+            .map_err(|error| ApprovalError::Execution(error.to_string()))?
+            .filter(|record| !record.deleted)
+            .ok_or_else(|| ApprovalError::Invalid(
+                "folderId no longer references an existing note.folder".to_owned(),
+            ))?;
+        if folder.entity_id != folder_id {
+            return Err(ApprovalError::Invalid("folderId is invalid".to_owned()));
+        }
+    }
+
+    let content_text = action.content_markdown.clone();
+    let summary = content_text.chars().take(160).collect::<String>();
+    let payload = json!({
+        "meta": base_meta(principal, &action.entity_id, approval.requested_at),
+        "title": action.title,
+        "noteType": action.note_type,
+        "folderId": action.folder_id,
+        "contentJson": {
+            "type": "markdown",
+            "source": action.content_markdown,
+            "editor": "codemirror",
+            "properties": {
+                "status": "",
+                "source": "agent",
+                "aliases": []
+            }
+        },
+        "contentHtml": "",
+        "contentText": content_text,
+        "contentMarkdown": action.content_markdown,
+        "summary": summary,
+        "isPinned": false,
+        "isFavorite": false,
+        "isArchived": false,
+        "aiSummary": null,
+        "aiTags": null,
+        "embeddingStatus": null,
+        "lastAiProcessedAt": null
+    });
+
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::NOTE_NOTE,
+            entity_id: action.entity_id,
+            base_server_version: ServerVersion::zero(),
+            payload,
+            change_id: format!("agent-approval-{}", approval.id),
+        },
+    )
+    .await
 }
 
 async fn execute_send_mail(
@@ -3555,6 +3643,7 @@ fn require_principal_action_write(
         | "create_reminder"
         | "update_reminder" => &["sync:write", "execution:write"],
         "create_habit" | "update_habit" => &["sync:write", "habits:write"],
+        "create_note" => &["sync:write", "notes:write"],
         "send_mail" | "reply_mail" => &["mail:write"],
         other => {
             return Err(ApprovalError::Invalid(format!(
