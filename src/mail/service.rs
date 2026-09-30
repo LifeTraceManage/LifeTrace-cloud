@@ -1551,6 +1551,7 @@ impl MailService {
                     subject: draft.subject.clone(),
                     body_text: draft.body_text.clone(),
                     in_reply_to_message_id: draft.in_reply_to_message_id,
+                    in_reply_to_header: None,
                     idempotency_key: format!("draft:{draft_id}"),
                 },
             )
@@ -1653,7 +1654,14 @@ impl MailService {
             return Ok(existing.2.unwrap_or(generated_message_id));
         }
         let message_id = existing.2.unwrap_or(generated_message_id);
-        let in_reply_to = if let Some(source_id) = input.in_reply_to_message_id {
+        let in_reply_to = if let Some(header) = input
+            .in_reply_to_header
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(header.to_owned())
+        } else if let Some(source_id) = input.in_reply_to_message_id {
             sqlx::query_scalar::<_, Option<String>>(
                 "SELECT message_id FROM mail_messages WHERE user_id=$1 AND account_id=$2 AND id=$3",
             )

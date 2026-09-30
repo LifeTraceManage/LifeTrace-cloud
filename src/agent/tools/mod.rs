@@ -49,6 +49,7 @@ pub struct SearchMailArgs {
 pub struct LifeTraceOverviewTool;
 pub struct SearchRecordsTool;
 pub struct SearchMailTool;
+pub struct ListMailAccountsTool;
 pub struct ListPendingApprovalsTool;
 
 impl Tool for LifeTraceOverviewTool {
@@ -123,7 +124,7 @@ impl Tool for SearchMailTool {
     type Error = AgentToolError;
 
     fn description(&self) -> String {
-        "搜索当前用户近 30 天已同步邮件的主题、发件人、摘要和已读状态。只读，不发送、不删除、不修改邮件。".to_owned()
+        "搜索当前用户近 30 天已同步邮件，并返回主题、发收件人、Reply-To、正文预览和邮件 ID。回复邮件前必须先用它定位准确邮件；只读。".to_owned()
     }
 
     fn parameters(&self) -> Value {
@@ -146,6 +147,32 @@ impl Tool for SearchMailTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         let call_id = audit_start(&ctx, Self::NAME, &args).await?;
         let result = search_mail(&ctx, args).await;
+        finish_audited(&ctx, call_id, result).await
+    }
+}
+
+impl Tool for ListMailAccountsTool {
+    const NAME: &'static str = "lifetrace_list_mail_accounts";
+    type Args = OverviewArgs;
+    type Output = Value;
+    type Error = AgentToolError;
+
+    fn description(&self) -> String {
+        "读取当前用户可用于发信的邮箱账号与发件身份。起草新邮件前，用它确认 accountId / identityId；只读。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({"type":"object","properties":{},"additionalProperties":false})
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        let call_id = audit_start(&ctx, Self::NAME, &args).await?;
+        let result = list_mail_accounts(&ctx).await;
         finish_audited(&ctx, call_id, result).await
     }
 }
@@ -326,8 +353,8 @@ async fn search_mail(
     let limit = args.limit.unwrap_or(10).clamp(1, 20);
 
     let rows = sqlx::query(
-        "SELECT id,subject,from_json,received_at,is_read,snippet FROM mail_messages \
-         WHERE user_id=$1 AND received_at >= datetime('now','-30 days') \
+        "SELECT id,account_id,subject,from_json,to_json,cc_json,reply_to_json,received_at,is_read,snippet,body_text \
+         FROM mail_messages WHERE user_id=$1 AND received_at >= datetime('now','-30 days') \
          AND ($2='' OR lower(subject) LIKE $3 OR lower(coalesce(snippet,'')) LIKE $3 \
               OR lower(coalesce(body_text,'')) LIKE $3 OR lower(CAST(from_json AS TEXT)) LIKE $3) \
          AND ($4=0 OR is_read=0) ORDER BY received_at DESC LIMIT $5",
@@ -342,13 +369,73 @@ async fn search_mail(
 
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
+        let body = row
+            .try_get::<Option<String>, _>("body_text")?
+            .map(|value| value.chars().take(4_000).collect::<String>());
         items.push(json!({
             "id": row.try_get::<Uuid,_>("id")?,
+            "accountId": row.try_get::<Uuid,_>("account_id")?,
             "subject": row.try_get::<String,_>("subject")?,
             "from": row.try_get::<Value,_>("from_json")?,
+            "to": row.try_get::<Value,_>("to_json")?,
+            "cc": row.try_get::<Value,_>("cc_json")?,
+            "replyTo": row.try_get::<Value,_>("reply_to_json")?,
             "receivedAt": row.try_get::<DateTime<Utc>,_>("received_at")?,
             "isRead": row.try_get::<bool,_>("is_read")?,
-            "snippet": row.try_get::<Option<String>,_>("snippet")?
+            "snippet": row.try_get::<Option<String>,_>("snippet")?,
+            "bodyText": body
+        }));
+    }
+    Ok(json!({"items":items,"count":items.len()}))
+}
+
+async fn list_mail_accounts(ctx: &AgentInvocationContext) -> Result<Value, AgentToolError> {
+    if !ctx.scopes.contains("mail:read") {
+        return Err(AgentToolError::Permission("mail:read".to_owned()));
+    }
+
+    let accounts = sqlx::query(
+        "SELECT id,email_address,display_name,provider,status FROM mail_accounts \
+         WHERE user_id=$1 AND deleted_at IS NULL ORDER BY created_at ASC",
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&ctx.pool)
+    .await?;
+
+    let identities = sqlx::query(
+        "SELECT id,account_id,email_address,display_name,is_default FROM mail_identities \
+         WHERE user_id=$1 AND deleted_at IS NULL ORDER BY is_default DESC,created_at ASC",
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&ctx.pool)
+    .await?;
+
+    let mut items = Vec::with_capacity(accounts.len());
+    for account in accounts {
+        let account_id = account.try_get::<Uuid, _>("id")?;
+        let account_id_for_match = account_id;
+        let identity_items = identities
+            .iter()
+            .filter_map(|row| {
+                let identity_account_id = row.try_get::<Uuid, _>("account_id").ok()?;
+                if identity_account_id != account_id_for_match {
+                    return None;
+                }
+                Some(json!({
+                    "id": row.try_get::<Uuid,_>("id").ok()?,
+                    "email": row.try_get::<String,_>("email_address").ok()?,
+                    "displayName": row.try_get::<Option<String>,_>("display_name").ok()?,
+                    "isDefault": row.try_get::<bool,_>("is_default").ok()?
+                }))
+            })
+            .collect::<Vec<_>>();
+        items.push(json!({
+            "accountId": account_id,
+            "email": account.try_get::<String,_>("email_address")?,
+            "displayName": account.try_get::<Option<String>,_>("display_name")?,
+            "provider": account.try_get::<String,_>("provider")?,
+            "status": account.try_get::<String,_>("status")?,
+            "identities": identity_items
         }));
     }
     Ok(json!({"items":items,"count":items.len()}))
