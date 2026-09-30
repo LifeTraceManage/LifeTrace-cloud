@@ -102,7 +102,7 @@ pub struct ListSandboxJobsArgs {}
 #[serde(rename_all = "camelCase")]
 pub struct RunSandboxJobArgs {
     pub job_id: String,
-    #[serde(default)]
+    #[serde(default = "empty_object")]
     pub input: Value,
     #[serde(default)]
     pub supersedes_approval_id: Option<String>,
@@ -670,6 +670,42 @@ fn validate_input_size(settings: &SandboxSettings, input: &Value) -> Result<(), 
         )));
     }
     Ok(())
+}
+
+pub fn format_execution_result(result: &Value) -> String {
+    let job_id = result.get("jobId").and_then(Value::as_str).unwrap_or("unknown");
+    let duration_ms = result.get("durationMs").and_then(Value::as_u64);
+    let mut message = format!("沙盒 Job `{job_id}` 已执行完成。");
+    if let Some(duration_ms) = duration_ms {
+        message.push_str(&format!("耗时 {duration_ms} ms。"));
+    }
+    if let Some(output) = result.get("output").filter(|value| !value.is_null()) {
+        let encoded = serde_json::to_string_pretty(output).unwrap_or_else(|_| output.to_string());
+        message.push_str("\n\n**结构化输出**\n\n```json\n");
+        message.push_str(&encoded);
+        message.push_str("\n```");
+    }
+    if let Some(stdout) = result.get("stdout").and_then(Value::as_str).filter(|value| !value.trim().is_empty()) {
+        message.push_str("\n\n**stdout**\n\n```text\n");
+        message.push_str(stdout);
+        if result.get("stdoutTruncated").and_then(Value::as_bool).unwrap_or(false) {
+            message.push_str("\n…[输出已截断]");
+        }
+        message.push_str("\n```");
+    }
+    if let Some(stderr) = result.get("stderr").and_then(Value::as_str).filter(|value| !value.trim().is_empty()) {
+        message.push_str("\n\n**stderr**\n\n```text\n");
+        message.push_str(stderr);
+        if result.get("stderrTruncated").and_then(Value::as_bool).unwrap_or(false) {
+            message.push_str("\n…[输出已截断]");
+        }
+        message.push_str("\n```");
+    }
+    message
+}
+
+fn empty_object() -> Value {
+    json!({})
 }
 
 fn env_bool(name: &str, default: bool) -> bool {
