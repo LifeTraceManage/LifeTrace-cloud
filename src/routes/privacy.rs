@@ -368,7 +368,9 @@ async fn database_section(
                     'sessionId',CASE WHEN typeof(a.session_id)='blob' THEN lower(hex(a.session_id)) ELSE a.session_id END,
                     'toolCallId',CASE WHEN a.tool_call_id IS NULL THEN NULL WHEN typeof(a.tool_call_id)='blob' THEN lower(hex(a.tool_call_id)) ELSE a.tool_call_id END,
                     'actionName',a.action_name,'action',json(a.action_json),'status',a.status,
-                    'requestedAt',a.requested_at,'decidedAt',a.decided_at,'expiresAt',a.expires_at
+                    'requestedAt',a.requested_at,'decidedAt',a.decided_at,'expiresAt',a.expires_at,
+                    'supersededByApprovalId',CASE WHEN a.superseded_by_approval_id IS NULL THEN NULL WHEN typeof(a.superseded_by_approval_id)='blob' THEN lower(hex(a.superseded_by_approval_id)) ELSE a.superseded_by_approval_id END,
+                    'cancellationReason',a.cancellation_reason
                 )), '[]') FROM agent_approvals a
                 JOIN agent_sessions s ON s.id=a.session_id
                 WHERE a.user_id=$1 AND s.app_id=$2 AND s.scopes_json=$3
