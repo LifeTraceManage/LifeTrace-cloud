@@ -32,7 +32,6 @@ export type AppId = string;
 
 export type AppInstallationId = string;
 
-
 export type Asset = { id: EntityId, name: string, brand: string, model: string, category: AssetCategory, status: AssetStatus, purchasePrice: number, currentValue: number, purchaseDate: string, warrantyUntil: string | null, spec: string, serialNumber: string, location: string, targetDailyCost: number, purchaseChannel: string, maintenanceCost: number, recoveredAmount: number, createdAt: string, updatedAt: string, isDeleted: boolean, serverVersion: ServerVersion, };
 
 export type AssetCategory = "phone" | "tablet" | "computer" | "wearable" | "audio" | "camera" | "home" | "other";
@@ -90,17 +89,6 @@ export type DeviceId = string;
 export type DeviceInstallationV1 = { id: AppInstallationId, externalDeviceId: string, deviceGroupId: string | null, deviceName: string, appId: AppId, platform: string, status: string, clientVersion: string | null, firstSeenAt: string, lastSeenAt: string, lastLoginAt: string | null, lastSyncAt: string | null, revokedAt: string | null, current: boolean, };
 
 export type DeviceListV1 = { devices: Array<DeviceInstallationV1>, };
-
-
-
-
-
-
-
-
-
-
-
 
 export type EntityId = string;
 
@@ -160,7 +148,6 @@ openingBalanceCents: bigint | null, balanceAt: string | null, last4: string | nu
 export type ForgotPasswordRequestV1 = { email: string, };
 
 export type GoalStatus = "active" | "paused" | "completed" | "cancelled";
-
 
 export type ImportStatus = string;
 
@@ -329,10 +316,6 @@ export type User = { meta: EntityMeta, displayName: string | null, email: string
 export type UserId = string;
 
 export type UserPreference = { meta: EntityMeta, preferenceKey: string, value: JsonValue, };
-
-
-
-
 
 export type WebLoginRequestV1 = { email: string, password: string, requestedScopes: Array<Scope>, publicDevice: boolean, };
 
