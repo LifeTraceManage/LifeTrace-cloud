@@ -5,6 +5,7 @@ import {
   Plus, RotateCcw, Save, Search, Settings2, Star, Tag, Trash2, X,
 } from "lucide-react";
 import { useApp } from "../../app/AppContext";
+import { useAgentPageContext } from "../assistant/AgentSidebarContext";
 import { Button, Dialog, EmptyState, Input, cn } from "../../components/ui";
 import { entities, number, text, todayKey } from "../../lib/entities";
 import { WorkspaceShell } from "../../layouts/WorkspaceShell";
@@ -174,6 +175,23 @@ export function NotesPage() {
   const favoriteCount = activeNotes.filter((note) => note.isFavorite === true).length;
   const activeFolderId = scopeId(scope, "folder");
   const activeFolder = activeFolderId ? folderById.get(activeFolderId) ?? null : null;
+
+  useAgentPageContext({
+    workspace: "notes",
+    view: selected ? "editor" : scope,
+    label: selected
+      ? `Notes · ${text(selected, "title", "未命名笔记")}`
+      : activeFolder
+        ? `Notes · ${text(activeFolder, "name")}`
+        : "Notes",
+    selectedEntity: selected
+      ? { entityType: "note.note", entityId: selected.meta.id }
+      : undefined,
+    searchContext: {
+      query: query.trim() || undefined,
+      folderId: activeFolderId ?? undefined,
+    },
+  });
 
   useEffect(() => {
     if (!session?.user.id) {
