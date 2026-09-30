@@ -1567,7 +1567,7 @@ impl Tool for ProposeSendMailTool {
         args: Self::Args,
     ) -> Result<Self::Output, Self::Error> {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
-        require_context_write_scopes(&ctx, &["mail:write"])?;
+        require_context_write_scopes(&ctx, &["mail:read", "mail:write"])?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
         let supersedes_approval_id = args.supersedes_approval_id.clone();
 
