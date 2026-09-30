@@ -2079,26 +2079,6 @@ pub async fn decide(
                 .await?;
             }
             approval = load_approval(&state.pool, user_id, access, approval_id).await?;
-            if approval.action_name == "run_sandbox_job" {
-                let content = sandbox::format_execution_result(&result);
-                if let Err(error) = session::insert_message(
-                    &state.pool,
-                    user_id,
-                    approval.session_id,
-                    Some(approval.run_id),
-                    "assistant",
-                    &content,
-                    Some("sandbox"),
-                )
-                .await
-                {
-                    tracing::warn!(
-                        approval_id = %approval_id,
-                        error = %error,
-                        "failed to persist sandbox execution result message"
-                    );
-                }
-            }
             tracing::info!(
                 approval_id = %approval_id,
                 session_id = %approval.session_id,
@@ -2179,6 +2159,26 @@ pub async fn decide(
             }
 
             approval = load_approval(&state.pool, user_id, access, approval_id).await?;
+            if approval.action_name == "run_sandbox_job" {
+                let content = sandbox::format_execution_result(&result);
+                if let Err(error) = session::insert_message(
+                    &state.pool,
+                    user_id,
+                    approval.session_id,
+                    Some(approval.run_id),
+                    "assistant",
+                    &content,
+                    Some("sandbox"),
+                )
+                .await
+                {
+                    tracing::warn!(
+                        approval_id = %approval_id,
+                        error = %error,
+                        "failed to persist sandbox execution result message"
+                    );
+                }
+            }
             tracing::info!(
                 approval_id = %approval_id,
                 session_id = %approval.session_id,
