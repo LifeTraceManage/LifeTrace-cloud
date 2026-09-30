@@ -12,6 +12,7 @@ use sqlx::{FromRow, Row, SqlitePool};
 use uuid::Uuid;
 
 use crate::agent::context::{AgentAccessPartition, AgentInvocationContext};
+use crate::agent::sandbox;
 use crate::auth::AuthenticatedPrincipal;
 use crate::mail::domain::SendMailInput;
 use crate::mail::MailService;
@@ -1849,7 +1850,7 @@ impl Tool for ProposeReplyMailTool {
     }
 }
 
-async fn propose(
+pub(crate) async fn propose(
     ctx: &AgentInvocationContext,
     tool_name: &str,
     action_name: &str,
@@ -2244,6 +2245,9 @@ async fn execute_action(
     approval: &AgentApproval,
 ) -> Result<Value, ApprovalError> {
     match approval.action_name.as_str() {
+        "run_sandbox_job" => sandbox::execute_approved_job(approval)
+            .await
+            .map_err(|error| ApprovalError::Execution(error.to_string())),
         "create_note" => {
             let action: CreateNoteAction = serde_json::from_value(approval.action_json.clone())
                 .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
@@ -3645,6 +3649,7 @@ fn require_principal_action_write(
         "create_habit" | "update_habit" => &["sync:write", "habits:write"],
         "create_note" => &["sync:write", "notes:write"],
         "send_mail" | "reply_mail" => &["mail:write"],
+        "run_sandbox_job" => &["execution:write"],
         other => {
             return Err(ApprovalError::Invalid(format!(
                 "unsupported action name: {other}"
