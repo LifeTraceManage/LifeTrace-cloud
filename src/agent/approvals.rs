@@ -1675,7 +1675,10 @@ impl Tool for ProposeReplyMailTool {
         let mut cc = Vec::new();
         if args.reply_all {
             let owned = owned_mail_address_keys(&ctx, account_id).await?;
-            let to_keys = to.iter().map(|value| mail_address_key(value)).collect::<Vec<_>>();
+            let to_keys = to
+                .iter()
+                .map(|value| mail_address_key(value))
+                .collect::<Vec<_>>();
             for value in collect_mail_addresses(&original_to_json)
                 .into_iter()
                 .chain(collect_mail_addresses(&original_cc_json))
