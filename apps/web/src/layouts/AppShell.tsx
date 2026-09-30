@@ -7,15 +7,21 @@ import {
 } from "lucide-react";
 import { useApp } from "../app/AppContext";
 import { Badge, Button, Input, cn } from "../components/ui";
+import { AgentSidebar } from "../features/assistant/AgentSidebar";
+import {
+  agentContextFromPath,
+  useAgentRouteContext,
+  useAgentSidebar,
+} from "../features/assistant/AgentSidebarContext";
 
 const nav = [
   { group: "LifeTrace Core", items: [
-    ["/app/health", "健康", HeartPulse], ["/app/fitness", "健身", Dumbbell], ["/app/assistant", "AI 助手", Bot],
+    ["/app/health", "健康", HeartPulse], ["/app/fitness", "健身", Dumbbell],
   ] },
 ] as const;
 
 const mobile = [
-  ["/app/health", "健康", HeartPulse], ["/app/fitness", "健身", Dumbbell], ["/app/assistant", "助手", Bot],
+  ["/app/health", "健康", HeartPulse], ["/app/fitness", "健身", Dumbbell],
 ] as const;
 
 const commands = [
@@ -30,6 +36,8 @@ export function AppShell() {
   const { session, loading, online, privacy, setPrivacy, refresh, logout, theme, setTheme, error, clearError } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
+  const agent = useAgentSidebar();
+  useAgentRouteContext(agentContextFromPath(location.pathname));
   const [collapsed, setCollapsed] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -49,7 +57,7 @@ export function AppShell() {
   useEffect(() => { setMoreOpen(false); }, [location.pathname]);
   const filtered = useMemo(() => commands.filter(([label]) => label.includes(query.trim())), [query]);
 
-  return <div className="min-h-screen bg-background lg:grid lg:grid-cols-[auto_1fr]">
+  return <div className={cn("min-h-screen bg-background transition-[padding] lg:grid lg:grid-cols-[auto_1fr]", agent.open && "lg:pr-[420px]")}>
     <aside className={cn("sticky top-0 hidden h-screen border-r bg-card lg:flex lg:flex-col", collapsed ? "w-[76px]" : "w-[236px]") }>
       <div className="flex h-16 items-center gap-3 border-b px-4">
         <Link to="/" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground" aria-label="返回 LifeTrace 首页"><Leaf size={18} /></Link>
@@ -76,6 +84,7 @@ export function AppShell() {
         </div>
         <div className="flex items-center gap-1.5">
           <Button variant="outline" className="hidden min-w-56 justify-between text-muted-foreground md:flex" onClick={() => setCommandOpen(true)}><span className="flex items-center gap-2"><Search size={15} />搜索或执行命令</span><kbd className="rounded border bg-muted px-1.5 py-0.5 text-[10px]">⌘K</kbd></Button>
+          <Button size="icon" variant={agent.open ? "secondary" : "ghost"} onClick={agent.toggle} aria-label="打开 Agent"><Bot size={17} /></Button>
           <Button size="icon" variant="ghost" onClick={() => void refresh()} aria-label="刷新云端数据"><RefreshCw size={17} /></Button>
           <Button size="icon" variant="ghost" onClick={() => void setTheme(theme === "dark" ? "light" : "dark")} aria-label="切换主题">{theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}</Button>
           <Button className="md:hidden" size="icon" variant="ghost" onClick={() => setCommandOpen(true)} aria-label="搜索"><Command size={18} /></Button>
@@ -89,6 +98,7 @@ export function AppShell() {
 
     <nav className="fixed inset-x-0 bottom-0 z-40 grid h-[68px] grid-cols-4 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="移动端导航">
       {mobile.map(([path, label, Icon]) => <NavLink key={path} to={path} className={({ isActive }) => cn("flex min-h-11 flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground", isActive || routeActive(location.pathname, path) ? "text-primary" : "")}><Icon size={19} /><span>{label}</span></NavLink>)}
+      <button className={cn("flex min-h-11 flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground", agent.open && "text-primary")} onClick={agent.toggle}><Bot size={19} /><span>助手</span></button>
       <button className="flex min-h-11 flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground" onClick={() => setMoreOpen(true)}><Menu size={19} /><span>更多</span></button>
     </nav>
 
@@ -98,6 +108,8 @@ export function AppShell() {
         <div className="max-h-[360px] overflow-y-auto p-2">{filtered.map(([label, path]) => <button key={label} className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm hover:bg-muted" onClick={() => { setCommandOpen(false); setQuery(""); navigate(path); }}><span>{label}</span><span className="text-xs text-muted-foreground">↵</span></button>)}</div>
       </div>
     </div> : null}
+
+    <AgentSidebar />
 
     {moreOpen ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 lg:items-center" role="dialog" aria-modal="true" aria-label="账户与更多菜单" onMouseDown={(event) => { if (event.currentTarget === event.target) setMoreOpen(false); }}>
       <div className="w-full rounded-t-xl border bg-popover p-4 shadow-2xl sm:max-w-md sm:rounded-xl">
