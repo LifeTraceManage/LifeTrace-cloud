@@ -52,16 +52,10 @@ impl SandboxSettings {
                 DEFAULT_MAX_TIMEOUT_SECONDS,
             )
             .clamp(1, 600),
-            max_input_bytes: env_usize(
-                "AGENT_SANDBOX_MAX_INPUT_BYTES",
-                DEFAULT_MAX_INPUT_BYTES,
-            )
-            .clamp(1024, 1024 * 1024),
-            max_output_bytes: env_usize(
-                "AGENT_SANDBOX_MAX_OUTPUT_BYTES",
-                DEFAULT_MAX_OUTPUT_BYTES,
-            )
-            .clamp(1024, 1024 * 1024),
+            max_input_bytes: env_usize("AGENT_SANDBOX_MAX_INPUT_BYTES", DEFAULT_MAX_INPUT_BYTES)
+                .clamp(1024, 1024 * 1024),
+            max_output_bytes: env_usize("AGENT_SANDBOX_MAX_OUTPUT_BYTES", DEFAULT_MAX_OUTPUT_BYTES)
+                .clamp(1024, 1024 * 1024),
         }
     }
 }
@@ -360,39 +354,36 @@ async fn execute_job_inner(
     let stdout_task = tokio::spawn(read_limited(stdout, max_output));
     let stderr_task = tokio::spawn(read_limited(stderr, max_output));
 
-    let status = match tokio::time::timeout(
-        Duration::from_secs(timeout_seconds),
-        child.wait(),
-    )
-    .await
-    {
-        Ok(Ok(status)) => status,
-        Ok(Err(error)) => {
-            let _ = child.kill().await;
-            cleanup_run_dir(&run_dir).await;
-            return Err(SandboxError::Process(format!(
-                "failed while waiting for job: {error}"
-            )));
-        }
-        Err(_) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            let _ = stdout_task.await;
-            let _ = stderr_task.await;
-            cleanup_run_dir(&run_dir).await;
-            return Err(SandboxError::Timeout(timeout_seconds));
-        }
-    };
+    let status =
+        match tokio::time::timeout(Duration::from_secs(timeout_seconds), child.wait()).await {
+            Ok(Ok(status)) => status,
+            Ok(Err(error)) => {
+                let _ = child.kill().await;
+                cleanup_run_dir(&run_dir).await;
+                return Err(SandboxError::Process(format!(
+                    "failed while waiting for job: {error}"
+                )));
+            }
+            Err(_) => {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                let _ = stdout_task.await;
+                let _ = stderr_task.await;
+                cleanup_run_dir(&run_dir).await;
+                return Err(SandboxError::Timeout(timeout_seconds));
+            }
+        };
 
     let (stdout, stdout_truncated) = join_capture(stdout_task, "stdout").await?;
     let (stderr, stderr_truncated) = join_capture(stderr_task, "stderr").await?;
-    let structured_output = match read_structured_output(&output_path, settings.max_output_bytes).await {
-        Ok(value) => value,
-        Err(error) => {
-            cleanup_run_dir(&run_dir).await;
-            return Err(error);
-        }
-    };
+    let structured_output =
+        match read_structured_output(&output_path, settings.max_output_bytes).await {
+            Ok(value) => value,
+            Err(error) => {
+                cleanup_run_dir(&run_dir).await;
+                return Err(error);
+            }
+        };
     let duration_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
     cleanup_run_dir(&run_dir).await;
 
@@ -448,7 +439,10 @@ async fn join_capture(
     Ok((String::from_utf8_lossy(&bytes).into_owned(), truncated))
 }
 
-async fn read_structured_output(path: &Path, max_bytes: usize) -> Result<Option<Value>, SandboxError> {
+async fn read_structured_output(
+    path: &Path,
+    max_bytes: usize,
+) -> Result<Option<Value>, SandboxError> {
     let metadata = match tokio::fs::symlink_metadata(path).await {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -465,8 +459,9 @@ async fn read_structured_output(path: &Path, max_bytes: usize) -> Result<Option<
         )));
     }
     let bytes = tokio::fs::read(path).await?;
-    let value = serde_json::from_slice(&bytes)
-        .map_err(|error| SandboxError::Invalid(format!("output.json is not valid JSON: {error}")))?;
+    let value = serde_json::from_slice(&bytes).map_err(|error| {
+        SandboxError::Invalid(format!("output.json is not valid JSON: {error}"))
+    })?;
     Ok(Some(value))
 }
 
@@ -523,8 +518,8 @@ fn load_job(settings: &SandboxSettings, job_id: &str) -> Result<LoadedJob, Sandb
     let job_id = validate_job_id(job_id)?;
     let root = canonical_jobs_root(settings)?;
     let manifest_path = root.join(format!("{job_id}.json"));
-    let canonical_manifest = std::fs::canonicalize(&manifest_path)
-        .map_err(|error| match error.kind() {
+    let canonical_manifest =
+        std::fs::canonicalize(&manifest_path).map_err(|error| match error.kind() {
             std::io::ErrorKind::NotFound => SandboxError::NotFound(job_id.clone()),
             _ => SandboxError::Io(error),
         })?;
@@ -552,9 +547,9 @@ fn load_job(settings: &SandboxSettings, job_id: &str) -> Result<LoadedJob, Sandb
     let relative_entrypoint = PathBuf::from(&manifest.entrypoint);
     if relative_entrypoint.as_os_str().is_empty()
         || relative_entrypoint.is_absolute()
-        || relative_entrypoint.components().any(|component| {
-            !matches!(component, Component::Normal(_))
-        })
+        || relative_entrypoint
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
     {
         return Err(SandboxError::Invalid(
             "entrypoint must be a relative path without traversal".to_owned(),
@@ -673,7 +668,10 @@ fn validate_input_size(settings: &SandboxSettings, input: &Value) -> Result<(), 
 }
 
 pub fn format_execution_result(result: &Value) -> String {
-    let job_id = result.get("jobId").and_then(Value::as_str).unwrap_or("unknown");
+    let job_id = result
+        .get("jobId")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
     let duration_ms = result.get("durationMs").and_then(Value::as_u64);
     let mut message = format!("沙盒 Job `{job_id}` 已执行完成。");
     if let Some(duration_ms) = duration_ms {
@@ -685,18 +683,34 @@ pub fn format_execution_result(result: &Value) -> String {
         message.push_str(&encoded);
         message.push_str("\n```");
     }
-    if let Some(stdout) = result.get("stdout").and_then(Value::as_str).filter(|value| !value.trim().is_empty()) {
+    if let Some(stdout) = result
+        .get("stdout")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+    {
         message.push_str("\n\n**stdout**\n\n```text\n");
         message.push_str(stdout);
-        if result.get("stdoutTruncated").and_then(Value::as_bool).unwrap_or(false) {
+        if result
+            .get("stdoutTruncated")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
             message.push_str("\n…[输出已截断]");
         }
         message.push_str("\n```");
     }
-    if let Some(stderr) = result.get("stderr").and_then(Value::as_str).filter(|value| !value.trim().is_empty()) {
+    if let Some(stderr) = result
+        .get("stderr")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+    {
         message.push_str("\n\n**stderr**\n\n```text\n");
         message.push_str(stderr);
-        if result.get("stderrTruncated").and_then(Value::as_bool).unwrap_or(false) {
+        if result
+            .get("stderrTruncated")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
             message.push_str("\n…[输出已截断]");
         }
         message.push_str("\n```");
@@ -711,7 +725,12 @@ fn empty_object() -> Value {
 fn env_bool(name: &str, default: bool) -> bool {
     std::env::var(name)
         .ok()
-        .map(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(default)
 }
 
