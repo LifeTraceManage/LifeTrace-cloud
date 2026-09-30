@@ -7,8 +7,8 @@ use axum::Router;
 use lifetrace_cloud::agent::{
     approvals::{
         CreateNoteArgs, CreateProjectArgs, CreateTaskArgs, ProposeCreateNoteTool,
-        ProposeCreateProjectTool, ProposeCreateTaskTool, ProposeReplyMailTool,
-        ProposeSendMailTool, ReplyMailArgs, SendMailArgs,
+        ProposeCreateProjectTool, ProposeCreateTaskTool, ProposeReplyMailTool, ProposeSendMailTool,
+        ReplyMailArgs, SendMailArgs,
     },
     context::{AgentAccessPartition, AgentInvocationContext},
     session as agent_session,
@@ -1611,7 +1611,6 @@ async fn assistant_mail_tools_create_reviewable_send_and_reply_approvals() {
     assert_eq!(outbox_count, 0);
 }
 
-
 #[tokio::test]
 async fn assistant_note_tool_creates_note_only_after_approval() {
     let (state, app) = test_state_and_app().await;
@@ -1693,7 +1692,10 @@ async fn assistant_note_tool_creates_note_only_after_approval() {
     .await
     .unwrap();
     assert_eq!(stored.0, "Agent 创建的笔记");
-    assert_eq!(stored.1, "# 测试笔记\n\n这是通过 Agent 起草的 Markdown 内容。");
+    assert_eq!(
+        stored.1,
+        "# 测试笔记\n\n这是通过 Agent 起草的 Markdown 内容。"
+    );
     assert_eq!(stored.2, "quick");
     assert_eq!(stored.3, None);
 }
