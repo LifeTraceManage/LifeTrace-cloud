@@ -16,8 +16,9 @@ describe("navigation contract",()=>{
     expect(workspaces.every(path=>!path.startsWith("/app/"))).toBe(true);
     expect(executeViews).toContain("habits");
   });
-  it("keeps remaining core destinations under app",()=>{
-    const core=["/app/health","/app/fitness","/app/assistant","/app/settings"];
+  it("keeps remaining page destinations under app while Agent is global",()=>{
+    const core=["/app/health","/app/fitness","/app/settings"];
     expect(core.every(path=>path.startsWith("/app/"))).toBe(true);
+    expect(core).not.toContain("/app/assistant");
   });
 });
