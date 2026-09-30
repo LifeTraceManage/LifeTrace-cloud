@@ -19,6 +19,7 @@ import { MailAccountSettings } from "./MailAccountSettings";
 import { MailComposer, type ComposeMode } from "./MailComposer";
 import { MailHtmlFrame } from "./MailHtmlFrame";
 import { renderableMailHtml } from "./mailHtml";
+import { groupMessagesBySource, type MailSourceGroup } from "./mailSource";
 import type { MailAddress, MailDraft, MailMessageDetail } from "./types";
 import { useMailWorkspace } from "./useMailWorkspace";
 
@@ -94,6 +95,8 @@ export function MailPage() {
   const deferredQuery = useDeferredValue(query);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [listMode, setListMode] = useState<"sources" | "messages">("sources");
+  const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [categoryName, setCategoryName] = useState("");
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
@@ -147,6 +150,15 @@ export function MailPage() {
     },
   });
   const isDraftView = !selectedCategoryId && mailbox === "drafts";
+  const sourceGroupingAvailable = !selectedCategoryId && mailbox === "inbox";
+  const sourceGroups = useMemo(() => groupMessagesBySource(messages), [messages]);
+  const activeSource = selectedSourceKey
+    ? sourceGroups.find((item) => item.key === selectedSourceKey) ?? null
+    : null;
+  const sourceOverview = sourceGroupingAvailable && listMode === "sources" && !activeSource;
+  const visibleMessages = sourceGroupingAvailable && listMode === "sources" && activeSource
+    ? activeSource.messages
+    : messages;
   const categoryById = useMemo(
     () => new Map(categories.map((item) => [item.id, item])),
     [categories],
@@ -166,7 +178,13 @@ export function MailPage() {
         .includes(needle);
     });
   }, [accountId, deferredQuery, drafts]);
-  const listCount = isDraftView ? visibleDrafts.length : messages.length;
+  const listCount = isDraftView
+    ? visibleDrafts.length
+    : sourceOverview
+      ? sourceGroups.length
+      : activeSource
+        ? activeSource.messageCount
+        : messages.length;
 
   useEffect(() => {
     if (selectedCategoryId && !categories.some((item) => item.id === selectedCategoryId)) {
@@ -174,8 +192,19 @@ export function MailPage() {
     }
   }, [categories, selectedCategoryId]);
 
+  useEffect(() => {
+    if (selectedSourceKey && !sourceGroups.some((item) => item.key === selectedSourceKey)) {
+      setSelectedSourceKey(null);
+    }
+  }, [selectedSourceKey, sourceGroups]);
+
+  useEffect(() => {
+    if (sourceOverview && selectedId) setSelectedId(null);
+  }, [selectedId, setSelectedId, sourceOverview]);
+
   function changeMailbox(next: MailboxId) {
     setSelectedCategoryId(null);
+    setSelectedSourceKey(null);
     setMailbox(next);
     setMobileDetail(false);
     setSelectedId(null);
@@ -183,8 +212,28 @@ export function MailPage() {
 
   function changeCategory(id: string) {
     setSelectedCategoryId(id);
+    setSelectedSourceKey(null);
     setMobileDetail(false);
     setSelectedId(null);
+  }
+
+  function changeListMode(next: "sources" | "messages") {
+    setListMode(next);
+    setSelectedSourceKey(null);
+    setMobileDetail(false);
+    setSelectedId(next === "messages" ? messages[0]?.id ?? null : null);
+  }
+
+  function selectSource(source: MailSourceGroup) {
+    setSelectedSourceKey(source.key);
+    setSelectedId(source.latestMessage.id);
+    setMobileDetail(false);
+  }
+
+  function leaveSource() {
+    setSelectedSourceKey(null);
+    setSelectedId(null);
+    setMobileDetail(false);
   }
 
   function selectMessage(id: string) {
@@ -452,9 +501,26 @@ export function MailPage() {
         <div className="shrink-0 border-b p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h1 className="text-sm font-semibold">{account ? `${account.email} · ${currentLabel}` : `所有邮箱 · ${currentLabel}`}</h1>
+              <div className="flex items-center gap-1.5">
+                {activeSource ? <button className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={leaveSource} aria-label="返回全部来源"><ArrowLeft size={14} /></button> : null}
+                <h1 className="min-w-0 truncate text-sm font-semibold">
+                  {activeSource
+                    ? `${activeSource.label} · ${activeSource.messageCount} 封`
+                    : account
+                      ? `${account.email} · ${currentLabel}`
+                      : `所有邮箱 · ${currentLabel}`}
+                </h1>
+              </div>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {runtimeReady ? isDraftView ? `${visibleDrafts.length} 个草稿` : `${messages.length} 封 · ${unreadCount} 封未读` : runtimeDescription}
+                {runtimeReady
+                  ? isDraftView
+                    ? `${visibleDrafts.length} 个草稿`
+                    : activeSource
+                      ? `${activeSource.unreadCount} 封未读 · ${activeSource.groupedBy === "domain" ? activeSource.domain : activeSource.email}`
+                      : sourceOverview
+                        ? `${sourceGroups.length} 个来源 · ${messages.length} 封邮件 · ${unreadCount} 封未读`
+                        : `${messages.length} 封 · ${unreadCount} 封未读`
+                  : runtimeDescription}
               </p>
             </div>
             {listLoading ? <Loader2 size={15} className="animate-spin text-muted-foreground" /> : <Badge>{listCount}</Badge>}
@@ -463,6 +529,19 @@ export function MailPage() {
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
             <Input className="h-9 pl-9" placeholder={isDraftView ? "搜索草稿" : "搜索主题、发件人、收件人或正文"} value={query} onChange={(event) => setQuery(event.target.value)} disabled={!runtimeReady} />
           </div>
+          {sourceGroupingAvailable ? <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="inline-flex rounded-md border bg-muted/30 p-0.5 text-[11px]">
+              <button
+                className={cn("rounded px-2.5 py-1.5 text-muted-foreground", listMode === "sources" && "bg-background font-medium text-foreground shadow-sm")}
+                onClick={() => changeListMode("sources")}
+              >按来源</button>
+              <button
+                className={cn("rounded px-2.5 py-1.5 text-muted-foreground", listMode === "messages" && "bg-background font-medium text-foreground shadow-sm")}
+                onClick={() => changeListMode("messages")}
+              >按邮件</button>
+            </div>
+            {activeSource ? <button className="text-[11px] text-muted-foreground hover:text-foreground" onClick={leaveSource}>全部来源</button> : null}
+          </div> : null}
         </div>
 
         <div className="scrollbar-thin overflow-y-auto p-2 lg:min-h-0 lg:flex-1">
@@ -482,7 +561,23 @@ export function MailPage() {
             {!visibleDrafts.length ? <EmptyState icon={<FileText size={22} />} title="没有草稿" /> : null}
           </> : <>
             {runtimeReady && !listLoading && !messages.length ? <EmptyState icon={<MailOpen size={22} />} title={query ? "没有匹配的邮件" : `${currentLabel}为空`} /> : null}
-            {messages.map((message) => <button key={message.id} onClick={() => selectMessage(message.id)} className={cn("mb-1 w-full rounded-md px-3 py-3 text-left transition-colors hover:bg-muted", selectedId === message.id && "bg-accent", !message.isRead && "font-medium")}>
+            {sourceOverview ? sourceGroups.map((source) => <button
+              key={source.key}
+              onClick={() => selectSource(source)}
+              className="mb-1 w-full rounded-md px-3 py-3 text-left transition-colors hover:bg-muted"
+            >
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{source.label}</span>
+                <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">{source.messageCount} 封</span>
+                {source.unreadCount ? <span className="shrink-0 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-medium text-background">{source.unreadCount} 未读</span> : null}
+              </div>
+              <div className="mt-1 truncate text-[11px] font-normal text-muted-foreground">{source.groupedBy === "domain" ? source.domain : source.email}</div>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-xs">{source.latestMessage.subject || "(无主题)"}</span>
+                <span className="shrink-0 text-[10px] font-normal text-muted-foreground">{new Date(source.latestMessage.sentAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+              </div>
+              <div className="mt-1 line-clamp-1 text-xs font-normal leading-5 text-muted-foreground">{source.latestMessage.preview || "无预览"}</div>
+            </button>) : visibleMessages.map((message) => <button key={message.id} onClick={() => selectMessage(message.id)} className={cn("mb-1 w-full rounded-md px-3 py-3 text-left transition-colors hover:bg-muted", selectedId === message.id && "bg-accent", !message.isRead && "font-medium")}>
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-xs">{addressesText(message.from) || "未知发件人"}</span>
                 {message.isStarred ? <Star size={12} className="shrink-0 fill-current text-warning" /> : null}
@@ -500,7 +595,7 @@ export function MailPage() {
       </section>
 
       <main className={cn("min-w-0 bg-background lg:h-full lg:min-h-0 lg:overflow-hidden", mobileDetail ? "block" : "hidden lg:block")}>
-        {selectedMessage && !isDraftView ? <div className="flex min-h-full flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
+        {selectedMessage && !isDraftView && !sourceOverview ? <div className="flex min-h-full flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
           <div className="shrink-0 border-b p-4 sm:p-5">
             <div className="mb-3 flex items-center gap-2">
               <Button className="lg:hidden" size="icon" variant="ghost" onClick={() => setMobileDetail(false)} aria-label="返回邮件列表"><ArrowLeft size={17} /></Button>
@@ -555,7 +650,8 @@ export function MailPage() {
         </div> : <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-8 lg:h-full lg:min-h-0">
           <div className="max-w-md text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">{detailLoading ? <Loader2 size={21} className="animate-spin" /> : <Mail size={21} />}</div>
-            <h2 className="mt-4 text-lg font-semibold">{runtimeReady ? isDraftView ? "选择或新建草稿" : "选择一封邮件" : "LifeTrace Mail"}</h2>
+            <h2 className="mt-4 text-lg font-semibold">{runtimeReady ? isDraftView ? "选择或新建草稿" : sourceOverview ? "选择一个邮件来源" : "选择一封邮件" : "LifeTrace Mail"}</h2>
+            {runtimeReady && sourceOverview ? <p className="mt-2 text-sm leading-6 text-muted-foreground">同一来源的邮件会自动聚合，进入来源后仍可逐封处理。</p> : null}
             {!runtimeReady ? <p className="mt-2 text-sm leading-6 text-muted-foreground">{runtimeDescription}</p> : null}
           </div>
         </div>}
