@@ -1245,7 +1245,6 @@ Mailbox sync
 - PGP；
 - Advanced Search；
 - Semantic Search；
-- Smart Categories；
 - AI triage；
 - Thread summary；
 - Follow-up detection。
