@@ -9,7 +9,6 @@ const HealthPage = lazy(() => import("../features/health/HealthPage").then((modu
 const NotesPage = lazy(() => import("../features/notes/NotesPage").then((module) => ({ default: module.NotesPage })));
 const ReviewPage = lazy(() => import("../features/review/ReviewPage").then((module) => ({ default: module.ReviewPage })));
 const FinanceWorkspace = lazy(() => import("../features/finance/FinanceWorkspace").then((module) => ({ default: module.FinanceWorkspace })));
-const AssistantPage = lazy(() => import("../features/assistant/AssistantPage").then((module) => ({ default: module.AssistantPage })));
 const SearchPage = lazy(() => import("../features/search/SearchPage").then((module) => ({ default: module.SearchPage })));
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const UiShowcasePage = lazy(() => import("../features/system/UiShowcasePage").then((module) => ({ default: module.UiShowcasePage })));
@@ -65,7 +64,7 @@ function FeatureRoutes() {
       <Route path="/app/review" element={withSuspense(<ReviewPage />)} />
       <Route path="/finance/*" element={withSuspense(<FinanceWorkspace />)} />
       <Route path="/app/finance/*" element={<LegacyFinanceRedirect />} />
-      <Route path="/app/assistant" element={withSuspense(<AssistantPage />)} />
+      <Route path="/app/assistant" element={<Navigate to="/app/health" replace />} />
       <Route path="/app/search" element={withSuspense(<SearchPage />)} />
       <Route path="/app/settings/*" element={withSuspense(<SettingsPage />)} />
       <Route path="/app/system/ui" element={withSuspense(<UiShowcasePage />)} />
