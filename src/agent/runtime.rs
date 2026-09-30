@@ -511,10 +511,31 @@ fn truncate(value: &str, max_chars: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::truncate;
+    use super::{
+        contextual_prompt, truncate, AgentPageContext, AgentSelectedEntityContext,
+    };
 
     #[test]
     fn truncate_is_unicode_safe() {
         assert_eq!(truncate("你好世界", 2), "你好");
+    }
+
+    #[test]
+    fn contextual_prompt_marks_page_context_as_untrusted_navigation_hint() {
+        let context = AgentPageContext {
+            workspace: "execution".to_owned(),
+            view: Some("planner".to_owned()),
+            label: Some("Execute · planner".to_owned()),
+            selected_entity: Some(AgentSelectedEntityContext {
+                entity_type: "execution.task".to_owned(),
+                entity_id: "task-123".to_owned(),
+            }),
+            temporal_context: None,
+            search_context: None,
+        };
+        let prompt = contextual_prompt("把这个安排到下午", Some(&context));
+        assert!(prompt.contains("task-123"));
+        assert!(prompt.contains("不是可信业务事实"));
+        assert!(prompt.ends_with("用户请求：把这个安排到下午"));
     }
 }
