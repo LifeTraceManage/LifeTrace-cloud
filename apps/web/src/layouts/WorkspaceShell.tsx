@@ -1,8 +1,14 @@
 import type { ReactNode } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { Bot, ChevronDown, Dumbbell, HeartPulse, LayoutDashboard, Leaf, LogOut, Mail, Moon, NotebookPen, Settings, Sun, WalletCards } from "lucide-react";
 import { useApp } from "../app/AppContext";
 import { Badge, Button, cn } from "../components/ui";
+import { AgentSidebar } from "../features/assistant/AgentSidebar";
+import {
+  agentContextFromPath,
+  useAgentRouteContext,
+  useAgentSidebar,
+} from "../features/assistant/AgentSidebarContext";
 
 const workspaceLinks = [
   { to: "/notes", label: "Notes", icon: NotebookPen },
@@ -14,7 +20,6 @@ const workspaceLinks = [
 const coreLinks = [
   { to: "/app/health", label: "Health", icon: HeartPulse },
   { to: "/app/fitness", label: "Fitness", icon: Dumbbell },
-  { to: "/app/assistant", label: "Assistant", icon: Bot },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -32,8 +37,11 @@ export function WorkspaceShell({
   children: ReactNode;
 }) {
   const { session, online, loading, theme, setTheme, logout, error, clearError } = useApp();
+  const location = useLocation();
+  const agent = useAgentSidebar();
+  useAgentRouteContext(agentContextFromPath(location.pathname));
 
-  return <div className="min-h-screen bg-background">
+  return <div className={cn("min-h-screen bg-background transition-[padding]", agent.open && "lg:pr-[420px]")}>
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
       <div className="flex h-14 items-center gap-3 px-3 sm:px-5 lg:h-16 lg:px-6">
         <Link to="/" className="flex shrink-0 items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold tracking-[-0.02em] hover:text-primary">
@@ -61,6 +69,7 @@ export function WorkspaceShell({
           {!online ? <Badge className="border-warning/30 bg-warning/10 text-warning">离线</Badge> : null}
           {loading ? <Badge>同步中</Badge> : null}
           {action}
+          <Button size="icon" variant={agent.open ? "secondary" : "ghost"} onClick={agent.toggle} aria-label="打开 Agent"><Bot size={17} /></Button>
           <Button size="icon" variant="ghost" onClick={() => void setTheme(theme === "dark" ? "light" : "dark")} aria-label="切换主题">
             {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </Button>
@@ -82,5 +91,6 @@ export function WorkspaceShell({
     {error ? <div className="mx-3 mt-3 flex items-start justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:mx-5 lg:mx-6"><span>{error}</span><button onClick={clearError}>关闭</button></div> : null}
 
     {children}
+    <AgentSidebar />
   </div>;
 }
