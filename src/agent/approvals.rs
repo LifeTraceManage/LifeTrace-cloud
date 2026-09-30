@@ -1612,14 +1612,13 @@ impl Tool for ProposeCreateNoteTool {
 
         let folder_id = bounded_optional(args.folder_id.as_deref(), 200);
         if let Some(folder_id) = folder_id.as_deref() {
-            let folder = ctx
-                .pool
-                .fetch_optional(sqlx::query(
-                    "SELECT entity_id FROM sync_entities WHERE user_id=$1 AND entity_type='note.folder' AND entity_id=$2 AND is_deleted=0",
-                )
-                .bind(ctx.user_id)
-                .bind(folder_id))
-                .await?;
+            let folder = sqlx::query(
+                "SELECT entity_id FROM sync_entities WHERE user_id=$1 AND entity_type='note.folder' AND entity_id=$2 AND is_deleted=0",
+            )
+            .bind(ctx.user_id)
+            .bind(folder_id)
+            .fetch_optional(&ctx.pool)
+            .await?;
             if folder.is_none() {
                 return Err(ApprovalError::Invalid(
                     "folderId does not reference an existing note.folder".to_owned(),
