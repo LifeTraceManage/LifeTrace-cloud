@@ -75,7 +75,14 @@ export function AgentSidebarProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState("");
   const [routeContext, setRouteContext] = useState<AgentPageContext | null>(null);
   const [pageContext, setPageContext] = useState<AgentPageContext | null>(null);
-  const effectivePageContext = pageContext ?? routeContext;
+  const effectivePageContext = useMemo(() => {
+    const base = pageContext ?? routeContext;
+    if (!base) return null;
+    const timeZone = typeof Intl !== "undefined"
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone
+      : undefined;
+    return timeZone ? { ...base, timeZone } : base;
+  }, [pageContext, routeContext]);
 
   const setOpen = useCallback((value: boolean) => {
     setOpenState(value);
