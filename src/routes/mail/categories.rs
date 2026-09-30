@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::get;
+use axum::routing::{get, patch};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use lifetrace_contracts::ErrorCode;
@@ -60,11 +60,7 @@ struct MessageRef {
 }
 
 fn invalid(message: &'static str) -> ApiError {
-    ApiError::new(
-        ErrorCode::InvalidRequest,
-        message,
-        StatusCode::BAD_REQUEST,
-    )
+    ApiError::new(ErrorCode::InvalidRequest, message, StatusCode::BAD_REQUEST)
 }
 
 fn not_found(message: &'static str) -> ApiError {
