@@ -12,6 +12,7 @@ use lifetrace_cloud::agent::{
     },
     context::{AgentAccessPartition, AgentInvocationContext},
     session as agent_session,
+    tools::{SearchMailArgs, SearchMailTool, SearchRecordsArgs, SearchRecordsTool},
 };
 use lifetrace_cloud::{app, AppState, Config};
 use rig::tool::{Tool, ToolContext};
@@ -1698,4 +1699,101 @@ async fn assistant_note_tool_creates_note_only_after_approval() {
     );
     assert_eq!(stored.2, "quick");
     assert_eq!(stored.3, None);
+}
+
+#[tokio::test]
+async fn assistant_read_tools_resolve_selected_entities_by_exact_id() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"准备测试 selectedEntity 精确读取"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT user_id FROM agent_sessions WHERE id=$1")
+        .bind(session_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+
+    let task_id = Uuid::new_v4().to_string();
+    let task_approval = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_task",
+        json!({
+            "entityId": task_id,
+            "title": "Selected entity exact task",
+            "description": null,
+            "projectId": null,
+            "priority": "normal",
+            "dueAt": null,
+            "scheduledStartAt": null,
+            "scheduledEndAt": null,
+            "timezone": "UTC",
+            "context": null
+        }),
+    )
+    .await;
+    let (status, _) = send(
+        app,
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{task_approval}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (_, _, mail_message_id) = seed_agent_mail_fixture(&state, user_id).await;
+
+    let scopes = BTreeSet::from(["execution:read".to_owned(), "mail:read".to_owned()]);
+    let mut tool_context = ToolContext::new();
+    tool_context.insert(AgentInvocationContext {
+        pool: state.pool.clone(),
+        user_id,
+        scopes: Arc::new(scopes),
+        run_id,
+        session_id,
+    });
+
+    let task_result = SearchRecordsTool
+        .call(
+            &mut tool_context,
+            SearchRecordsArgs {
+                entity_types: Some(vec!["execution.task".to_owned()]),
+                entity_id: Some(task_id.clone()),
+                query: None,
+                limit: Some(10),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(task_result["count"], 1);
+    assert_eq!(task_result["items"][0]["entityId"], task_id);
+    assert_eq!(
+        task_result["items"][0]["payload"]["title"],
+        "Selected entity exact task"
+    );
+
+    let mail_result = SearchMailTool
+        .call(
+            &mut tool_context,
+            SearchMailArgs {
+                message_id: Some(mail_message_id.to_string()),
+                query: Some("this query must not be required".to_owned()),
+                unread_only: Some(true),
+                limit: Some(20),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(mail_result["count"], 1);
+    assert_eq!(mail_result["items"][0]["id"], mail_message_id.to_string());
+    assert_eq!(mail_result["items"][0]["subject"], "Status update");
 }
