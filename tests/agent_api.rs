@@ -1340,7 +1340,6 @@ async fn assistant_cannot_supersede_pending_approval_with_different_action_type(
     assert_eq!(count, 1);
 }
 
-
 #[tokio::test]
 async fn assistant_accepts_page_context_without_persisting_it_as_user_message() {
     let app = test_app().await;
