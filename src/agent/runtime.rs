@@ -87,7 +87,12 @@ impl AgentPageContext {
         validate_optional_context_text("view", self.view.as_deref(), 64)?;
         validate_optional_context_text("label", self.label.as_deref(), 160)?;
         if let Some(selected) = self.selected_entity.as_ref() {
-            validate_context_text("selectedEntity.entityType", &selected.entity_type, 128, false)?;
+            validate_context_text(
+                "selectedEntity.entityType",
+                &selected.entity_type,
+                128,
+                false,
+            )?;
             validate_context_text("selectedEntity.entityId", &selected.entity_id, 240, false)?;
         }
         if let Some(temporal) = self.temporal_context.as_ref() {
@@ -105,9 +110,21 @@ impl AgentPageContext {
         }
         if let Some(search) = self.search_context.as_ref() {
             validate_optional_context_text("searchContext.query", search.query.as_deref(), 300)?;
-            validate_optional_context_text("searchContext.folderId", search.folder_id.as_deref(), 240)?;
-            validate_optional_context_text("searchContext.projectId", search.project_id.as_deref(), 240)?;
-            validate_optional_context_text("searchContext.mailbox", search.mailbox.as_deref(), 160)?;
+            validate_optional_context_text(
+                "searchContext.folderId",
+                search.folder_id.as_deref(),
+                240,
+            )?;
+            validate_optional_context_text(
+                "searchContext.projectId",
+                search.project_id.as_deref(),
+                240,
+            )?;
+            validate_optional_context_text(
+                "searchContext.mailbox",
+                search.mailbox.as_deref(),
+                160,
+            )?;
         }
         Ok(())
     }
@@ -511,9 +528,7 @@ fn truncate(value: &str, max_chars: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        contextual_prompt, truncate, AgentPageContext, AgentSelectedEntityContext,
-    };
+    use super::{contextual_prompt, truncate, AgentPageContext, AgentSelectedEntityContext};
 
     #[test]
     fn truncate_is_unicode_safe() {
