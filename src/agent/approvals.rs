@@ -1533,6 +1533,201 @@ impl Tool for ProposeUpdateReminderTool {
     }
 }
 
+impl Tool for ProposeSendMailTool {
+    const NAME: &'static str = "lifetrace_propose_send_mail";
+    type Args = SendMailArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "起草一封新邮件并生成发送审批。必须先用 lifetrace_list_mail_accounts 确认 accountId/identityId。该工具不会发送邮件；只有用户批准审批后才会通过 SMTP 发送。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。用户要求修改当前未批准邮件草稿时，填写被替代的 approvalId"},
+                "accountId":{"type":"string","description":"来自 lifetrace_list_mail_accounts 的 accountId"},
+                "identityId":{"type":"string","description":"可选。来自该账号 identities 的 identityId；省略时使用默认发件身份"},
+                "to":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":50},
+                "cc":{"type":"array","items":{"type":"string"},"maxItems":50},
+                "bcc":{"type":"array","items":{"type":"string"},"maxItems":50},
+                "subject":{"type":"string"},
+                "bodyText":{"type":"string"}
+            },
+            "required":["accountId","to","subject","bodyText"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_context_write_scopes(&ctx, &["mail:write"])?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
+
+        let (account_id, identity_id, from_address) =
+            resolve_mail_sender(&ctx, &args.account_id, args.identity_id.as_deref()).await?;
+        let to = normalize_mail_recipients(args.to, "to", true)?;
+        let cc = normalize_mail_recipients(args.cc, "cc", false)?;
+        let bcc = normalize_mail_recipients(args.bcc, "bcc", false)?;
+        let subject = bounded_required(&args.subject, "subject", 300)?;
+        let body_text = bounded_required(&args.body_text, "bodyText", 20_000)?;
+
+        let action = json!({
+            "accountId": account_id,
+            "identityId": identity_id,
+            "to": to,
+            "cc": cc,
+            "bcc": bcc,
+            "subject": subject,
+            "bodyText": body_text,
+            "sourceMessageId": null,
+            "inReplyToHeader": null
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "send_mail",
+            arguments_json,
+            action,
+            json!({
+                "from": from_address,
+                "to": to,
+                "cc": cc,
+                "bcc": bcc,
+                "subject": subject,
+                "bodyText": body_text
+            }),
+            supersedes_approval_id.as_deref(),
+        )
+        .await
+    }
+}
+
+impl Tool for ProposeReplyMailTool {
+    const NAME: &'static str = "lifetrace_propose_reply_mail";
+    type Args = ReplyMailArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "起草对已有邮件的回复并生成发送审批。调用前必须先用 lifetrace_search_mail 定位准确 messageId；服务器会从原邮件推导账号、收件人与 In-Reply-To，避免模型猜测。该工具不会直接发送。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。用户要求修改当前未批准回复草稿时，填写被替代的 approvalId"},
+                "messageId":{"type":"string","description":"来自 lifetrace_search_mail 的原邮件 id"},
+                "identityId":{"type":"string","description":"可选。指定同一账号下的发件身份"},
+                "bodyText":{"type":"string"},
+                "replyAll":{"type":"boolean","default":false}
+            },
+            "required":["messageId","bodyText"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_context_write_scopes(&ctx, &["mail:read", "mail:write"])?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
+        let source_message_id = parse_uuid_field(&args.message_id, "messageId")?;
+
+        let source = sqlx::query(
+            "SELECT account_id,message_id,subject,from_json,to_json,cc_json,reply_to_json \
+             FROM mail_messages WHERE user_id=$1 AND id=$2",
+        )
+        .bind(ctx.user_id)
+        .bind(source_message_id)
+        .fetch_optional(&ctx.pool)
+        .await?
+        .ok_or(ApprovalError::NotFound)?;
+
+        let account_id = source.try_get::<Uuid, _>("account_id")?;
+        let identity_arg = args.identity_id.as_deref();
+        let (_, identity_id, from_address) =
+            resolve_mail_sender_for_account(&ctx, account_id, identity_arg).await?;
+
+        let reply_to_json = source.try_get::<Value, _>("reply_to_json")?;
+        let from_json = source.try_get::<Value, _>("from_json")?;
+        let original_to_json = source.try_get::<Value, _>("to_json")?;
+        let original_cc_json = source.try_get::<Value, _>("cc_json")?;
+
+        let mut to = collect_mail_addresses(&reply_to_json);
+        if to.is_empty() {
+            to = collect_mail_addresses(&from_json);
+        }
+        to = normalize_mail_recipients(to, "to", true)?;
+
+        let mut cc = Vec::new();
+        if args.reply_all {
+            let owned = owned_mail_address_keys(&ctx, account_id).await?;
+            let to_keys = to.iter().map(|value| mail_address_key(value)).collect::<Vec<_>>();
+            for value in collect_mail_addresses(&original_to_json)
+                .into_iter()
+                .chain(collect_mail_addresses(&original_cc_json))
+            {
+                let key = mail_address_key(&value);
+                if !owned.contains(&key)
+                    && !to_keys.contains(&key)
+                    && !cc.iter().any(|existing| mail_address_key(existing) == key)
+                {
+                    cc.push(value);
+                }
+            }
+            cc = normalize_mail_recipients(cc, "cc", false)?;
+        }
+
+        let original_subject = source.try_get::<String, _>("subject")?;
+        let subject = reply_mail_subject(&original_subject);
+        let body_text = bounded_required(&args.body_text, "bodyText", 20_000)?;
+        let in_reply_to_header = source.try_get::<Option<String>, _>("message_id")?;
+
+        let action = json!({
+            "accountId": account_id,
+            "identityId": identity_id,
+            "to": to,
+            "cc": cc,
+            "bcc": [],
+            "subject": subject,
+            "bodyText": body_text,
+            "sourceMessageId": source_message_id,
+            "inReplyToHeader": in_reply_to_header
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "reply_mail",
+            arguments_json,
+            action,
+            json!({
+                "from": from_address,
+                "to": to,
+                "cc": cc,
+                "subject": subject,
+                "bodyText": body_text,
+                "sourceMessageId": source_message_id,
+                "replyAll": args.reply_all
+            }),
+            supersedes_approval_id.as_deref(),
+        )
+        .await
+    }
+}
+
 async fn propose(
     ctx: &AgentInvocationContext,
     tool_name: &str,
