@@ -1298,10 +1298,7 @@ async fn assistant_cannot_supersede_pending_approval_with_different_action_type(
     )
     .await;
 
-    let scopes = BTreeSet::from([
-        "sync:write".to_owned(),
-        "execution:write".to_owned(),
-    ]);
+    let scopes = BTreeSet::from(["sync:write".to_owned(), "execution:write".to_owned()]);
     let mut tool_context = ToolContext::new();
     tool_context.insert(AgentInvocationContext {
         pool: state.pool.clone(),
