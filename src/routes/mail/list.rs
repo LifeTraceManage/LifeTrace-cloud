@@ -25,6 +25,7 @@ struct MessageListQuery {
     q: Option<String>,
     unread_only: Option<bool>,
     starred_only: Option<bool>,
+    category_id: Option<Uuid>,
     limit: Option<i64>,
     offset: Option<i64>,
 }
@@ -46,6 +47,7 @@ struct MailMessageSummary {
     is_starred: bool,
     snippet: Option<String>,
     has_attachments: bool,
+    category_ids_json: Value,
 }
 
 fn normalize_role(value: Option<String>) -> Result<Option<String>, ApiError> {
@@ -95,7 +97,14 @@ async fn list_messages(
         SELECT m.id,m.account_id,m.folder_id,m.thread_id,m.subject,m.from_json,m.to_json,
                m.sent_at,m.received_at,m.is_read,m.is_archived,
                CASE WHEN lower(m.flags_json) LIKE '%flagged%' THEN 1 ELSE 0 END AS is_starred,
-               m.snippet,m.has_attachments
+               m.snippet,m.has_attachments,
+               COALESCE((
+                   SELECT json_group_array(mc.category_id)
+                   FROM mail_message_categories mc
+                   WHERE mc.user_id=m.user_id
+                     AND mc.account_id=m.account_id
+                     AND mc.content_hash=m.content_hash
+               ), '[]') AS category_ids_json
         FROM mail_messages m
         JOIN mail_folders f ON f.id=m.folder_id
         WHERE m.user_id=$1
@@ -105,6 +114,7 @@ async fn list_messages(
                 $3 IS NOT NULL
                 OR $4 IS NOT NULL
                 OR $7=1
+                OR $8 IS NOT NULL
                 OR (f.normalized_role='inbox' AND m.is_archived=0)
               )
           AND (
@@ -121,8 +131,22 @@ async fn list_messages(
                OR lower(m.to_json) LIKE '%' || lower($5) || '%')
           AND ($6 IS NULL OR ($6=1 AND m.is_read=0) OR $6=0)
           AND ($7 IS NULL OR $7=0 OR lower(m.flags_json) LIKE '%flagged%')
+          AND (
+                $8 IS NULL
+                OR (
+                    f.normalized_role NOT IN ('trash','spam')
+                    AND EXISTS (
+                        SELECT 1
+                        FROM mail_message_categories mc
+                        WHERE mc.user_id=m.user_id
+                          AND mc.account_id=m.account_id
+                          AND mc.content_hash=m.content_hash
+                          AND mc.category_id=$8
+                    )
+                )
+              )
         ORDER BY m.received_at DESC
-        LIMIT $8 OFFSET $9
+        LIMIT $9 OFFSET $10
         "#,
     )
     .bind(user_id)
@@ -132,6 +156,7 @@ async fn list_messages(
     .bind(q)
     .bind(query.unread_only)
     .bind(query.starred_only)
+    .bind(query.category_id)
     .bind(limit + 1)
     .bind(offset)
     .fetch_all(&state.pool)
