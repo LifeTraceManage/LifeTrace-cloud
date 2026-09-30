@@ -459,6 +459,7 @@ Mail 保留：
 
 - Account / Identity / Draft；
 - Unified Inbox、Mailbox Role、Starred 与正文/发件人/收件人搜索；
+- Unified Inbox 默认支持按来源自动聚合，并可切换回逐封邮件视图；
 - Read / Star / MOVE；
 - Identity Display Name / Reply-To / Signature；
 - Draft attachment（SQLite BLOB，单封总量 18 MiB 上限）；
