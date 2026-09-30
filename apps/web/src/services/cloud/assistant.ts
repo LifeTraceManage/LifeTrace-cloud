@@ -41,6 +41,8 @@ export interface AssistantApproval {
   requestedAt: string;
   decidedAt?: string | null;
   expiresAt?: string | null;
+  supersededByApprovalId?: string | null;
+  cancellationReason?: string | null;
 }
 
 export interface ApprovalDecisionResult {
