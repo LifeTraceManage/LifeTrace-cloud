@@ -5,6 +5,8 @@ import type {
   MailAccountInput,
   MailAttachment,
   MailConnectionTest,
+  MailCategory,
+  MailCategoryInput,
   MailDraft,
   MailDraftAttachment,
   MailDraftInput,
@@ -84,6 +86,11 @@ function addresses(value: unknown): MailAddress[] {
   return result;
 }
 
+function stringIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
 function isStarred(flags: unknown): boolean {
   if (!Array.isArray(flags)) return false;
   return flags.some((flag) =>
@@ -144,6 +151,15 @@ interface RawMessage {
   bodyText?: string | null;
   bodyHtmlSanitized?: string | null;
   hasAttachments?: boolean;
+  categoryIdsJson?: unknown;
+}
+
+interface RawCategory {
+  id: string;
+  name: string;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface RawAttachment {
@@ -223,6 +239,7 @@ function summary(raw: RawMessage): MailMessageSummary {
     isStarred: raw.isStarred ?? isStarred(raw.flagsJson),
     isArchived: raw.isArchived,
     hasAttachments: raw.hasAttachments,
+    categoryIds: stringIds(raw.categoryIdsJson),
   };
 }
 
@@ -367,6 +384,7 @@ export class MailApi {
     if (query.query?.trim()) params.set("q", query.query.trim());
     if (query.unreadOnly !== null && query.unreadOnly !== undefined) params.set("unreadOnly", String(query.unreadOnly));
     if (query.starredOnly || query.mailboxRole === "starred") params.set("starredOnly", "true");
+    if (query.categoryId) params.set("categoryId", query.categoryId);
     params.set("offset", String(query.offset ?? 0));
     params.set("limit", String(query.limit ?? 100));
 
@@ -381,13 +399,19 @@ export class MailApi {
   }
 
   async message(messageId: string): Promise<MailMessageDetail> {
-    const [raw, attachmentResponse] = await Promise.all([
+    const [raw, attachmentResponse, categoryResponse] = await Promise.all([
       this.request<RawMessage>(`/api/v1/mail/messages/${encodeURIComponent(messageId)}`),
       this.request<{ items: RawAttachment[] }>(
         `/api/v1/mail/messages/${encodeURIComponent(messageId)}/attachments`
       ),
+      this.request<{ items: RawCategory[] }>(
+        `/api/v1/mail/messages/${encodeURIComponent(messageId)}/categories`
+      ),
     ]);
-    const base = summary(raw);
+    const base = {
+      ...summary(raw),
+      categoryIds: categoryResponse.items.map((item) => item.id),
+    };
     const attachments: MailAttachment[] = attachmentResponse.items.map((item) => ({
       id: item.id,
       messageId: item.messageId,
@@ -447,6 +471,50 @@ export class MailApi {
       method: "POST",
       body: JSON.stringify({ destinationRole }),
     });
+  }
+
+  async categories(): Promise<MailCategory[]> {
+    const value = await this.request<{ items: RawCategory[] }>("/api/v1/mail/categories");
+    return value.items;
+  }
+
+  createCategory(input: MailCategoryInput): Promise<MailCategory> {
+    return this.request<RawCategory>("/api/v1/mail/categories", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  updateCategory(id: string, input: MailCategoryInput): Promise<MailCategory> {
+    return this.request<RawCategory>(`/api/v1/mail/categories/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteCategory(id: string): Promise<void> {
+    return this.request(`/api/v1/mail/categories/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      body: "{}",
+    });
+  }
+
+  async messageCategories(messageId: string): Promise<MailCategory[]> {
+    const value = await this.request<{ items: RawCategory[] }>(
+      `/api/v1/mail/messages/${encodeURIComponent(messageId)}/categories`
+    );
+    return value.items;
+  }
+
+  async setMessageCategories(messageId: string, categoryIds: string[]): Promise<string[]> {
+    const value = await this.request<{ categoryIds: string[] }>(
+      `/api/v1/mail/messages/${encodeURIComponent(messageId)}/categories`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ categoryIds }),
+      },
+    );
+    return value.categoryIds;
   }
 
   async drafts(): Promise<MailDraft[]> {
