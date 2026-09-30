@@ -15,6 +15,7 @@ use crate::agent::approvals::{
     ProposeUpdateTaskTool, ProposeUpdateWaitingItemTool,
 };
 use crate::agent::context::{ensure_cloud_user, AgentAccessPartition, AgentInvocationContext};
+use crate::agent::sandbox::{ListSandboxJobsTool, ProposeRunSandboxJobTool};
 use crate::agent::session;
 use crate::agent::tools::{
     fail_open_tool_calls, load_overview, CurrentTimeTool, LifeTraceOverviewTool,
@@ -33,7 +34,7 @@ const SYSTEM_PROMPT: &str = r#"你是 LifeTrace 的个人数据助手。你的�
 3. 读取工具可以直接执行。写操作绝不能直接执行：只允许通过 propose 工具生成待审批操作，随后明确告诉用户需要在界面中批准。
 4. 如果用户要求修改、纠正、重做或替换一个尚未批准的提案，必须先调用 lifetrace_list_pending_approvals 找到准确的旧 approvalId；随后创建同类型的新提案，并把旧 approvalId 作为 supersedesApprovalId。不要让新旧两个版本同时保持 pending，也不要要求用户先手工拒绝旧版本。
 5. supersedesApprovalId 只能用于替换当前会话里同一 actionName 的 pending 审批。若无法唯一确定用户指的是哪一个 pending 提案，再向用户确认。
-6. 当前支持审批后创建/修改任务、创建日程、创建/修改 Project、创建/修改习惯、Waiting Item、Reminder、创建 Notes 笔记，以及发送新邮件和回复已有邮件。删除邮件及其他未提供 propose 工具的写操作仍不可用，不要伪造执行结果。
+6. 当前支持审批后创建/修改任务、创建日程、创建/修改 Project、创建/修改习惯、Waiting Item、Reminder、创建 Notes 笔记、发送新邮件、回复已有邮件，以及运行服务器管理员预先注册的沙盒 Job。删除邮件及其他未提供 propose 工具的写操作仍不可用，不要伪造执行结果。
 7. 在用户批准前，不要声称任何写操作已经完成。工具返回 requiresApproval=true 只表示提案已保存。
 8. 明确区分截止时间 dueAt 与 Planner 执行时间 scheduledStartAt/scheduledEndAt。用户说“截止/之前完成”表示 dueAt；用户说“安排/计划/几点做”表示 Planner 执行时间。
 9. 对有明确 dueAt 的新任务，除非用户明确要求只收集不排期，否则要主动承担规划：先读取目标日期附近的 execution.task 和 execution.calendar_event，避开已有时间块，在截止前选择合理的执行时间，并把 scheduledStartAt/scheduledEndAt 一起放进创建提案。没有预计时长时默认按 60 分钟规划。
@@ -52,6 +53,7 @@ const SYSTEM_PROMPT: &str = r#"你是 LifeTrace 的个人数据助手。你的�
 22. 客户端可能提供当前 Workspace、视图、日期、timeZone 或 selectedEntity 作为界面导航上下文。只能把它用于理解“这个/当前/这里”等指代；任何业务字段、实体状态和写操作都必须通过服务器工具重新核验。selectedEntity 是 Sync 实体时优先用 lifetrace_search_records.entityId 精确读取；selectedEntity 是 mail.message 时优先用 lifetrace_search_mail.messageId 精确读取，不要退化成标题或关键词猜测。
 23. 不要向用户询问“当前时间/现在几点”。当问题涉及现在、今天、明天、今晚、相对截止时间或任何依赖当前时间的规划时，调用 lifetrace_get_current_time。优先把 pageContext.timeZone 传给工具；若没有时区信息且精确本地时间确实影响结果，再只询问时区，不询问当前时间。
 24. 回复可以使用标准 Markdown，包括标题、列表、粗体、表格、链接和代码块；不要输出原始 HTML 作为排版手段。
+25. 需要运行后台脚本/处理任务时，先调用 lifetrace_list_sandbox_jobs，只能选择管理员注册的 jobId；不得要求或尝试构造 shell 命令、可执行路径、脚本内容。运行 Job 必须使用 lifetrace_propose_run_sandbox_job 生成审批，用户批准前不得声称 Job 已执行。
 "#;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -407,6 +409,8 @@ async fn run_deepseek(
         .tool(SearchMailTool)
         .tool(ListMailAccountsTool)
         .tool(ListPendingApprovalsTool)
+        .tool(ListSandboxJobsTool)
+        .tool(ProposeRunSandboxJobTool)
         .tool(ProposeCreateTaskTool)
         .tool(ProposeUpdateTaskTool)
         .tool(ProposeCreateCalendarEventTool)
@@ -471,6 +475,8 @@ async fn run_openai_compatible(
         .tool(SearchMailTool)
         .tool(ListMailAccountsTool)
         .tool(ListPendingApprovalsTool)
+        .tool(ListSandboxJobsTool)
+        .tool(ProposeRunSandboxJobTool)
         .tool(ProposeCreateTaskTool)
         .tool(ProposeUpdateTaskTool)
         .tool(ProposeCreateCalendarEventTool)
