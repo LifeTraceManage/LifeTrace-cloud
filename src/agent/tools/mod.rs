@@ -1,4 +1,5 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Offset, Utc};
+use chrono_tz::Tz;
 use lifetrace_contracts::registry::{EntityOwnership, REGISTRY};
 use rig::tool::{MissingToolContext, Tool, ToolContext};
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,12 @@ pub enum AgentToolError {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OverviewArgs {}
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentTimeArgs {
+    #[serde(default)]
+    pub time_zone: Option<String>,
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,11 +59,47 @@ pub struct SearchMailArgs {
     pub limit: Option<i64>,
 }
 
+pub struct CurrentTimeTool;
 pub struct LifeTraceOverviewTool;
 pub struct SearchRecordsTool;
 pub struct SearchMailTool;
 pub struct ListMailAccountsTool;
 pub struct ListPendingApprovalsTool;
+
+impl Tool for CurrentTimeTool {
+    const NAME: &'static str = "lifetrace_get_current_time";
+    type Args = CurrentTimeArgs;
+    type Output = Value;
+    type Error = AgentToolError;
+
+    fn description(&self) -> String {
+        "获取真实的当前日期和时间。涉及“现在、今天、明天、刚才、今晚、当前几点、距截止还有多久”等相对时间时优先调用，不要向用户询问当前时间。timeZone 使用 IANA 时区；优先使用页面上下文中的 timeZone。只读，无需审批。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "timeZone":{
+                    "type":"string",
+                    "description":"可选 IANA 时区，例如 Asia/Shanghai。优先使用当前 pageContext.timeZone；省略时返回 UTC。"
+                }
+            },
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        let call_id = audit_start(&ctx, Self::NAME, &args).await?;
+        let result = current_time_value(Utc::now(), args.time_zone.as_deref());
+        finish_audited(&ctx, call_id, result).await
+    }
+}
 
 impl Tool for LifeTraceOverviewTool {
     const NAME: &'static str = "lifetrace_overview";
@@ -209,6 +252,32 @@ impl Tool for ListPendingApprovalsTool {
         let result = list_pending_approvals(&ctx).await;
         finish_audited(&ctx, call_id, result).await
     }
+}
+
+fn current_time_value(
+    now: DateTime<Utc>,
+    time_zone: Option<&str>,
+) -> Result<Value, AgentToolError> {
+    let time_zone = time_zone
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("UTC");
+    let tz: Tz = time_zone
+        .parse()
+        .map_err(|_| AgentToolError::Invalid(format!("unsupported IANA time zone: {time_zone}")))?;
+    let local = now.with_timezone(&tz);
+    let offset_seconds = local.offset().fix().local_minus_utc();
+
+    Ok(json!({
+        "timeZone": time_zone,
+        "localIso": local.to_rfc3339(),
+        "localDate": local.format("%Y-%m-%d").to_string(),
+        "localTime": local.format("%H:%M:%S").to_string(),
+        "weekday": local.format("%A").to_string(),
+        "utcOffsetSeconds": offset_seconds,
+        "utcIso": now.to_rfc3339(),
+        "unixTimestamp": now.timestamp()
+    }))
 }
 
 pub async fn list_pending_approvals(ctx: &AgentInvocationContext) -> Result<Value, AgentToolError> {
@@ -604,5 +673,23 @@ mod tests {
     fn compact_value_bounds_large_records() {
         let value = json!({"body":"x".repeat(10_000)});
         assert_eq!(compact_value(value)["truncated"], true);
+    }
+
+    #[test]
+    fn current_time_uses_requested_iana_timezone() {
+        let now = DateTime::parse_from_rfc3339("2026-09-30T06:30:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let value = current_time_value(now, Some("Asia/Shanghai")).unwrap();
+        assert_eq!(value["timeZone"], "Asia/Shanghai");
+        assert_eq!(value["localDate"], "2026-09-30");
+        assert_eq!(value["localTime"], "14:30:00");
+        assert_eq!(value["utcOffsetSeconds"], 28_800);
+    }
+
+    #[test]
+    fn current_time_rejects_unknown_timezone() {
+        let error = current_time_value(Utc::now(), Some("Mars/Olympus")).unwrap_err();
+        assert!(error.to_string().contains("unsupported IANA time zone"));
     }
 }

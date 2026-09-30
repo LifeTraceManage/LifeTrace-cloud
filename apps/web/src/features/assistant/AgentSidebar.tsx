@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import { Badge, Button, Textarea, cn } from "../../components/ui";
 import type { AssistantApproval } from "../../services/core";
+import { AssistantMarkdown } from "./AssistantMarkdown";
 import { useAgentSidebar } from "./AgentSidebarContext";
 
 function approvalLabel(approval: AssistantApproval): string {
@@ -242,7 +243,9 @@ export function AgentSidebar() {
                       message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted",
                     )}
                   >
-                    <div className="whitespace-pre-wrap">{message.content}</div>
+                    {message.role === "assistant"
+                      ? <AssistantMarkdown content={message.content} />
+                      : <div className="whitespace-pre-wrap">{message.content}</div>}
                     {message.provider ? <Badge className="mt-2">{message.provider}</Badge> : null}
                   </div>
                 </div>
