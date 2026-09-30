@@ -33,7 +33,6 @@ pub struct CurrentTimeArgs {
     pub time_zone: Option<String>,
 }
 
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchRecordsArgs {
