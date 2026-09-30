@@ -7,6 +7,7 @@ use axum::Router;
 use lifetrace_cloud::agent::{
     approvals::{
         CreateProjectArgs, CreateTaskArgs, ProposeCreateProjectTool, ProposeCreateTaskTool,
+        ProposeReplyMailTool, ProposeSendMailTool, ReplyMailArgs, SendMailArgs,
     },
     context::{AgentAccessPartition, AgentInvocationContext},
     session as agent_session,
@@ -106,6 +107,97 @@ async fn seed_approval(
     .unwrap();
 
     approval_id
+}
+
+async fn seed_agent_mail_fixture(
+    state: &AppState,
+    user_id: Uuid,
+) -> (Uuid, Uuid, Uuid) {
+    let account_id = Uuid::new_v4();
+    let identity_id = Uuid::new_v4();
+    let folder_id = Uuid::new_v4();
+    let thread_id = Uuid::new_v4();
+    let message_id = Uuid::new_v4();
+
+    sqlx::query(
+        r#"
+        INSERT INTO mail_accounts (
+            id,user_id,provider,email_address,display_name,
+            imap_host,imap_port,imap_security,smtp_host,smtp_port,smtp_security,username,
+            credential_ciphertext,credential_nonce,status
+        ) VALUES ($1,$2,'generic','me@example.com','Me',
+                  'imap.example.com',993,'tls','smtp.example.com',465,'tls','me@example.com',
+                  $3,$4,'active')
+        "#,
+    )
+    .bind(account_id)
+    .bind(user_id)
+    .bind(vec![0_u8; 16])
+    .bind(vec![0_u8; 12])
+    .execute(&state.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO mail_identities          (id,user_id,account_id,email_address,display_name,is_default)          VALUES ($1,$2,$3,'me@example.com','Me',1)",
+    )
+    .bind(identity_id)
+    .bind(user_id)
+    .bind(account_id)
+    .execute(&state.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO mail_folders          (id,user_id,account_id,remote_name,normalized_role,uidvalidity,last_seen_uid)          VALUES ($1,$2,$3,'INBOX','inbox',1,1)",
+    )
+    .bind(folder_id)
+    .bind(user_id)
+    .bind(account_id)
+    .execute(&state.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO mail_threads          (id,user_id,account_id,normalized_subject,message_count,unread_count)          VALUES ($1,$2,$3,'status update',1,1)",
+    )
+    .bind(thread_id)
+    .bind(user_id)
+    .bind(account_id)
+    .execute(&state.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        r#"
+        INSERT INTO mail_messages (
+            id,user_id,account_id,folder_id,thread_id,remote_uid,uidvalidity,
+            message_id,subject,normalized_subject,from_json,to_json,cc_json,reply_to_json,
+            received_at,flags_json,is_read,is_archived,has_attachments,content_hash
+        ) VALUES (
+            $1,$2,$3,$4,$5,1,1,
+            '<source-1@example.com>','Status update','status update',$6,$7,$8,$9,
+            CURRENT_TIMESTAMP,'[]',0,0,0,'agent-mail-source-hash'
+        )
+        "#,
+    )
+    .bind(message_id)
+    .bind(user_id)
+    .bind(account_id)
+    .bind(folder_id)
+    .bind(thread_id)
+    .bind(json!([{"name":"Alice","email":"alice@example.com"}]))
+    .bind(json!([
+        {"name":"Me","email":"me@example.com"},
+        {"name":"Bob","email":"bob@example.com"}
+    ]))
+    .bind(json!([{"name":"Carol","email":"carol@example.com"}]))
+    .bind(json!([{"name":"Alice Reply","email":"alice.reply@example.com"}]))
+    .execute(&state.pool)
+    .await
+    .unwrap();
+
+    (account_id, identity_id, message_id)
 }
 
 #[tokio::test]
@@ -1338,4 +1430,126 @@ async fn assistant_cannot_supersede_pending_approval_with_different_action_type(
         .await
         .unwrap();
     assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn assistant_mail_tools_create_reviewable_send_and_reply_approvals() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"准备测试邮件起草审批"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT user_id FROM agent_sessions WHERE id=$1")
+        .bind(session_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+    let (account_id, identity_id, source_message_id) =
+        seed_agent_mail_fixture(&state, user_id).await;
+
+    let scopes = BTreeSet::from(["mail:read".to_owned(), "mail:write".to_owned()]);
+    let mut tool_context = ToolContext::new();
+    tool_context.insert(AgentInvocationContext {
+        pool: state.pool.clone(),
+        user_id,
+        scopes: Arc::new(scopes),
+        run_id,
+        session_id,
+    });
+
+    let send_proposal = ProposeSendMailTool
+        .call(
+            &mut tool_context,
+            SendMailArgs {
+                account_id: account_id.to_string(),
+                identity_id: Some(identity_id.to_string()),
+                to: vec!["new.recipient@example.com".to_owned()],
+                cc: Vec::new(),
+                bcc: Vec::new(),
+                subject: "Draft subject".to_owned(),
+                body_text: "Draft body".to_owned(),
+                supersedes_approval_id: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(send_proposal["requiresApproval"], true);
+    assert_eq!(send_proposal["actionName"], "send_mail");
+    assert_eq!(send_proposal["preview"]["from"], "me@example.com");
+
+    let send_approval_id =
+        Uuid::parse_str(send_proposal["approvalId"].as_str().unwrap()).unwrap();
+    let send_action: Value =
+        sqlx::query_scalar("SELECT action_json FROM agent_approvals WHERE id=$1")
+            .bind(send_approval_id)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+    assert_eq!(send_action["accountId"], account_id.to_string());
+    assert_eq!(send_action["identityId"], identity_id.to_string());
+    assert_eq!(send_action["subject"], "Draft subject");
+    assert_eq!(send_action["bodyText"], "Draft body");
+
+    let reply_proposal = ProposeReplyMailTool
+        .call(
+            &mut tool_context,
+            ReplyMailArgs {
+                message_id: source_message_id.to_string(),
+                identity_id: None,
+                body_text: "Thanks, received.".to_owned(),
+                reply_all: true,
+                supersedes_approval_id: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(reply_proposal["requiresApproval"], true);
+    assert_eq!(reply_proposal["actionName"], "reply_mail");
+    assert_eq!(
+        reply_proposal["preview"]["to"][0],
+        "Alice Reply <alice.reply@example.com>"
+    );
+
+    let reply_approval_id =
+        Uuid::parse_str(reply_proposal["approvalId"].as_str().unwrap()).unwrap();
+    let reply_action: Value =
+        sqlx::query_scalar("SELECT action_json FROM agent_approvals WHERE id=$1")
+            .bind(reply_approval_id)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+    assert_eq!(reply_action["sourceMessageId"], source_message_id.to_string());
+    assert_eq!(reply_action["inReplyToHeader"], "<source-1@example.com>");
+    assert_eq!(reply_action["subject"], "Re: Status update");
+    let cc = reply_action["cc"].as_array().unwrap();
+    assert!(cc.iter().any(|value| value.as_str() == Some("Bob <bob@example.com>")));
+    assert!(cc.iter().any(|value| value.as_str() == Some("Carol <carol@example.com>")));
+    assert!(!cc.iter().any(|value| value
+        .as_str()
+        .is_some_and(|value| value.contains("me@example.com"))));
+
+    let (status, rejected) = send(
+        app,
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{send_approval_id}/decision"),
+        json!({"decision":"reject"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(rejected["approval"]["status"], "rejected");
+
+    let outbox_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM mail_outbox WHERE user_id=$1")
+            .bind(user_id)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+    assert_eq!(outbox_count, 0);
 }
