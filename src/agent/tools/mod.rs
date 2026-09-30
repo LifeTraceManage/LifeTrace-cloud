@@ -150,7 +150,6 @@ impl Tool for SearchMailTool {
     }
 }
 
-
 impl Tool for ListPendingApprovalsTool {
     const NAME: &'static str = "lifetrace_list_pending_approvals";
     type Args = OverviewArgs;
@@ -177,9 +176,7 @@ impl Tool for ListPendingApprovalsTool {
     }
 }
 
-pub async fn list_pending_approvals(
-    ctx: &AgentInvocationContext,
-) -> Result<Value, AgentToolError> {
+pub async fn list_pending_approvals(ctx: &AgentInvocationContext) -> Result<Value, AgentToolError> {
     let rows = sqlx::query(
         "SELECT id,action_name,action_json,requested_at,expires_at \
          FROM agent_approvals \
