@@ -24,6 +24,7 @@ export interface AgentPageContext {
   workspace: string;
   view?: string;
   label?: string;
+  timeZone?: string;
   selectedEntity?: AgentSelectedEntityContext;
   temporalContext?: AgentTemporalContext;
   searchContext?: AgentSearchContext;
