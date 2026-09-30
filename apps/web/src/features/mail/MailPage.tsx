@@ -5,6 +5,7 @@ import {
   RotateCcw, Search, Send, Settings, Star, Tag, Trash2,
 } from "lucide-react";
 import { useApp } from "../../app/AppContext";
+import { useAgentPageContext } from "../assistant/AgentSidebarContext";
 import { Badge, Button, Dialog, EmptyState, Input, cn } from "../../components/ui";
 import {
   createEntityLink,
@@ -133,6 +134,18 @@ export function MailPage() {
   const current = mailboxes.find((item) => item.id === mailbox) ?? mailboxes[0];
   const activeCategory = categories.find((item) => item.id === selectedCategoryId) ?? null;
   const currentLabel = activeCategory ? `分类 · ${activeCategory.name}` : current.label;
+  useAgentPageContext({
+    workspace: "mail",
+    view: selectedMessage ? "message" : mailbox,
+    label: `Mail · ${currentLabel}`,
+    selectedEntity: selectedMessage
+      ? { entityType: "mail.message", entityId: selectedMessage.id }
+      : undefined,
+    searchContext: {
+      mailbox: currentLabel,
+      query: deferredQuery.trim() || undefined,
+    },
+  });
   const isDraftView = !selectedCategoryId && mailbox === "drafts";
   const categoryById = useMemo(
     () => new Map(categories.map((item) => [item.id, item])),
