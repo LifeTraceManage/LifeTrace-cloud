@@ -136,7 +136,12 @@ async fn list_messages(
     .bind(offset)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| {
+    .map_err(|error| {
+        tracing::warn!(
+            error = %error,
+            user_id = %user_id,
+            "mail message list query failed"
+        );
         ApiError::new(
             ErrorCode::TemporarilyUnavailable,
             "mail storage operation failed",
