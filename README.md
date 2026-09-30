@@ -372,9 +372,13 @@ Cloud 内置基于 Rig 的 Agent runtime。会话、消息、Run、工具调用�
 
 审批同时要求同一 `user_id`、同一 `app_id + scopes` 分区，并在执行时按 action 重新校验当前 Session 的写权限：任务、日程、Project、Memo、Waiting Item、Reminder 要求 `sync:write + execution:write`，习惯要求 `sync:write + habits:write`。Reminder 执行时还会重新确认 subject 实体仍存在，避免产生悬空提醒。前端只提交 approval id 和 approve/reject，不接受模型生成的任意 API/SQL。删除数据、发送/删除邮件及其他高风险写操作目前仍未开放。
 
-Web Assistant 将会话列表和聊天正文做独立滚动；会话支持显式删除。审批区只在主视图展示待处理项，已批准/拒绝/过期项折叠为最近审批历史。会话删除会利用 SQLite 外键级联清理该会话的 message、run、tool call 和 approval，避免长期留下孤儿记录。
+Web 不再把 Agent 作为独立 Workspace。Agent 以全局右侧 Sidebar 挂载在 Portal、Core Shell 和 Notes/Mail/Execute/Finance Workspace Shell 上；桌面端打开后工作区为固定侧栏让出空间，移动端以覆盖式抽屉显示。Sidebar 的会话、草稿、审批和打开状态由全局 Provider 持有，因此跨 Workspace 切换不会丢失当前对话。旧 `/app/assistant` 仅保留为兼容入口：打开 Sidebar 后回到正常工作台，不再渲染独立 Assistant 页面。
 
-每次工具调用都同时绑定当前 `user_id` 和当前认证 Session 的 scopes。旧 Web 客户端仍可发送 `context` 字段，但服务端不再把客户端拼装的 context 当作可信数据源。
+各 Workspace 可注册轻量 `pageContext`，当前已接入 Execute、Mail、Notes 和 Finance。上下文只描述 `workspace/view`、当前日期/范围、搜索条件以及 `selectedEntity { entityType, entityId }` 等导航信息，用于理解“这个任务”“当前邮件”“这里”等指代。Cloud 对字段长度和结构做校验，并明确要求 Agent 对实体内容、状态、权限和任何写操作重新调用服务器工具核验；前端不会把页面中的业务对象快照直接作为可信模型事实。
+
+Sidebar 内会话历史支持显式删除。审批区只在主对话展示待处理项，已批准/拒绝/过期/被替代项折叠为最近审批历史。会话删除会利用 SQLite 外键级联清理该会话的 message、run、tool call 和 approval，避免长期留下孤儿记录。
+
+每次工具调用都同时绑定当前 `user_id` 和当前认证 Session 的 scopes。旧 Web 客户端仍可发送 `context` 字段，但服务端不再把客户端拼装的 legacy context 当作可信数据源。
 
 模型配置统一使用以下环境变量：
 
