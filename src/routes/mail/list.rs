@@ -277,7 +277,6 @@ async fn list_messages(
     })))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
