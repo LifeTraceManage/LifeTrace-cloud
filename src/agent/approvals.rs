@@ -1672,7 +1672,7 @@ impl Tool for ProposeReplyMailTool {
         }
         to = normalize_mail_recipients(to, "to", true)?;
 
-        let mut cc = Vec::new();
+        let mut cc: Vec<String> = Vec::new();
         if args.reply_all {
             let owned = owned_mail_address_keys(&ctx, account_id).await?;
             let to_keys = to
