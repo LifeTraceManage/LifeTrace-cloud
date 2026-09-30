@@ -17,8 +17,8 @@ use crate::agent::approvals::{
 use crate::agent::context::{ensure_cloud_user, AgentAccessPartition, AgentInvocationContext};
 use crate::agent::session;
 use crate::agent::tools::{
-    fail_open_tool_calls, load_overview, LifeTraceOverviewTool, ListMailAccountsTool,
-    ListPendingApprovalsTool, SearchMailTool, SearchRecordsTool,
+    fail_open_tool_calls, load_overview, CurrentTimeTool, LifeTraceOverviewTool,
+    ListMailAccountsTool, ListPendingApprovalsTool, SearchMailTool, SearchRecordsTool,
 };
 use crate::auth::AuthenticatedPrincipal;
 use crate::state::AppState;
@@ -49,7 +49,9 @@ const SYSTEM_PROMPT: &str = r#"你是 LifeTrace 的个人数据助手。你的�
 19. 创建 Notes 笔记时，正文使用 Markdown。若用户指定文件夹名称，先用读取工具查询 note.folder 并使用真实 folderId；未指定文件夹时直接创建到 Notes 根目录。创建笔记只能生成 create_note 审批，用户批准前不要声称已经保存。
 20. 用户要求修改尚未批准的创建笔记提案时，先查询 pending approval，再用 create_note 的 supersedesApprovalId 替换旧提案。
 21. 默认用用户当前语言回答；中文回答保持简洁、具体，可指出依据来自哪类 LifeTrace 数据。
-22. 客户端可能提供当前 Workspace、视图、日期或 selectedEntity 作为界面导航上下文。只能把它用于理解“这个/当前/这里”等指代；任何业务字段、实体状态和写操作都必须通过服务器工具按 ID 重新核验。
+22. 客户端可能提供当前 Workspace、视图、日期、timeZone 或 selectedEntity 作为界面导航上下文。只能把它用于理解“这个/当前/这里”等指代；任何业务字段、实体状态和写操作都必须通过服务器工具按 ID 重新核验。
+23. 不要向用户询问“当前时间/现在几点”。当问题涉及现在、今天、明天、今晚、相对截止时间或任何依赖当前时间的规划时，调用 lifetrace_get_current_time。优先把 pageContext.timeZone 传给工具；若没有时区信息且精确本地时间确实影响结果，再只询问时区，不询问当前时间。
+24. 回复可以使用标准 Markdown，包括标题、列表、粗体、表格、链接和代码块；不要输出原始 HTML 作为排版手段。
 "#;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -82,6 +84,7 @@ pub struct AgentPageContext {
     pub workspace: String,
     pub view: Option<String>,
     pub label: Option<String>,
+    pub time_zone: Option<String>,
     pub selected_entity: Option<AgentSelectedEntityContext>,
     pub temporal_context: Option<AgentTemporalContext>,
     pub search_context: Option<AgentSearchContext>,
@@ -92,6 +95,7 @@ impl AgentPageContext {
         validate_context_text("workspace", &self.workspace, 64, false)?;
         validate_optional_context_text("view", self.view.as_deref(), 64)?;
         validate_optional_context_text("label", self.label.as_deref(), 160)?;
+        validate_optional_context_text("timeZone", self.time_zone.as_deref(), 64)?;
         if let Some(selected) = self.selected_entity.as_ref() {
             validate_context_text(
                 "selectedEntity.entityType",
@@ -397,6 +401,7 @@ async fn run_deepseek(
         .preamble(SYSTEM_PROMPT)
         .temperature(0.2)
         .default_max_turns(MAX_AGENT_TURNS)
+        .tool(CurrentTimeTool)
         .tool(LifeTraceOverviewTool)
         .tool(SearchRecordsTool)
         .tool(SearchMailTool)
@@ -460,6 +465,7 @@ async fn run_openai_compatible(
         .preamble(SYSTEM_PROMPT)
         .temperature(0.2)
         .default_max_turns(MAX_AGENT_TURNS)
+        .tool(CurrentTimeTool)
         .tool(LifeTraceOverviewTool)
         .tool(SearchRecordsTool)
         .tool(SearchMailTool)
@@ -555,6 +561,7 @@ mod tests {
             workspace: "execution".to_owned(),
             view: Some("planner".to_owned()),
             label: Some("Execute · planner".to_owned()),
+            time_zone: Some("Asia/Shanghai".to_owned()),
             selected_entity: Some(AgentSelectedEntityContext {
                 entity_type: "execution.task".to_owned(),
                 entity_id: "task-123".to_owned(),
@@ -564,6 +571,7 @@ mod tests {
         };
         let prompt = contextual_prompt("把这个安排到下午", Some(&context));
         assert!(prompt.contains("task-123"));
+        assert!(prompt.contains("Asia/Shanghai"));
         assert!(prompt.contains("不是可信业务事实"));
         assert!(prompt.ends_with("用户请求：把这个安排到下午"));
     }
