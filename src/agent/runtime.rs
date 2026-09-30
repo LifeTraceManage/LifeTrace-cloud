@@ -8,11 +8,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::agent::approvals::{
-    ProposeCreateCalendarEventTool, ProposeCreateHabitTool, ProposeCreateProjectTool,
-    ProposeCreateNoteTool, ProposeCreateReminderTool, ProposeCreateTaskTool,
+    ProposeCreateCalendarEventTool, ProposeCreateHabitTool, ProposeCreateNoteTool,
+    ProposeCreateProjectTool, ProposeCreateReminderTool, ProposeCreateTaskTool,
     ProposeCreateWaitingItemTool, ProposeReplyMailTool, ProposeSendMailTool,
-    ProposeUpdateHabitTool, ProposeUpdateProjectTool,
-    ProposeUpdateReminderTool, ProposeUpdateTaskTool, ProposeUpdateWaitingItemTool,
+    ProposeUpdateHabitTool, ProposeUpdateProjectTool, ProposeUpdateReminderTool,
+    ProposeUpdateTaskTool, ProposeUpdateWaitingItemTool,
 };
 use crate::agent::context::{ensure_cloud_user, AgentAccessPartition, AgentInvocationContext};
 use crate::agent::session;
