@@ -1122,7 +1122,6 @@ async fn assistant_approval_listing_expires_stale_pending_cards() {
     assert_eq!(tool_status, "denied");
 }
 
-
 #[tokio::test]
 async fn assistant_new_proposal_supersedes_old_pending_approval_atomically() {
     let (state, app) = test_state_and_app().await;
@@ -1164,10 +1163,7 @@ async fn assistant_new_proposal_supersedes_old_pending_approval_atomically() {
     )
     .await;
 
-    let scopes = BTreeSet::from([
-        "sync:write".to_owned(),
-        "execution:write".to_owned(),
-    ]);
+    let scopes = BTreeSet::from(["sync:write".to_owned(), "execution:write".to_owned()]);
     let mut tool_context = ToolContext::new();
     tool_context.insert(AgentInvocationContext {
         pool: state.pool.clone(),
@@ -1199,10 +1195,7 @@ async fn assistant_new_proposal_supersedes_old_pending_approval_atomically() {
 
     let new_approval_id =
         Uuid::parse_str(result["approvalId"].as_str().expect("new approval id")).unwrap();
-    assert_eq!(
-        result["supersedesApprovalId"],
-        old_approval_id.to_string()
-    );
+    assert_eq!(result["supersedesApprovalId"], old_approval_id.to_string());
 
     let (status, listed) = send(
         app.clone(),
@@ -1331,22 +1324,21 @@ async fn assistant_cannot_supersede_pending_approval_with_different_action_type(
         )
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("cannot replace create_task approval"));
+    assert!(error
+        .to_string()
+        .contains("cannot replace create_task approval"));
 
-    let status: String =
-        sqlx::query_scalar("SELECT status FROM agent_approvals WHERE id=$1")
-            .bind(old_approval_id)
-            .fetch_one(&state.pool)
-            .await
-            .unwrap();
+    let status: String = sqlx::query_scalar("SELECT status FROM agent_approvals WHERE id=$1")
+        .bind(old_approval_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
     assert_eq!(status, "pending");
 
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM agent_approvals WHERE session_id=$1",
-    )
-    .bind(session_id)
-    .fetch_one(&state.pool)
-    .await
-    .unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_approvals WHERE session_id=$1")
+        .bind(session_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
     assert_eq!(count, 1);
 }
