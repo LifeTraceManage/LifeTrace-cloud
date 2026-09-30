@@ -1,8 +1,18 @@
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
 use axum::body::{to_bytes, Body};
 use axum::http::{Method, Request, StatusCode};
 use axum::Router;
-use lifetrace_cloud::agent::{context::AgentAccessPartition, session as agent_session};
+use lifetrace_cloud::agent::{
+    approvals::{
+        CreateProjectArgs, CreateTaskArgs, ProposeCreateProjectTool, ProposeCreateTaskTool,
+    },
+    context::{AgentAccessPartition, AgentInvocationContext},
+    session as agent_session,
+};
 use lifetrace_cloud::{app, AppState, Config};
+use rig::tool::{Tool, ToolContext};
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -1110,4 +1120,233 @@ async fn assistant_approval_listing_expires_stale_pending_cards() {
     .await
     .unwrap();
     assert_eq!(tool_status, "denied");
+}
+
+
+#[tokio::test]
+async fn assistant_new_proposal_supersedes_old_pending_approval_atomically() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"准备一个稍后修改的任务审批"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT user_id FROM agent_sessions WHERE id=$1")
+        .bind(session_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+
+    let old_task_id = Uuid::new_v4().to_string();
+    let old_approval_id = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_task",
+        json!({
+            "entityId": old_task_id,
+            "title": "旧方案任务",
+            "description": null,
+            "projectId": null,
+            "priority": "normal",
+            "dueAt": null,
+            "scheduledStartAt": null,
+            "scheduledEndAt": null,
+            "timezone": "Asia/Singapore",
+            "context": null
+        }),
+    )
+    .await;
+
+    let scopes = BTreeSet::from([
+        "sync:write".to_owned(),
+        "execution:write".to_owned(),
+    ]);
+    let mut tool_context = ToolContext::new();
+    tool_context.insert(AgentInvocationContext {
+        pool: state.pool.clone(),
+        user_id,
+        scopes: Arc::new(scopes),
+        run_id,
+        session_id,
+    });
+
+    let result = ProposeCreateTaskTool
+        .call(
+            &mut tool_context,
+            CreateTaskArgs {
+                title: "修改后的任务".to_owned(),
+                description: Some("这是替代版本".to_owned()),
+                project_id: None,
+                priority: Some("high".to_owned()),
+                due_at: None,
+                scheduled_start_at: None,
+                scheduled_end_at: None,
+                timezone: Some("Asia/Singapore".to_owned()),
+                context: None,
+                leave_unscheduled: false,
+                supersedes_approval_id: Some(old_approval_id.to_string()),
+            },
+        )
+        .await
+        .unwrap();
+
+    let new_approval_id =
+        Uuid::parse_str(result["approvalId"].as_str().expect("new approval id")).unwrap();
+    assert_eq!(
+        result["supersedesApprovalId"],
+        old_approval_id.to_string()
+    );
+
+    let (status, listed) = send(
+        app.clone(),
+        Method::GET,
+        &format!("/api/v1/assistant/sessions/{session_id}/approvals?limit=20"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let items = listed["items"].as_array().unwrap();
+    let old = items
+        .iter()
+        .find(|item| item["id"] == old_approval_id.to_string())
+        .unwrap();
+    let new = items
+        .iter()
+        .find(|item| item["id"] == new_approval_id.to_string())
+        .unwrap();
+    assert_eq!(old["status"], "cancelled");
+    assert_eq!(old["cancellationReason"], "superseded");
+    assert_eq!(old["supersededByApprovalId"], new_approval_id.to_string());
+    assert_eq!(new["status"], "pending");
+
+    let old_tool_status: String = sqlx::query_scalar(
+        "SELECT t.status FROM agent_tool_calls t \
+         JOIN agent_approvals a ON a.tool_call_id=t.id WHERE a.id=$1",
+    )
+    .bind(old_approval_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(old_tool_status, "denied");
+
+    let (status, _) = send(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{old_approval_id}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    let (status, approved) = send(
+        app,
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{new_approval_id}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(approved["approval"]["status"], "approved");
+
+    let tasks: Vec<String> = sqlx::query_scalar(
+        "SELECT payload->>'title' FROM sync_entities \
+         WHERE entity_type='execution.task' AND is_deleted=0 ORDER BY payload->>'title'",
+    )
+    .fetch_all(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(tasks, vec!["修改后的任务".to_owned()]);
+}
+
+#[tokio::test]
+async fn assistant_cannot_supersede_pending_approval_with_different_action_type() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app,
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"准备测试不同审批类型不能互相替代"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT user_id FROM agent_sessions WHERE id=$1")
+        .bind(session_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+
+    let old_approval_id = seed_approval(
+        &state,
+        session_id,
+        run_id,
+        "create_task",
+        json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "title": "不能被 Project 替代",
+            "description": null,
+            "projectId": null,
+            "priority": "normal",
+            "dueAt": null,
+            "scheduledStartAt": null,
+            "scheduledEndAt": null,
+            "timezone": "UTC",
+            "context": null
+        }),
+    )
+    .await;
+
+    let scopes = BTreeSet::from([
+        "sync:write".to_owned(),
+        "execution:write".to_owned(),
+    ]);
+    let mut tool_context = ToolContext::new();
+    tool_context.insert(AgentInvocationContext {
+        pool: state.pool.clone(),
+        user_id,
+        scopes: Arc::new(scopes),
+        run_id,
+        session_id,
+    });
+
+    let error = ProposeCreateProjectTool
+        .call(
+            &mut tool_context,
+            CreateProjectArgs {
+                name: "错误替代 Project".to_owned(),
+                description: None,
+                color: None,
+                icon: None,
+                supersedes_approval_id: Some(old_approval_id.to_string()),
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("cannot replace create_task approval"));
+
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM agent_approvals WHERE id=$1")
+            .bind(old_approval_id)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "pending");
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM agent_approvals WHERE session_id=$1",
+    )
+    .bind(session_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
 }
