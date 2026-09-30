@@ -13,9 +13,6 @@ const routeMap: Record<string, string> = {
   "/finance/transactions": "/app/finance/transactions",
   "/finance/accounts": "/app/finance/accounts",
   "/notes": "/notes",
-  "/english/articles": "/app/english/articles",
-  "/english/vocabulary": "/app/english/vocabulary",
-  "/english/stats": "/app/english/stats",
   "/review": "/app/review",
 };
 

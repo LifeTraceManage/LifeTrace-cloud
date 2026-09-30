@@ -212,32 +212,6 @@ export function createNote(userId: string, deviceId: string, title: string, cont
   };
 }
 
-export function createVocabulary(userId: string, deviceId: string, word: string, definition: string): JsonEntity {
-  const displayWord = word.trim();
-  if (!displayWord) throw new Error("请输入单词");
-  const cleanDefinition = definition.trim();
-  return {
-    meta: baseMeta(userId, deviceId), normalizedWord: displayWord.toLocaleLowerCase("en-US"), displayWord,
-    definition: cleanDefinition, phonetic: "", partOfSpeech: "", selectedMeanings: cleanDefinition ? [cleanDefinition] : [],
-    lemma: displayWord.toLocaleLowerCase("en-US"), notes: "", masteryLevel: 0, reviewStage: 0,
-    reviewCount: 0, correctCount: 0, incorrectCount: 0, encounterCount: 1, status: "LEARNING",
-    tags: [], sourceArticleId: null, sourceArticleTitle: null, sourceSentence: null,
-    frequencyRank: null, lastReviewedAt: null, nextReviewAt: null, metadata: null,
-  };
-}
-
-export function createEnglishHighlight(userId: string, deviceId: string, articleId: string, selectedText: string, note = ""): JsonEntity {
-  return { meta: baseMeta(userId, deviceId), articleId, blockId: null, selectedText: selectedText.trim(), startOffset: null, endOffset: null, prefix: null, suffix: null, color: "yellow", note: note.trim() || null };
-}
-
-export function createEnglishNote(userId: string, deviceId: string, articleId: string, content: string, quote = ""): JsonEntity {
-  return { meta: baseMeta(userId, deviceId), articleId, quote: quote.trim() || null, content: content.trim(), blockId: null, startOffset: null, endOffset: null, selectedText: quote.trim() || null, prefix: null, suffix: null, highlightId: null };
-}
-
-export function createEnglishLearningRecord(userId: string, deviceId: string, articleId: string, summary: string, readingTimeSeconds: number, newWords: string[] = []): JsonEntity {
-  return { meta: baseMeta(userId, deviceId), articleId, analysisId: null, recordDate: localDate(), readingTimeSeconds: Math.max(0, Math.round(readingTimeSeconds)), summary: summary.trim(), newWords, completionStatus: "completed", readingStatus: "completed", startedAt: null, completedAt: new Date().toISOString(), score: null };
-}
-
 export function createPreference(userId: string, deviceId: string, preferenceKey: string, value: unknown): JsonEntity {
   return { meta: baseMeta(userId, deviceId), preferenceKey, value };
 }

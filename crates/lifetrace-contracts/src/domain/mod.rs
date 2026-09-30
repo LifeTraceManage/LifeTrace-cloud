@@ -5,7 +5,6 @@
 //! structs are wire contracts.
 
 pub mod assets;
-pub mod english;
 pub mod enums;
 pub mod execution;
 pub mod files;
@@ -20,7 +19,6 @@ pub mod user;
 pub mod workouts;
 
 pub use assets::*;
-pub use english::*;
 pub use enums::*;
 pub use execution::*;
 pub use files::*;

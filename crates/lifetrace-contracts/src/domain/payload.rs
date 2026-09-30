@@ -5,7 +5,6 @@
 //! accepts them.
 
 use crate::domain::assets::{Asset, AssetEvent};
-use crate::domain::english::*;
 use crate::domain::execution::{ExecutionGoal, FocusSession, ImportantDate, Reminder};
 use crate::domain::files::FileMetadata;
 use crate::domain::finance::*;
@@ -51,13 +50,6 @@ pub enum EntityPayload {
     NoteTagRelation(NoteTagRelation),
     NoteRelation(NoteRelation),
     NoteRevision(NoteRevision),
-    EnglishArticle(EnglishArticle),
-    EnglishLearningRecord(EnglishLearningRecord),
-    EnglishHighlight(EnglishHighlight),
-    EnglishNote(EnglishNote),
-    EnglishVocabulary(EnglishVocabulary),
-    VocabularyOccurrence(VocabularyOccurrence),
-    VocabularyReviewState(VocabularyReviewState),
     WorkoutImport(WorkoutImport),
     Workout(Workout),
     WorkoutExercise(WorkoutExercise),
@@ -104,13 +96,6 @@ impl EntityPayload {
             EntityPayload::NoteTagRelation(_) => EntityType::NOTE_TAG_RELATION,
             EntityPayload::NoteRelation(_) => EntityType::NOTE_RELATION,
             EntityPayload::NoteRevision(_) => EntityType::NOTE_REVISION,
-            EntityPayload::EnglishArticle(_) => EntityType::ENGLISH_ARTICLE,
-            EntityPayload::EnglishLearningRecord(_) => EntityType::ENGLISH_LEARNING_RECORD,
-            EntityPayload::EnglishHighlight(_) => EntityType::ENGLISH_HIGHLIGHT,
-            EntityPayload::EnglishNote(_) => EntityType::ENGLISH_NOTE,
-            EntityPayload::EnglishVocabulary(_) => EntityType::ENGLISH_VOCABULARY,
-            EntityPayload::VocabularyOccurrence(_) => EntityType::ENGLISH_VOCABULARY_OCCURRENCE,
-            EntityPayload::VocabularyReviewState(_) => EntityType::ENGLISH_VOCABULARY_REVIEW_STATE,
             EntityPayload::WorkoutImport(_) => EntityType::WORKOUT_IMPORT,
             EntityPayload::Workout(_) => EntityType::WORKOUT_WORKOUT,
             EntityPayload::WorkoutExercise(_) => EntityType::WORKOUT_EXERCISE,
@@ -153,13 +138,6 @@ impl EntityPayload {
             EntityPayload::NoteTagRelation(value) => &value.meta.id,
             EntityPayload::NoteRelation(value) => &value.meta.id,
             EntityPayload::NoteRevision(value) => &value.meta.id,
-            EntityPayload::EnglishArticle(value) => &value.meta.id,
-            EntityPayload::EnglishLearningRecord(value) => &value.meta.id,
-            EntityPayload::EnglishHighlight(value) => &value.meta.id,
-            EntityPayload::EnglishNote(value) => &value.meta.id,
-            EntityPayload::EnglishVocabulary(value) => &value.meta.id,
-            EntityPayload::VocabularyOccurrence(value) => &value.meta.id,
-            EntityPayload::VocabularyReviewState(value) => &value.meta.id,
             EntityPayload::WorkoutImport(value) => &value.meta.id,
             EntityPayload::Workout(value) => &value.meta.id,
             EntityPayload::WorkoutExercise(value) => &value.meta.id,
@@ -207,13 +185,6 @@ impl EntityPayload {
             EntityPayload::NoteTagRelation(v) => json!(v),
             EntityPayload::NoteRelation(v) => json!(v),
             EntityPayload::NoteRevision(v) => json!(v),
-            EntityPayload::EnglishArticle(v) => json!(v),
-            EntityPayload::EnglishLearningRecord(v) => json!(v),
-            EntityPayload::EnglishHighlight(v) => json!(v),
-            EntityPayload::EnglishNote(v) => json!(v),
-            EntityPayload::EnglishVocabulary(v) => json!(v),
-            EntityPayload::VocabularyOccurrence(v) => json!(v),
-            EntityPayload::VocabularyReviewState(v) => json!(v),
             EntityPayload::WorkoutImport(v) => json!(v),
             EntityPayload::Workout(v) => json!(v),
             EntityPayload::WorkoutExercise(v) => json!(v),
@@ -340,32 +311,6 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
                 .map(EntityPayload::NoteRelation),
             EntityType::NOTE_REVISION => parse::<NoteRevision>(&value, EntityType::NOTE_REVISION)
                 .map(EntityPayload::NoteRevision),
-            EntityType::ENGLISH_ARTICLE => {
-                parse::<EnglishArticle>(&value, EntityType::ENGLISH_ARTICLE)
-                    .map(EntityPayload::EnglishArticle)
-            }
-            EntityType::ENGLISH_LEARNING_RECORD => {
-                parse::<EnglishLearningRecord>(&value, EntityType::ENGLISH_LEARNING_RECORD)
-                    .map(EntityPayload::EnglishLearningRecord)
-            }
-            EntityType::ENGLISH_HIGHLIGHT => {
-                parse::<EnglishHighlight>(&value, EntityType::ENGLISH_HIGHLIGHT)
-                    .map(EntityPayload::EnglishHighlight)
-            }
-            EntityType::ENGLISH_NOTE => parse::<EnglishNote>(&value, EntityType::ENGLISH_NOTE)
-                .map(EntityPayload::EnglishNote),
-            EntityType::ENGLISH_VOCABULARY => {
-                parse::<EnglishVocabulary>(&value, EntityType::ENGLISH_VOCABULARY)
-                    .map(EntityPayload::EnglishVocabulary)
-            }
-            EntityType::ENGLISH_VOCABULARY_OCCURRENCE => {
-                parse::<VocabularyOccurrence>(&value, EntityType::ENGLISH_VOCABULARY_OCCURRENCE)
-                    .map(EntityPayload::VocabularyOccurrence)
-            }
-            EntityType::ENGLISH_VOCABULARY_REVIEW_STATE => {
-                parse::<VocabularyReviewState>(&value, EntityType::ENGLISH_VOCABULARY_REVIEW_STATE)
-                    .map(EntityPayload::VocabularyReviewState)
-            }
             EntityType::WORKOUT_IMPORT => {
                 parse::<WorkoutImport>(&value, EntityType::WORKOUT_IMPORT)
                     .map(EntityPayload::WorkoutImport)

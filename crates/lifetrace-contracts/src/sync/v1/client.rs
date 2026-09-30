@@ -14,7 +14,6 @@ impl AppId {
     pub const DESKTOP: &'static str = "lifetrace-desktop";
     pub const FINANCE_ANDROID: &'static str = "lifetrace-finance-android";
     pub const NOTES_ANDROID: &'static str = "lifetrace-notes-android";
-    pub const ENGLISH_ANDROID: &'static str = "lifetrace-english-android";
     pub const HABITS_ANDROID: &'static str = "lifetrace-habits-android";
     pub const EXECUTE_ANDROID: &'static str = "lifetrace-execute-android";
     pub const ASSETS: &'static str = "lifetrace-assets";

@@ -32,8 +32,6 @@ export type AppId = string;
 
 export type AppInstallationId = string;
 
-export type ArticleVocabularyItem = { word: string, phonetic: string | null, meaning: string, example: string | null, };
-
 export type Asset = { id: EntityId, name: string, brand: string, model: string, category: AssetCategory, status: AssetStatus, purchasePrice: number, currentValue: number, purchaseDate: string, warrantyUntil: string | null, spec: string, serialNumber: string, location: string, targetDailyCost: number, purchaseChannel: string, maintenanceCost: number, recoveredAmount: number, createdAt: string, updatedAt: string, isDeleted: boolean, serverVersion: ServerVersion, };
 
 export type AssetCategory = "phone" | "tablet" | "computer" | "wearable" | "audio" | "camera" | "home" | "other";
@@ -91,28 +89,6 @@ export type DeviceId = string;
 export type DeviceInstallationV1 = { id: AppInstallationId, externalDeviceId: string, deviceGroupId: string | null, deviceName: string, appId: AppId, platform: string, status: string, clientVersion: string | null, firstSeenAt: string, lastSeenAt: string, lastLoginAt: string | null, lastSyncAt: string | null, revokedAt: string | null, current: boolean, };
 
 export type DeviceListV1 = { devices: Array<DeviceInstallationV1>, };
-
-export type EnglishArticle = { meta: EntityMeta, title: string, level: EnglishLevel, category: EnglishCategory, content: string, wordCount: bigint, difficulty: bigint | null, estimatedMinutes: bigint | null, source: string | null, sourceKey: string | null, sourceName: string | null, sourceCategory: string | null, sourceUrl: string | null, normalizedSourceUrl: string | null, externalId: string | null, publishedAt: string | null, sourceUpdatedAt: string | null, imageUrl: string | null, audioUrl: string | null, author: string | null, summary: string | null, fetchedAt: string | null, rightsNote: string | null, contentHash: string | null, language: string | null, qualityScore: number | null, hasAudio: boolean, licenseType: string | null, attribution: string | null, processingStatus: EnglishProcessingStatus | null, fetchStatus: EnglishFetchStatus | null, retryCount: bigint, lastError: string | null, createdTime: string | null, questions: Array<string>, vocabulary: Array<ArticleVocabularyItem>, };
-
-export type EnglishCategory = string;
-
-export type EnglishCompletionStatus = string;
-
-export type EnglishFetchStatus = string;
-
-export type EnglishHighlight = { meta: EntityMeta, articleId: EntityId | null, selectedText: string, blockId: string | null, startOffset: bigint | null, endOffset: bigint | null, color: HighlightColor, prefix: string | null, suffix: string | null, note: string | null, };
-
-export type EnglishLearningRecord = { meta: EntityMeta, articleId: EntityId | null, recordDate: LocalDate, readingTimeSeconds: bigint, summary: string, score: number | null, analysisId: EntityId | null, newWords: Array<string>, completionStatus: EnglishCompletionStatus, readingStatus: EnglishReadingStatus | null, startedAt: string | null, completedAt: string | null, };
-
-export type EnglishLevel = string;
-
-export type EnglishNote = { meta: EntityMeta, articleId: EntityId | null, quote: string | null, content: string, blockId: string | null, startOffset: bigint | null, endOffset: bigint | null, selectedText: string | null, prefix: string | null, suffix: string | null, highlightId: EntityId | null, };
-
-export type EnglishProcessingStatus = string;
-
-export type EnglishReadingStatus = string;
-
-export type EnglishVocabulary = { meta: EntityMeta, normalizedWord: string, displayWord: string, definition: string, phonetic: string, partOfSpeech: string, selectedMeanings: Array<string>, lemma: string, sourceArticleId: EntityId | null, sourceArticleTitle: string | null, sourceSentence: string | null, notes: string, masteryLevel: bigint, reviewStage: bigint, reviewCount: bigint, correctCount: bigint, incorrectCount: bigint, encounterCount: bigint, lastReviewedAt: string | null, nextReviewAt: string | null, status: VocabularyStatus, frequencyRank: bigint | null, tags: Array<string>, metadata: JsonValue | null, };
 
 export type EntityId = string;
 
@@ -172,8 +148,6 @@ openingBalanceCents: bigint | null, balanceAt: string | null, last4: string | nu
 export type ForgotPasswordRequestV1 = { email: string, };
 
 export type GoalStatus = "active" | "paused" | "completed" | "cancelled";
-
-export type HighlightColor = string;
 
 export type ImportStatus = string;
 
@@ -342,14 +316,6 @@ export type User = { meta: EntityMeta, displayName: string | null, email: string
 export type UserId = string;
 
 export type UserPreference = { meta: EntityMeta, preferenceKey: string, value: JsonValue, };
-
-export type VocabularyOccurrence = { meta: EntityMeta, vocabularyId: EntityId, articleId: EntityId | null, articleTitle: string | null, sourceSentence: string, };
-
-export type VocabularyReviewResult = string;
-
-export type VocabularyReviewState = { meta: EntityMeta, vocabularyId: EntityId, dueAt: string | null, difficulty: number | null, stability: number | null, retrievability: number | null, reviewCount: bigint, lapseCount: bigint, schedulerVersion: string | null, };
-
-export type VocabularyStatus = string;
 
 export type WebLoginRequestV1 = { email: string, password: string, requestedScopes: Array<Scope>, publicDevice: boolean, };
 

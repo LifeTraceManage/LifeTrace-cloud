@@ -150,7 +150,6 @@ wire_string_enum!(ActivityCheckinMethod, "Habit check-in method.", [
 
 wire_string_enum!(ActivitySyncSource, "Habit sync source.", [
     FITNESS => "fitness",
-    ENGLISH => "english",
 ]);
 
 wire_string_enum!(ActivityLogStatus, "Habit log status.", [
@@ -170,70 +169,6 @@ wire_string_enum!(NoteType, "Note type.", [
     MONTHLY_REVIEW => "monthly_review",
 ]);
 
-wire_string_enum!(EnglishLevel, "CEFR level.", [
-    A1 => "A1",
-    A2 => "A2",
-    B1 => "B1",
-    B2 => "B2",
-    C1 => "C1",
-]);
-
-wire_string_enum!(EnglishCategory, "English article category.", [
-    TECHNOLOGY => "Technology",
-    SCIENCE => "Science",
-    LIFE => "Life",
-    BUSINESS => "Business",
-    CULTURE => "Culture",
-]);
-
-wire_string_enum!(EnglishProcessingStatus, "English article processing status.", [
-    FETCHED => "FETCHED",
-    CLEANED => "CLEANED",
-    ANALYZED => "ANALYZED",
-    READY => "READY",
-    REJECTED => "REJECTED",
-    FAILED => "FAILED",
-]);
-
-wire_string_enum!(EnglishFetchStatus, "English article fetch status.", [
-    PENDING => "PENDING",
-    SUCCESS => "SUCCESS",
-    FAILED => "FAILED",
-    SKIPPED => "SKIPPED",
-]);
-
-wire_string_enum!(EnglishCompletionStatus, "English learning record completion status.", [
-    READING => "reading",
-    SUMMARIZED => "summarized",
-    ANALYZED => "analyzed",
-    COMPLETED => "completed",
-]);
-
-wire_string_enum!(EnglishReadingStatus, "English reading status.", [
-    UNREAD => "unread",
-    READING => "reading",
-    COMPLETED => "completed",
-]);
-
-wire_string_enum!(VocabularyStatus, "Vocabulary status.", [
-    LEARNING => "LEARNING",
-    REVIEWING => "REVIEWING",
-    MASTERED => "MASTERED",
-    ARCHIVED => "ARCHIVED",
-]);
-
-wire_string_enum!(VocabularyReviewResult, "Vocabulary review result.", [
-    FORGOT => "FORGOT",
-    HARD => "HARD",
-    GOOD => "GOOD",
-    EASY => "EASY",
-]);
-
-wire_string_enum!(HighlightColor, "English highlight color.", [
-    YELLOW => "yellow",
-    GREEN => "green",
-    BLUE => "blue",
-]);
 
 wire_string_enum!(WorkoutSource, "Workout source.", [
     MANUAL => "manual",
@@ -281,8 +216,6 @@ mod tests {
         assert_eq!(TransactionStatus::CANDIDATE, "candidate");
         assert_eq!(ActivityLogStatus::PARTIAL, "partial");
         assert_eq!(NoteType::WEEKLY_REVIEW, "weekly_review");
-        assert_eq!(EnglishProcessingStatus::FETCHED, "FETCHED");
-        assert_eq!(VocabularyStatus::MASTERED, "MASTERED");
         assert_eq!(FileStorageState::LOCAL_ONLY, "local_only");
     }
 }

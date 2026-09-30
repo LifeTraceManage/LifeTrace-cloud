@@ -222,7 +222,6 @@ fn capabilities_round_trip_with_defaults() {
     assert_eq!(json["tombstoneRetentionDays"], 90);
     let supported = json["supportedEntityTypes"].as_array().unwrap();
     assert!(supported.iter().any(|value| value == "finance.transaction"));
-    assert!(supported.iter().any(|value| value == "english.article"));
     let back: CapabilitiesResponseV1 = serde_json::from_value(json).unwrap();
     assert_eq!(back, capabilities);
 }

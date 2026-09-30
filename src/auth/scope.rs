@@ -22,8 +22,6 @@ pub const ALL_SCOPES: &[&str] = &[
     "notes:write",
     "files:read",
     "files:write",
-    "english:read",
-    "english:write",
     "habits:read",
     "habits:write",
     "reviews:read",
@@ -46,7 +44,6 @@ pub fn supported_app(app_id: &str) -> bool {
         AppId::DESKTOP
             | AppId::FINANCE_ANDROID
             | AppId::NOTES_ANDROID
-            | AppId::ENGLISH_ANDROID
             | AppId::HABITS_ANDROID
             | AppId::EXECUTE_ANDROID
             | AppId::ASSETS
@@ -75,14 +72,6 @@ pub fn allowed_scopes(app_id: &str) -> BTreeSet<String> {
             "notes:write",
             "files:read",
             "files:write",
-        ],
-        AppId::ENGLISH_ANDROID => &[
-            "account:read",
-            "devices:read",
-            "sync:read",
-            "sync:write",
-            "english:read",
-            "english:write",
         ],
         AppId::HABITS_ANDROID => &[
             "account:read",
@@ -168,8 +157,6 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         "finance"
     } else if entity_type.starts_with("note.") {
         "notes"
-    } else if entity_type.starts_with("english.") {
-        "english"
     } else if entity_type.starts_with("habit.") {
         "habits"
     } else if entity_type == "review.daily" {
@@ -196,8 +183,6 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         ("finance", _) => "finance:write",
         ("notes", "read") => "notes:read",
         ("notes", _) => "notes:write",
-        ("english", "read") => "english:read",
-        ("english", _) => "english:write",
         ("habits", "read") => "habits:read",
         ("habits", _) => "habits:write",
         ("reviews", "read") => "reviews:read",
