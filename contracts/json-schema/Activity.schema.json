@@ -10,7 +10,7 @@
       "type": "string"
     },
     "ActivitySyncSource": {
-      "description": "Habit sync source. Known values: fitness, english. Unknown values are preserved (forward compatible).",
+      "description": "Habit sync source. Known values: fitness. Unknown values are preserved (forward compatible).",
       "type": "string"
     },
     "ActivityType": {
