@@ -95,6 +95,9 @@ struct SandboxJobSummary {
     revision: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct ListSandboxJobsArgs {}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunSandboxJobArgs {
@@ -136,7 +139,7 @@ pub struct ProposeRunSandboxJobTool;
 
 impl Tool for ListSandboxJobsTool {
     const NAME: &'static str = "lifetrace_list_sandbox_jobs";
-    type Args = ();
+    type Args = ListSandboxJobsArgs;
     type Output = Value;
     type Error = SandboxError;
 
@@ -383,7 +386,13 @@ async fn execute_job_inner(
 
     let (stdout, stdout_truncated) = join_capture(stdout_task, "stdout").await?;
     let (stderr, stderr_truncated) = join_capture(stderr_task, "stderr").await?;
-    let structured_output = read_structured_output(&output_path, settings.max_output_bytes).await?;
+    let structured_output = match read_structured_output(&output_path, settings.max_output_bytes).await {
+        Ok(value) => value,
+        Err(error) => {
+            cleanup_run_dir(&run_dir).await;
+            return Err(error);
+        }
+    };
     let duration_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
     cleanup_run_dir(&run_dir).await;
 
