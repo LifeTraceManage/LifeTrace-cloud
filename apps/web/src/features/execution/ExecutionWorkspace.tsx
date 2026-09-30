@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CalendarDays, Check, Circle, Clock3, Flame, Focus, FolderKanban, Inbox, LayoutDashboard, Play, Plus, RotateCcw, Trash2, UserRoundCheck } from "lucide-react";
 import { useApp, type AppContextValue } from "../../app/AppContext";
+import { useAgentPageContext } from "../assistant/AgentSidebarContext";
 import { WorkspaceShell } from "../../layouts/WorkspaceShell";
 import { HabitsPanel, habitScheduledOnDate } from "../habits/HabitsPage";
 import { Badge, Button, Card, CardContent, Dialog, EmptyState, Input, Progress, Section, Select, Tabs, cn } from "../../components/ui";
@@ -41,6 +42,15 @@ export function ExecutionWorkspace() {
   const habitLogs=entities(state,"habit.log");
   const open=tasks.filter(isOpenExecutionTask);
   const today=todayKey();
+  useAgentPageContext({
+    workspace: "execution",
+    view,
+    label: `Execute · ${view}`,
+    selectedEntity: detailTaskId
+      ? { entityType: "execution.task", entityId: detailTaskId }
+      : undefined,
+    temporalContext: view === "today" || view === "planner" ? { date: today } : undefined,
+  });
   const todayOpen=open.filter(t=>taskMatchesToday(t,today));
   const unscheduled=open.filter(t=>!t.scheduledStartAt);
   const scheduled=todayOpen.filter(t=>t.scheduledStartAt).sort((a,b)=>text(a,"scheduledStartAt").localeCompare(text(b,"scheduledStartAt")));

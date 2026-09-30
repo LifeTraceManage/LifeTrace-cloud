@@ -1,7 +1,8 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { Navigate, createBrowserRouter, useLocation } from "react-router-dom";
 import { useApp } from "./AppContext";
 import { AppShell } from "../layouts/AppShell";
+import { useAgentSidebar } from "../features/assistant/AgentSidebarContext";
 
 const LoginPage = lazy(() => import("../features/auth/LoginPage").then((module) => ({ default: module.LoginPage })));
 const PortalPage = lazy(() => import("../features/portal/PortalPage").then((module) => ({ default: module.PortalPage })));
@@ -11,7 +12,6 @@ const HealthPage = lazy(() => import("../features/health/HealthPage").then((modu
 const NotesPage = lazy(() => import("../features/notes/NotesPage").then((module) => ({ default: module.NotesPage })));
 const MailPage = lazy(() => import("../features/mail/MailPage").then((module) => ({ default: module.MailPage })));
 const FinanceWorkspace = lazy(() => import("../features/finance/FinanceWorkspace").then((module) => ({ default: module.FinanceWorkspace })));
-const AssistantPage = lazy(() => import("../features/assistant/AssistantPage").then((module) => ({ default: module.AssistantPage })));
 const SearchPage = lazy(() => import("../features/search/SearchPage").then((module) => ({ default: module.SearchPage })));
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const UiShowcasePage = lazy(() => import("../features/system/UiShowcasePage").then((module) => ({ default: module.UiShowcasePage })));
@@ -60,6 +60,14 @@ function LegacyFinanceRedirect() {
   return <Navigate to={`${pathname || "/finance"}${location.search}${location.hash}`} replace />;
 }
 
+function LegacyAssistantRedirect() {
+  const { setOpen } = useAgentSidebar();
+  useEffect(() => {
+    setOpen(true);
+  }, [setOpen]);
+  return <Navigate to="/app/health" replace />;
+}
+
 export const router = createBrowserRouter([
   { path: "/", element: <RequireAuth>{withSuspense(<PortalPage />)}</RequireAuth> },
   { path: "/login", element: withSuspense(<LoginPage />) },
@@ -83,7 +91,7 @@ export const router = createBrowserRouter([
       { path: "notes", element: <Navigate to="/notes" replace /> },
       { path: "review", element: <Navigate to="/execute/review" replace /> },
       { path: "finance/*", element: <LegacyFinanceRedirect /> },
-      { path: "assistant", element: withSuspense(<AssistantPage />) },
+      { path: "assistant", element: <LegacyAssistantRedirect /> },
       { path: "search", element: withSuspense(<SearchPage />) },
       { path: "settings/*", element: withSuspense(<SettingsPage />) },
       { path: "system/ui", element: withSuspense(<UiShowcasePage />) },

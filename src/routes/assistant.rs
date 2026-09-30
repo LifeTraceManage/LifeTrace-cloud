@@ -28,6 +28,8 @@ struct AssistantRequest {
     context: Value,
     #[serde(default)]
     session_id: Option<Uuid>,
+    #[serde(default)]
+    page_context: Option<runtime::AgentPageContext>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,10 +109,22 @@ async fn assistant(
         ));
     }
 
-    runtime::run(&state, &principal, prompt, request.session_id)
-        .await
-        .map(Json)
-        .map_err(map_runtime_error)
+    if let Some(page_context) = request.page_context.as_ref() {
+        page_context.validate().map_err(|message| {
+            ApiError::new(ErrorCode::InvalidRequest, message, StatusCode::BAD_REQUEST)
+        })?;
+    }
+
+    runtime::run(
+        &state,
+        &principal,
+        prompt,
+        request.session_id,
+        request.page_context,
+    )
+    .await
+    .map(Json)
+    .map_err(map_runtime_error)
 }
 
 async fn list_sessions(

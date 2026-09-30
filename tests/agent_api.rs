@@ -1339,3 +1339,57 @@ async fn assistant_cannot_supersede_pending_approval_with_different_action_type(
         .unwrap();
     assert_eq!(count, 1);
 }
+
+#[tokio::test]
+async fn assistant_accepts_page_context_without_persisting_it_as_user_message() {
+    let app = test_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({
+            "prompt":"处理这个",
+            "pageContext":{
+                "workspace":"execution",
+                "view":"planner",
+                "label":"Execute · planner",
+                "selectedEntity":{
+                    "entityType":"execution.task",
+                    "entityId":"task-123"
+                },
+                "temporalContext":{"date":"2026-09-30"}
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let uri = format!(
+        "/api/v1/assistant/sessions/{}/messages?limit=10",
+        first["sessionId"].as_str().unwrap()
+    );
+    let (status, messages) = send(app, Method::GET, &uri, Value::Null).await;
+    assert_eq!(status, StatusCode::OK);
+    let items = messages["items"].as_array().unwrap();
+    assert_eq!(items[0]["content"], "处理这个");
+    assert!(!items[0]["content"].as_str().unwrap().contains("task-123"));
+}
+
+#[tokio::test]
+async fn assistant_rejects_oversized_page_context_fields() {
+    let app = test_app().await;
+    let (status, body) = send(
+        app,
+        Method::POST,
+        "/api/v1/assistant",
+        json!({
+            "prompt":"测试上下文校验",
+            "pageContext":{
+                "workspace":"x".repeat(65)
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "LIFETRACE_INVALID_REQUEST");
+}

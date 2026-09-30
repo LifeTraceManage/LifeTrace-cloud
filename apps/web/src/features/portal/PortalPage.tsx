@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Bot, Dumbbell, HeartPulse, LayoutDashboard, Leaf, Mail, NotebookPen, Settings, WalletCards } from "lucide-react";
 import { useApp } from "../../app/AppContext";
-import { Card, CardContent, cn } from "../../components/ui";
+import { Button, Card, CardContent, cn } from "../../components/ui";
+import { AgentSidebar } from "../assistant/AgentSidebar";
+import { useAgentSidebar } from "../assistant/AgentSidebarContext";
 
 const modules = [
   {
@@ -37,14 +39,14 @@ const modules = [
 const coreModules = [
   { to: "/app/health", name: "Health", icon: HeartPulse },
   { to: "/app/fitness", name: "Fitness", icon: Dumbbell },
-  { to: "/app/assistant", name: "Assistant", icon: Bot },
   { to: "/app/settings", name: "Settings", icon: Settings },
 ] as const;
 
 export function PortalPage() {
   const { session } = useApp();
+  const agent = useAgentSidebar();
 
-  return <main className="min-h-screen bg-background">
+  return <main className={cn("min-h-screen bg-background transition-[padding]", agent.open && "lg:pr-[420px]")}>
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
       <header className="mb-10 flex flex-col gap-6 border-b pb-8 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -56,9 +58,12 @@ export function PortalPage() {
           </div>
           <h1 className="max-w-2xl text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">一个账号，进入不同工作区。</h1>
         </div>
-        <div className="rounded-lg border bg-card px-4 py-3 text-sm">
-          <div className="text-xs text-muted-foreground">当前账号</div>
-          <div className="mt-1 font-medium">{session?.user.displayName || session?.user.email || "LifeTrace User"}</div>
+        <div className="flex items-center gap-2">
+          <Button variant={agent.open ? "secondary" : "outline"} onClick={agent.toggle}><Bot size={16}/>Agent</Button>
+          <div className="rounded-lg border bg-card px-4 py-3 text-sm">
+            <div className="text-xs text-muted-foreground">当前账号</div>
+            <div className="mt-1 font-medium">{session?.user.displayName || session?.user.email || "LifeTrace User"}</div>
+          </div>
         </div>
       </header>
 
@@ -89,5 +94,6 @@ export function PortalPage() {
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{coreModules.map(({to,name,icon:Icon})=><Link key={to} to={to} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-muted"><Icon size={16} className="text-muted-foreground"/><span className="flex-1">{name}</span><ArrowRight size={14} className="text-muted-foreground"/></Link>)}</div>
       </section>
     </div>
+    <AgentSidebar />
   </main>;
 }

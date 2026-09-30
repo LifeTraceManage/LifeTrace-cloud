@@ -2,6 +2,33 @@ import { API_BASE } from "./base";
 import { browserFetch } from "./http";
 import type { FetchLike } from "./types";
 
+export interface AgentSelectedEntityContext {
+  entityType: string;
+  entityId: string;
+}
+
+export interface AgentTemporalContext {
+  date?: string;
+  rangeStart?: string;
+  rangeEnd?: string;
+}
+
+export interface AgentSearchContext {
+  query?: string;
+  folderId?: string;
+  projectId?: string;
+  mailbox?: string;
+}
+
+export interface AgentPageContext {
+  workspace: string;
+  view?: string;
+  label?: string;
+  selectedEntity?: AgentSelectedEntityContext;
+  temporalContext?: AgentTemporalContext;
+  searchContext?: AgentSearchContext;
+}
+
 export interface AssistantReply {
   reply: string;
   provider: string;
@@ -53,7 +80,12 @@ export interface ApprovalDecisionResult {
 export class AssistantApi {
   constructor(private readonly fetcher: FetchLike = browserFetch) {}
 
-  async ask(prompt: string, csrfToken: string, sessionId?: string | null): Promise<AssistantReply> {
+  async ask(
+    prompt: string,
+    csrfToken: string,
+    sessionId?: string | null,
+    pageContext?: AgentPageContext | null,
+  ): Promise<AssistantReply> {
     const response = await this.fetcher(`${API_BASE}/api/v1/web/assistant`, {
       method: "POST",
       credentials: "include",
@@ -61,6 +93,7 @@ export class AssistantApi {
       body: JSON.stringify({
         prompt: prompt.trim(),
         ...(sessionId ? { sessionId } : {}),
+        ...(pageContext ? { pageContext } : {}),
       }),
     });
     const payload = await response.json() as Partial<AssistantReply> & {

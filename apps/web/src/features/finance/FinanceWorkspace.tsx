@@ -8,9 +8,11 @@
  */
 import { WalletCards } from "lucide-react";
 import { WorkspaceShell } from "../../layouts/WorkspaceShell";
+import { useAgentPageContext } from "../assistant/AgentSidebarContext";
 import { BeeCountCloudWorkspace } from "./beecount-cloud/BeeCountCloudWorkspace";
 
 export function FinanceWorkspace() {
+  useAgentPageContext({ workspace: "finance", view: "workspace", label: "Finance" });
   return (
     <WorkspaceShell
       title="Finance"
