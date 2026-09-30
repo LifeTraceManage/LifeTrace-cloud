@@ -557,7 +557,7 @@ impl Tool for ProposeCreateTaskTool {
             "create_task",
             arguments_json,
             action,
-            json!({"title": title, "priority": priority}),,
+            json!({"title": title, "priority": priority}),
             supersedes_approval_id.as_deref()
         )
         .await
@@ -686,7 +686,7 @@ impl Tool for ProposeUpdateTaskTool {
             "update_task",
             arguments_json,
             action,
-            json!({"taskId": task_id}),,
+            json!({"taskId": task_id}),
             supersedes_approval_id.as_deref()
         )
         .await
@@ -770,7 +770,7 @@ impl Tool for ProposeCreateCalendarEventTool {
             "create_calendar_event",
             arguments_json,
             action,
-            json!({"title": title, "isAllDay": args.is_all_day}),,
+            json!({"title": title, "isAllDay": args.is_all_day}),
             supersedes_approval_id.as_deref()
         )
         .await
@@ -826,7 +826,7 @@ impl Tool for ProposeCreateProjectTool {
             "create_project",
             arguments_json,
             action,
-            json!({"name": name}),,
+            json!({"name": name}),
             supersedes_approval_id.as_deref()
         )
         .await
@@ -911,7 +911,7 @@ impl Tool for ProposeUpdateProjectTool {
             "update_project",
             arguments_json,
             action,
-            json!({"projectId": project_id}),,
+            json!({"projectId": project_id}),
             supersedes_approval_id.as_deref()
         )
         .await
@@ -1009,7 +1009,7 @@ impl Tool for ProposeCreateHabitTool {
             "create_habit",
             arguments_json,
             action,
-            json!({"name": name, "scheduleType": schedule_type}),,
+            json!({"name": name, "scheduleType": schedule_type}),
             supersedes_approval_id.as_deref()
         )
         .await
@@ -1137,7 +1137,7 @@ impl Tool for ProposeUpdateHabitTool {
             "update_habit",
             arguments_json,
             action,
-            json!({"habitId": habit_id}),,
+            json!({"habitId": habit_id}),
             supersedes_approval_id.as_deref()
         )
         .await
@@ -1199,7 +1199,7 @@ impl Tool for ProposeCreateWaitingItemTool {
             "create_waiting_item",
             arguments_json,
             action,
-            json!({"title": title, "waitingFor": waiting_for}),,
+            json!({"title": title, "waitingFor": waiting_for}),
             supersedes_approval_id.as_deref()
         )
         .await
@@ -1318,7 +1318,7 @@ impl Tool for ProposeUpdateWaitingItemTool {
             "update_waiting_item",
             arguments_json,
             action,
-            json!({"waitingItemId": waiting_item_id}),,
+            json!({"waitingItemId": waiting_item_id}),
             supersedes_approval_id.as_deref()
         )
         .await
@@ -1381,7 +1381,7 @@ impl Tool for ProposeCreateReminderTool {
             "create_reminder",
             arguments_json,
             action,
-            json!({"subjectType": args.subject_type, "subjectId": subject_id, "triggerAt": args.trigger_at}),,
+            json!({"subjectType": args.subject_type, "subjectId": subject_id, "triggerAt": args.trigger_at}),
             supersedes_approval_id.as_deref()
         )
         .await
@@ -1478,7 +1478,7 @@ impl Tool for ProposeUpdateReminderTool {
             "update_reminder",
             arguments_json,
             action,
-            json!({"reminderId": reminder_id}),,
+            json!({"reminderId": reminder_id}),
             supersedes_approval_id.as_deref()
         )
         .await
