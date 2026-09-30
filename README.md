@@ -38,7 +38,7 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 
 - `src/routes/`：HTTP API
 - `src/auth/`：认证、Session、Token 与密码逻辑
-- `src/agent/`：Rig Agent runtime、会话持久化、数据工具与审批执行层
+- `src/agent/`：Rig Agent runtime、会话持久化、数据工具、审批执行层与受控 Sandbox Job Runner
 - `src/beecount/`：BeeCount 兼容和财务同步
 - `src/mail/`：邮件协议、解析和邮件服务
 - `src/workers/`：随 Cloud 进程启动的后台任务
@@ -53,6 +53,13 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 - `crates/lifetrace-contracts/`：共享协议和领域契约
 - `crates/lifetrace-sync-client/`：Rust Sync v1 客户端
 - `contracts/`：生成的跨语言契约
+
+
+## Agent 沙盒 Job
+
+Agent 可以调用服务器管理员预先注册的后台 Job，但不会获得通用 Shell 权限。沙盒默认关闭，运行 Job 必须经过现有 Agent Approval，Cloud 只执行固定 entrypoint，并通过 JSON 文件传递模型生成的输入。
+
+完整注册格式、安全边界与部署配置见 [docs/agent-sandbox.md](docs/agent-sandbox.md)。
 
 ## HTTP 入口
 
