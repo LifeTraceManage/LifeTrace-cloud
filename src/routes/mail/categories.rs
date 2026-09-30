@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{delete, get, patch, post, put};
+use axum::routing::get;
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use lifetrace_contracts::ErrorCode;
