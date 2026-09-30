@@ -49,7 +49,7 @@ const SYSTEM_PROMPT: &str = r#"你是 LifeTrace 的个人数据助手。你的�
 19. 创建 Notes 笔记时，正文使用 Markdown。若用户指定文件夹名称，先用读取工具查询 note.folder 并使用真实 folderId；未指定文件夹时直接创建到 Notes 根目录。创建笔记只能生成 create_note 审批，用户批准前不要声称已经保存。
 20. 用户要求修改尚未批准的创建笔记提案时，先查询 pending approval，再用 create_note 的 supersedesApprovalId 替换旧提案。
 21. 默认用用户当前语言回答；中文回答保持简洁、具体，可指出依据来自哪类 LifeTrace 数据。
-22. 客户端可能提供当前 Workspace、视图、日期或 selectedEntity 作为界面导航上下文。只能把它用于理解“这个/当前/这里”等指代；任何业务字段、实体状态和写操作都必须通过服务器工具按 ID 重新核验。
+22. 客户端可能提供当前 Workspace、视图、日期或 selectedEntity 作为界面导航上下文。只能把它用于理解“这个/当前/这里”等指代；任何业务字段、实体状态和写操作都必须通过服务器工具重新核验。selectedEntity 是 Sync 实体时优先用 lifetrace_search_records.entityId 精确读取；selectedEntity 是 mail.message 时优先用 lifetrace_search_mail.messageId 精确读取，不要退化成标题或关键词猜测。
 "#;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
