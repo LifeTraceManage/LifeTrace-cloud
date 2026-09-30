@@ -315,6 +315,21 @@ pub struct UpdateReminderArgs {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateNoteArgs {
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub content_markdown: String,
+    #[serde(default)]
+    pub folder_id: Option<String>,
+    #[serde(default)]
+    pub note_type: Option<String>,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SendMailArgs {
     pub account_id: String,
     #[serde(default)]
@@ -341,6 +356,16 @@ pub struct ReplyMailArgs {
     pub reply_all: bool,
     #[serde(default)]
     pub supersedes_approval_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateNoteAction {
+    entity_id: String,
+    title: Option<String>,
+    content_markdown: String,
+    folder_id: Option<String>,
+    note_type: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -520,6 +545,7 @@ pub struct ProposeCreateWaitingItemTool;
 pub struct ProposeUpdateWaitingItemTool;
 pub struct ProposeCreateReminderTool;
 pub struct ProposeUpdateReminderTool;
+pub struct ProposeCreateNoteTool;
 pub struct ProposeSendMailTool;
 pub struct ProposeReplyMailTool;
 
@@ -1533,6 +1559,98 @@ impl Tool for ProposeUpdateReminderTool {
     }
 }
 
+impl Tool for ProposeCreateNoteTool {
+    const NAME: &'static str = "lifetrace_propose_create_note";
+    type Args = CreateNoteArgs;
+    type Output = Value;
+    type Error = ApprovalError;
+
+    fn description(&self) -> String {
+        "提出创建 LifeTrace Notes 笔记的写操作。正文使用 Markdown；可选 folderId 必须来自真实 note.folder。该工具不会直接创建笔记，只生成待用户批准的提案。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type":"object",
+            "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。用户要求修改尚未批准的创建笔记提案时，填写被替代的 approvalId"},
+                "title":{"type":"string","description":"可选笔记标题；标题和正文至少一个非空"},
+                "contentMarkdown":{"type":"string","description":"Markdown 正文，可为空字符串，但标题和正文至少一个非空"},
+                "folderId":{"type":"string","description":"可选。真实 note.folder 的实体 ID；未指定时创建到 Notes 根目录"},
+                "noteType":{"type":"string","enum":["quick","document"],"description":"默认 quick"}
+            },
+            "required":["contentMarkdown"],
+            "additionalProperties":false
+        })
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        require_context_write_scopes(&ctx, &["sync:write", "notes:write"])?;
+        let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
+
+        let title = bounded_optional(args.title.as_deref(), 300);
+        let content_markdown = args.content_markdown.trim_end().to_owned();
+        if content_markdown.chars().count() > 100_000 {
+            return Err(ApprovalError::Invalid(
+                "contentMarkdown must not exceed 100000 characters".to_owned(),
+            ));
+        }
+        if title.is_none() && content_markdown.trim().is_empty() {
+            return Err(ApprovalError::Invalid(
+                "title and contentMarkdown cannot both be empty".to_owned(),
+            ));
+        }
+
+        let note_type = args.note_type.unwrap_or_else(|| "quick".to_owned());
+        validate_one_of(&note_type, "noteType", &["quick", "document"])?;
+
+        let folder_id = bounded_optional(args.folder_id.as_deref(), 200);
+        if let Some(folder_id) = folder_id.as_deref() {
+            let folder = sqlx::query(
+                "SELECT entity_id FROM sync_entities WHERE user_id=$1 AND entity_type='note.folder' AND entity_id=$2 AND is_deleted=0",
+            )
+            .bind(ctx.user_id)
+            .bind(folder_id)
+            .fetch_optional(&ctx.pool)
+            .await?;
+            if folder.is_none() {
+                return Err(ApprovalError::Invalid(
+                    "folderId does not reference an existing note.folder".to_owned(),
+                ));
+            }
+        }
+
+        let action = json!({
+            "entityId": Uuid::new_v4().to_string(),
+            "title": title,
+            "contentMarkdown": content_markdown,
+            "folderId": folder_id,
+            "noteType": note_type
+        });
+        propose(
+            &ctx,
+            Self::NAME,
+            "create_note",
+            arguments_json,
+            action,
+            json!({
+                "title": title,
+                "contentMarkdown": content_markdown,
+                "folderId": folder_id,
+                "noteType": note_type
+            }),
+            supersedes_approval_id.as_deref(),
+        )
+        .await
+    }
+}
+
 impl Tool for ProposeSendMailTool {
     const NAME: &'static str = "lifetrace_propose_send_mail";
     type Args = SendMailArgs;
@@ -2126,6 +2244,11 @@ async fn execute_action(
     approval: &AgentApproval,
 ) -> Result<Value, ApprovalError> {
     match approval.action_name.as_str() {
+        "create_note" => {
+            let action: CreateNoteAction = serde_json::from_value(approval.action_json.clone())
+                .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
+            execute_create_note(state, principal, approval, action).await
+        }
         "send_mail" | "reply_mail" => {
             let action: SendMailAction = serde_json::from_value(approval.action_json.clone())
                 .map_err(|error| ApprovalError::Invalid(error.to_string()))?;
@@ -2193,6 +2316,89 @@ async fn execute_action(
             "unsupported action name: {other}"
         ))),
     }
+}
+
+async fn execute_create_note(
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
+    approval: &AgentApproval,
+    action: CreateNoteAction,
+) -> Result<Value, ApprovalError> {
+    if let Some(existing) = state
+        .store
+        .entity(&principal.user_id, EntityType::NOTE_NOTE, &action.entity_id)
+        .await
+        .map_err(|error| ApprovalError::Execution(error.to_string()))?
+    {
+        if !existing.deleted {
+            return Ok(json!({
+                "action":"create_note",
+                "entityType":EntityType::NOTE_NOTE,
+                "entityId":action.entity_id,
+                "serverVersion":existing.server_version.to_string(),
+                "alreadySatisfied":true
+            }));
+        }
+    }
+
+    if let Some(folder_id) = action.folder_id.as_deref() {
+        state
+            .store
+            .entity(&principal.user_id, EntityType::NOTE_FOLDER, folder_id)
+            .await
+            .map_err(|error| ApprovalError::Execution(error.to_string()))?
+            .filter(|record| !record.deleted)
+            .ok_or_else(|| {
+                ApprovalError::Invalid(
+                    "folderId no longer references an existing note.folder".to_owned(),
+                )
+            })?;
+    }
+
+    let content_markdown = action.content_markdown.clone();
+    let content_text = content_markdown.clone();
+    let summary = content_text.chars().take(160).collect::<String>();
+    let payload = json!({
+        "meta": base_meta(principal, &action.entity_id, approval.requested_at),
+        "title": action.title,
+        "noteType": action.note_type,
+        "folderId": action.folder_id,
+        "contentJson": {
+            "type": "markdown",
+            "source": content_markdown,
+            "editor": "codemirror",
+            "properties": {
+                "status": "",
+                "source": "agent",
+                "aliases": []
+            }
+        },
+        "contentHtml": "",
+        "contentText": content_text,
+        "contentMarkdown": content_markdown,
+        "summary": summary,
+        "isPinned": false,
+        "isFavorite": false,
+        "isArchived": false,
+        "aiSummary": null,
+        "aiTags": null,
+        "embeddingStatus": null,
+        "lastAiProcessedAt": null
+    });
+
+    push_upsert(
+        state,
+        principal,
+        approval,
+        SyncUpsertAction {
+            entity_type: EntityType::NOTE_NOTE,
+            entity_id: action.entity_id,
+            base_server_version: ServerVersion::zero(),
+            payload,
+            change_id: format!("agent-approval-{}", approval.id),
+        },
+    )
+    .await
 }
 
 async fn execute_send_mail(
@@ -3437,6 +3643,7 @@ fn require_principal_action_write(
         | "create_reminder"
         | "update_reminder" => &["sync:write", "execution:write"],
         "create_habit" | "update_habit" => &["sync:write", "habits:write"],
+        "create_note" => &["sync:write", "notes:write"],
         "send_mail" | "reply_mail" => &["mail:write"],
         other => {
             return Err(ApprovalError::Invalid(format!(
