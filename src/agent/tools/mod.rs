@@ -49,6 +49,7 @@ pub struct SearchMailArgs {
 pub struct LifeTraceOverviewTool;
 pub struct SearchRecordsTool;
 pub struct SearchMailTool;
+pub struct ListPendingApprovalsTool;
 
 impl Tool for LifeTraceOverviewTool {
     const NAME: &'static str = "lifetrace_overview";
@@ -147,6 +148,58 @@ impl Tool for SearchMailTool {
         let result = search_mail(&ctx, args).await;
         finish_audited(&ctx, call_id, result).await
     }
+}
+
+impl Tool for ListPendingApprovalsTool {
+    const NAME: &'static str = "lifetrace_list_pending_approvals";
+    type Args = OverviewArgs;
+    type Output = Value;
+    type Error = AgentToolError;
+
+    fn description(&self) -> String {
+        "列出当前 Agent 会话仍可审批的 pending 写操作。用户要求修改、纠正或替换尚未批准的提案时，必须先调用此工具确认旧 approvalId。只读。".to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({"type":"object","properties":{},"additionalProperties":false})
+    }
+
+    async fn call(
+        &self,
+        tool_context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
+        let call_id = audit_start(&ctx, Self::NAME, &args).await?;
+        let result = list_pending_approvals(&ctx).await;
+        finish_audited(&ctx, call_id, result).await
+    }
+}
+
+pub async fn list_pending_approvals(ctx: &AgentInvocationContext) -> Result<Value, AgentToolError> {
+    let rows = sqlx::query(
+        "SELECT id,action_name,action_json,requested_at,expires_at \
+         FROM agent_approvals \
+         WHERE user_id=$1 AND session_id=$2 AND status='pending' \
+           AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) \
+         ORDER BY requested_at DESC,rowid DESC LIMIT 20",
+    )
+    .bind(ctx.user_id)
+    .bind(ctx.session_id)
+    .fetch_all(&ctx.pool)
+    .await?;
+
+    let mut items = Vec::with_capacity(rows.len());
+    for row in rows {
+        items.push(json!({
+            "approvalId": row.try_get::<Uuid,_>("id")?,
+            "actionName": row.try_get::<String,_>("action_name")?,
+            "action": compact_value(row.try_get::<Value,_>("action_json")?),
+            "requestedAt": row.try_get::<DateTime<Utc>,_>("requested_at")?,
+            "expiresAt": row.try_get::<Option<DateTime<Utc>>,_>("expires_at")?
+        }));
+    }
+    Ok(json!({"items":items,"count":items.len()}))
 }
 
 pub async fn load_overview(ctx: &AgentInvocationContext) -> Result<Value, AgentToolError> {

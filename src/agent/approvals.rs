@@ -50,6 +50,8 @@ pub struct AgentApproval {
     pub requested_at: DateTime<Utc>,
     pub decided_at: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
+    pub superseded_by_approval_id: Option<Uuid>,
+    pub cancellation_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -87,6 +89,8 @@ pub struct CreateTaskArgs {
     pub context: Option<String>,
     #[serde(default)]
     pub leave_unscheduled: bool,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -111,6 +115,8 @@ pub struct UpdateTaskArgs {
     pub clear_schedule: bool,
     #[serde(default)]
     pub estimated_minutes: Option<i64>,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -131,6 +137,8 @@ pub struct CreateCalendarEventArgs {
     pub end_local_date: Option<String>,
     #[serde(default)]
     pub timezone: Option<String>,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -143,6 +151,8 @@ pub struct CreateProjectArgs {
     pub color: Option<String>,
     #[serde(default)]
     pub icon: Option<String>,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -161,6 +171,8 @@ pub struct UpdateProjectArgs {
     pub color: Option<String>,
     #[serde(default)]
     pub icon: Option<String>,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -182,6 +194,8 @@ pub struct CreateHabitArgs {
     pub start_date: String,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -208,6 +222,8 @@ pub struct UpdateHabitArgs {
     pub clear_description: bool,
     #[serde(default)]
     pub is_archived: Option<bool>,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -223,6 +239,8 @@ pub struct CreateWaitingItemArgs {
     pub follow_up_at: Option<String>,
     #[serde(default)]
     pub source_task_id: Option<String>,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -251,6 +269,8 @@ pub struct UpdateWaitingItemArgs {
     pub resolution_summary: Option<String>,
     #[serde(default)]
     pub clear_resolution_summary: bool,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -263,6 +283,8 @@ pub struct CreateReminderArgs {
     pub title: Option<String>,
     #[serde(default)]
     pub body: Option<String>,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -285,6 +307,8 @@ pub struct UpdateReminderArgs {
     pub body: Option<String>,
     #[serde(default)]
     pub clear_body: bool,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -465,6 +489,7 @@ impl Tool for ProposeCreateTaskTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "title":{"type":"string"},
                 "description":{"type":"string"},
                 "projectId":{"type":"string"},
@@ -489,6 +514,7 @@ impl Tool for ProposeCreateTaskTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
 
         let title = bounded_required(&args.title, "title", 300)?;
         let priority = args.priority.unwrap_or_else(|| "normal".to_owned());
@@ -532,6 +558,7 @@ impl Tool for ProposeCreateTaskTool {
             arguments_json,
             action,
             json!({"title": title, "priority": priority}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -551,6 +578,7 @@ impl Tool for ProposeUpdateTaskTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "taskId":{"type":"string"},
                 "title":{"type":"string"},
                 "status":{"type":"string","enum":["todo","in_progress","waiting","done","cancelled"]},
@@ -575,6 +603,7 @@ impl Tool for ProposeUpdateTaskTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
 
         let task_id = bounded_required(&args.task_id, "taskId", 200)?;
         let title = match args.title.as_deref() {
@@ -658,6 +687,7 @@ impl Tool for ProposeUpdateTaskTool {
             arguments_json,
             action,
             json!({"taskId": task_id}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -677,6 +707,7 @@ impl Tool for ProposeCreateCalendarEventTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "title":{"type":"string"},
                 "description":{"type":"string"},
                 "isAllDay":{"type":"boolean","default":false},
@@ -699,6 +730,7 @@ impl Tool for ProposeCreateCalendarEventTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
 
         let title = bounded_required(&args.title, "title", 300)?;
         validate_optional_timestamp(args.start_at.as_deref(), "startAt")?;
@@ -739,6 +771,7 @@ impl Tool for ProposeCreateCalendarEventTool {
             arguments_json,
             action,
             json!({"title": title, "isAllDay": args.is_all_day}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -758,6 +791,7 @@ impl Tool for ProposeCreateProjectTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "name":{"type":"string"},
                 "description":{"type":"string"},
                 "color":{"type":"string"},
@@ -776,6 +810,7 @@ impl Tool for ProposeCreateProjectTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_context_write_scopes(&ctx, &["sync:write", "execution:write"])?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
 
         let name = bounded_required(&args.name, "name", 300)?;
         let action = json!({
@@ -792,6 +827,7 @@ impl Tool for ProposeCreateProjectTool {
             arguments_json,
             action,
             json!({"name": name}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -811,6 +847,7 @@ impl Tool for ProposeUpdateProjectTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "projectId":{"type":"string"},
                 "name":{"type":"string"},
                 "description":{"type":"string"},
@@ -832,6 +869,7 @@ impl Tool for ProposeUpdateProjectTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_context_write_scopes(&ctx, &["sync:write", "execution:write"])?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
 
         let project_id = bounded_required(&args.project_id, "projectId", 200)?;
         let name = match args.name.as_deref() {
@@ -874,6 +912,7 @@ impl Tool for ProposeUpdateProjectTool {
             arguments_json,
             action,
             json!({"projectId": project_id}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -893,6 +932,7 @@ impl Tool for ProposeCreateHabitTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "name":{"type":"string"},
                 "activityType":{"type":"string","enum":["completion","count","duration"]},
                 "unit":{"type":"string"},
@@ -916,6 +956,7 @@ impl Tool for ProposeCreateHabitTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_context_write_scopes(&ctx, &["sync:write", "habits:write"])?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
 
         let name = bounded_required(&args.name, "name", 300)?;
         let activity_type = args
@@ -969,6 +1010,7 @@ impl Tool for ProposeCreateHabitTool {
             arguments_json,
             action,
             json!({"name": name, "scheduleType": schedule_type}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -988,6 +1030,7 @@ impl Tool for ProposeUpdateHabitTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "habitId":{"type":"string"},
                 "name":{"type":"string"},
                 "minimumTarget":{"type":"number","minimum":0},
@@ -1013,6 +1056,7 @@ impl Tool for ProposeUpdateHabitTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_context_write_scopes(&ctx, &["sync:write", "habits:write"])?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
 
         let habit_id = bounded_required(&args.habit_id, "habitId", 200)?;
         let name = match args.name.as_deref() {
@@ -1094,6 +1138,7 @@ impl Tool for ProposeUpdateHabitTool {
             arguments_json,
             action,
             json!({"habitId": habit_id}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1113,6 +1158,7 @@ impl Tool for ProposeCreateWaitingItemTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "title":{"type":"string"},
                 "description":{"type":"string"},
                 "waitingFor":{"type":"string"},
@@ -1133,6 +1179,7 @@ impl Tool for ProposeCreateWaitingItemTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
         let title = bounded_required(&args.title, "title", 300)?;
         let waiting_for = bounded_required(&args.waiting_for, "waitingFor", 300)?;
         validate_optional_timestamp(args.expected_at.as_deref(), "expectedAt")?;
@@ -1153,6 +1200,7 @@ impl Tool for ProposeCreateWaitingItemTool {
             arguments_json,
             action,
             json!({"title": title, "waitingFor": waiting_for}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1172,6 +1220,7 @@ impl Tool for ProposeUpdateWaitingItemTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "waitingItemId":{"type":"string"},
                 "title":{"type":"string"},
                 "description":{"type":"string"},
@@ -1198,6 +1247,7 @@ impl Tool for ProposeUpdateWaitingItemTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
         let waiting_item_id = bounded_required(&args.waiting_item_id, "waitingItemId", 200)?;
         let title = match args.title.as_deref() {
             Some(value) => Some(bounded_required(value, "title", 300)?),
@@ -1269,6 +1319,7 @@ impl Tool for ProposeUpdateWaitingItemTool {
             arguments_json,
             action,
             json!({"waitingItemId": waiting_item_id}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1288,6 +1339,7 @@ impl Tool for ProposeCreateReminderTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "subjectType":{"type":"string","enum":["task","calendar_event","waiting_item"]},
                 "subjectId":{"type":"string"},
                 "triggerAt":{"type":"string","description":"RFC3339 timestamp"},
@@ -1307,6 +1359,7 @@ impl Tool for ProposeCreateReminderTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
         validate_one_of(
             &args.subject_type,
             "subjectType",
@@ -1329,6 +1382,7 @@ impl Tool for ProposeCreateReminderTool {
             arguments_json,
             action,
             json!({"subjectType": args.subject_type, "subjectId": subject_id, "triggerAt": args.trigger_at}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1348,6 +1402,7 @@ impl Tool for ProposeUpdateReminderTool {
         json!({
             "type":"object",
             "properties":{
+                "supersedesApprovalId":{"type":"string","description":"可选。仅当用户明确修改/替换当前会话中的未审批提案时，填写要被替代的 pending approvalId"},
                 "reminderId":{"type":"string"},
                 "triggerAt":{"type":"string","description":"RFC3339 timestamp"},
                 "snoozedUntil":{"type":"string","description":"RFC3339 timestamp"},
@@ -1371,6 +1426,7 @@ impl Tool for ProposeUpdateReminderTool {
         let ctx = tool_context.require::<AgentInvocationContext>()?.clone();
         require_execution_write(&ctx)?;
         let arguments_json = serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_owned());
+        let supersedes_approval_id = args.supersedes_approval_id.clone();
         let reminder_id = bounded_required(&args.reminder_id, "reminderId", 200)?;
         validate_optional_timestamp(args.trigger_at.as_deref(), "triggerAt")?;
         validate_optional_timestamp(args.snoozed_until.as_deref(), "snoozedUntil")?;
@@ -1423,6 +1479,7 @@ impl Tool for ProposeUpdateReminderTool {
             arguments_json,
             action,
             json!({"reminderId": reminder_id}),
+            supersedes_approval_id.as_deref(),
         )
         .await
     }
@@ -1435,11 +1492,46 @@ async fn propose(
     arguments_json: String,
     action: Value,
     preview: Value,
+    supersedes_approval_id: Option<&str>,
 ) -> Result<Value, ApprovalError> {
     let tool_call_id = Uuid::new_v4();
     let approval_id = Uuid::new_v4();
     let action_json = serde_json::to_string(&action).unwrap_or_else(|_| "{}".to_owned());
+    let supersedes_approval_id = supersedes_approval_id
+        .map(|value| {
+            Uuid::parse_str(value).map_err(|_| {
+                ApprovalError::Invalid("supersedesApprovalId must be a UUID".to_owned())
+            })
+        })
+        .transpose()?;
     let mut tx = ctx.pool.begin().await?;
+
+    let superseded_tool_call_id = if let Some(superseded_id) = supersedes_approval_id {
+        let previous = sqlx::query(
+            "SELECT action_name,tool_call_id FROM agent_approvals \
+             WHERE id=$1 AND user_id=$2 AND session_id=$3 AND status='pending' \
+               AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)",
+        )
+        .bind(superseded_id)
+        .bind(ctx.user_id)
+        .bind(ctx.session_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| {
+            ApprovalError::Conflict(
+                "the approval being replaced is no longer pending in this conversation".to_owned(),
+            )
+        })?;
+        let previous_action: String = previous.try_get("action_name")?;
+        if previous_action != action_name {
+            return Err(ApprovalError::Conflict(format!(
+                "cannot replace {previous_action} approval with {action_name}"
+            )));
+        }
+        previous.try_get::<Option<Uuid>, _>("tool_call_id")?
+    } else {
+        None
+    };
 
     sqlx::query(
         "INSERT INTO agent_tool_calls \
@@ -1471,6 +1563,36 @@ async fn propose(
     .execute(&mut *tx)
     .await?;
 
+    if let Some(superseded_id) = supersedes_approval_id {
+        let changed = sqlx::query(
+            "UPDATE agent_approvals SET status='cancelled',decided_at=CURRENT_TIMESTAMP, \
+             superseded_by_approval_id=$4,cancellation_reason='superseded' \
+             WHERE id=$1 AND user_id=$2 AND session_id=$3 AND status='pending'",
+        )
+        .bind(superseded_id)
+        .bind(ctx.user_id)
+        .bind(ctx.session_id)
+        .bind(approval_id)
+        .execute(&mut *tx)
+        .await?;
+        if changed.rows_affected() != 1 {
+            return Err(ApprovalError::Conflict(
+                "approval state changed while replacing the proposal".to_owned(),
+            ));
+        }
+        if let Some(previous_tool_call_id) = superseded_tool_call_id {
+            sqlx::query(
+                "UPDATE agent_tool_calls SET status='denied',error_message='approval superseded', \
+                 finished_at=CURRENT_TIMESTAMP \
+                 WHERE id=$1 AND user_id=$2 AND status='awaiting_approval'",
+            )
+            .bind(previous_tool_call_id)
+            .bind(ctx.user_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+
     tx.commit().await?;
     tracing::info!(
         run_id = %ctx.run_id,
@@ -1486,6 +1608,7 @@ async fn propose(
         "approvalId": approval_id,
         "actionName": action_name,
         "preview": preview,
+        "supersedesApprovalId": supersedes_approval_id,
         "expiresInMinutes": APPROVAL_TTL_MINUTES
     }))
 }
@@ -1519,7 +1642,8 @@ pub async fn list_for_session(
 
     let items = sqlx::query_as::<_, AgentApproval>(
         "SELECT a.id,a.run_id,a.session_id,a.tool_call_id,a.action_name,a.action_json, \
-                a.status,a.requested_at,a.decided_at,a.expires_at \
+                a.status,a.requested_at,a.decided_at,a.expires_at, \
+                a.superseded_by_approval_id,a.cancellation_reason \
          FROM agent_approvals a \
          JOIN agent_sessions s ON s.id=a.session_id \
          WHERE a.user_id=$1 AND a.session_id=$2 AND s.user_id=$1 \
@@ -1691,7 +1815,8 @@ async fn load_approval(
 ) -> Result<AgentApproval, ApprovalError> {
     sqlx::query_as::<_, AgentApproval>(
         "SELECT a.id,a.run_id,a.session_id,a.tool_call_id,a.action_name,a.action_json, \
-                a.status,a.requested_at,a.decided_at,a.expires_at \
+                a.status,a.requested_at,a.decided_at,a.expires_at, \
+                a.superseded_by_approval_id,a.cancellation_reason \
          FROM agent_approvals a JOIN agent_sessions s ON s.id=a.session_id \
          WHERE a.id=$1 AND a.user_id=$2 AND s.user_id=$2 \
            AND s.app_id=$3 AND s.scopes_json=$4",

@@ -134,13 +134,14 @@ function approvalSummary(approval: AssistantApproval): string {
   return "待确认写操作";
 }
 
-function statusLabel(status: string): string {
-  if (status === "pending") return "待确认";
-  if (status === "approved") return "已执行";
-  if (status === "rejected") return "已拒绝";
-  if (status === "expired") return "已过期";
-  if (status === "cancelled") return "已取消";
-  return status;
+function statusLabel(approval: AssistantApproval): string {
+  if (approval.status === "pending") return "待确认";
+  if (approval.status === "approved") return "已执行";
+  if (approval.status === "rejected") return "已拒绝";
+  if (approval.status === "expired") return "已过期";
+  if (approval.status === "cancelled" && approval.cancellationReason === "superseded") return "已被新方案替代";
+  if (approval.status === "cancelled") return "已取消";
+  return approval.status;
 }
 
 export function AssistantPage() {
@@ -380,7 +381,7 @@ export function AssistantPage() {
                           <div className="text-sm font-medium">{approvalLabel(approval)}</div>
                           <div className="mt-1 text-xs text-muted-foreground">{approvalSummary(approval)}</div>
                         </div>
-                        <Badge>{statusLabel(approval.status)}</Badge>
+                        <Badge>{statusLabel(approval)}</Badge>
                       </div>
                       <div className="mt-3 flex gap-2">
                         <Button
@@ -428,7 +429,7 @@ export function AssistantPage() {
                               <div className="truncate text-xs font-medium">{approvalLabel(approval)}</div>
                               <div className="mt-1 truncate text-xs text-muted-foreground">{approvalSummary(approval)}</div>
                             </div>
-                            <Badge>{statusLabel(approval.status)}</Badge>
+                            <Badge>{statusLabel(approval)}</Badge>
                           </div>
                         </div>
                       ))}
