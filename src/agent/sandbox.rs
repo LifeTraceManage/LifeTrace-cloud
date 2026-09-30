@@ -601,13 +601,8 @@ fn calculate_revision(manifest: &[u8], executable: &Path) -> Result<String, Sand
 }
 
 fn canonical_jobs_root(settings: &SandboxSettings) -> Result<PathBuf, SandboxError> {
-    let root = std::fs::canonicalize(&settings.jobs_dir).map_err(|error| match error.kind() {
-        std::io::ErrorKind::NotFound => SandboxError::Invalid(format!(
-            "sandbox jobs directory does not exist: {}",
-            settings.jobs_dir.display()
-        )),
-        _ => SandboxError::Io(error),
-    })?;
+    std::fs::create_dir_all(&settings.jobs_dir)?;
+    let root = std::fs::canonicalize(&settings.jobs_dir)?;
     if !root.is_dir() {
         return Err(SandboxError::Invalid(
             "sandbox jobs path must be a directory".to_owned(),
