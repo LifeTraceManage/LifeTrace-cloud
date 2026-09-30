@@ -212,6 +212,29 @@ export function AgentSidebarProvider({ children }: PropsWithChildren) {
       setApprovals((items) =>
         items.map((item) => (item.id === approvalId ? result.approval : item)),
       );
+      if (
+        decision === "approve"
+        && result.approval.actionName === "run_sandbox_job"
+        && result.result
+      ) {
+        const value = result.result as Record<string, unknown>;
+        const jobId = typeof value.jobId === "string" ? value.jobId : "sandbox-job";
+        const duration = typeof value.durationMs === "number" ? ` · ${value.durationMs} ms` : "";
+        const sections: string[] = [`沙盒 Job \`${jobId}\` 已执行完成${duration}。`];
+        if (value.output != null) {
+          sections.push(`**结构化输出**\n\n\`\`\`json\n${JSON.stringify(value.output, null, 2)}\n\`\`\``);
+        }
+        if (typeof value.stdout === "string" && value.stdout.trim()) {
+          sections.push(`**stdout**\n\n\`\`\`text\n${value.stdout}\n\`\`\``);
+        }
+        if (typeof value.stderr === "string" && value.stderr.trim()) {
+          sections.push(`**stderr**\n\n\`\`\`text\n${value.stderr}\n\`\`\``);
+        }
+        setMessages((items) => [
+          ...items,
+          { role: "assistant", content: sections.join("\n\n"), provider: "sandbox" },
+        ]);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "审批操作失败");
       if (sessionId) {
