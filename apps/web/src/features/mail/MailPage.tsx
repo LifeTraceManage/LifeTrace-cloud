@@ -398,7 +398,7 @@ export function MailPage() {
           {mailboxes.map(({ id, label, icon: Icon }) => <button
             key={id}
             onClick={() => changeMailbox(id)}
-            className={cn("flex h-9 items-center justify-center gap-2 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:w-full lg:justify-start lg:text-sm", mailbox === id && "bg-accent font-medium text-accent-foreground")}
+            className={cn("flex h-9 items-center justify-center gap-2 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:w-full lg:justify-start lg:text-sm", !selectedCategoryId && mailbox === id && "bg-accent font-medium text-accent-foreground")}
           ><Icon size={16} /><span>{label}</span></button>)}
         </nav>
 
