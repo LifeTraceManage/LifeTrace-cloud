@@ -19,6 +19,8 @@ pub enum AgentToolError {
     Database(#[from] sqlx::Error),
     #[error("tool permission denied: {0}")]
     Permission(String),
+    #[error("invalid tool input: {0}")]
+    Invalid(String),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -30,6 +32,8 @@ pub struct SearchRecordsArgs {
     #[serde(default)]
     pub entity_types: Option<Vec<String>>,
     #[serde(default)]
+    pub entity_id: Option<String>,
+    #[serde(default)]
     pub query: Option<String>,
     #[serde(default)]
     pub limit: Option<i64>,
@@ -38,6 +42,8 @@ pub struct SearchRecordsArgs {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchMailArgs {
+    #[serde(default)]
+    pub message_id: Option<String>,
     #[serde(default)]
     pub query: Option<String>,
     #[serde(default)]
@@ -98,6 +104,7 @@ impl Tool for SearchRecordsTool {
                     "items":{"type":"string"},
                     "description":"可选。LifeTrace entityType，例如 execution.task、note.note、finance.transaction"
                 },
+                "entityId":{"type":"string","description":"可选。精确读取一个当前用户可访问的 Sync 实体；来自 selectedEntity 时优先使用它"},
                 "query":{"type":"string","description":"可选。对 JSON 记录做不区分大小写的关键词匹配"},
                 "limit":{"type":"integer","minimum":1,"maximum":20,"default":10}
             },
@@ -131,6 +138,7 @@ impl Tool for SearchMailTool {
         json!({
             "type":"object",
             "properties":{
+                "messageId":{"type":"string","description":"可选。精确读取一封当前用户的邮件；当前页面提供 selectedEntity.entityId 时优先使用"},
                 "query":{"type":"string","description":"可选。匹配主题、摘要、正文或发件人"},
                 "unreadOnly":{"type":"boolean","default":false},
                 "limit":{"type":"integer","minimum":1,"maximum":20,"default":10}
@@ -295,6 +303,10 @@ async fn search_records(
     }
 
     let limit = args.limit.unwrap_or(10).clamp(1, 20);
+    let entity_id = args
+        .entity_id
+        .map(|value| value.trim().chars().take(240).collect::<String>())
+        .filter(|value| !value.is_empty());
     let query = args
         .query
         .map(|value| value.trim().chars().take(120).collect::<String>())
@@ -313,6 +325,10 @@ async fn search_records(
         }
     }
     builder.push(")");
+    if let Some(entity_id) = &entity_id {
+        builder.push(" AND entity_id=");
+        builder.push_bind(entity_id);
+    }
     if let Some(query) = &query {
         builder.push(" AND lower(CAST(payload AS TEXT)) LIKE ");
         builder.push_bind(format!("%{}%", query.to_ascii_lowercase()));
@@ -341,6 +357,16 @@ async fn search_mail(
     if !ctx.scopes.contains("mail:read") {
         return Err(AgentToolError::Permission("mail:read".to_owned()));
     }
+    let message_id = args
+        .message_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            Uuid::parse_str(value)
+                .map_err(|_| AgentToolError::Invalid("messageId must be a UUID".to_owned()))
+        })
+        .transpose()?;
     let query = args
         .query
         .unwrap_or_default()
@@ -352,20 +378,31 @@ async fn search_mail(
     let unread_only = args.unread_only.unwrap_or(false);
     let limit = args.limit.unwrap_or(10).clamp(1, 20);
 
-    let rows = sqlx::query(
-        "SELECT id,account_id,subject,from_json,to_json,cc_json,reply_to_json,received_at,is_read,snippet,body_text \
-         FROM mail_messages WHERE user_id=$1 AND received_at >= datetime('now','-30 days') \
-         AND ($2='' OR lower(subject) LIKE $3 OR lower(coalesce(snippet,'')) LIKE $3 \
-              OR lower(coalesce(body_text,'')) LIKE $3 OR lower(CAST(from_json AS TEXT)) LIKE $3) \
-         AND ($4=0 OR is_read=0) ORDER BY received_at DESC LIMIT $5",
-    )
-    .bind(ctx.user_id)
-    .bind(&query)
-    .bind(pattern)
-    .bind(unread_only)
-    .bind(limit)
-    .fetch_all(&ctx.pool)
-    .await?;
+    let rows = if let Some(message_id) = message_id {
+        sqlx::query(
+            "SELECT id,account_id,subject,from_json,to_json,cc_json,reply_to_json,received_at,is_read,snippet,body_text \
+             FROM mail_messages WHERE user_id=$1 AND id=$2 LIMIT 1",
+        )
+        .bind(ctx.user_id)
+        .bind(message_id)
+        .fetch_all(&ctx.pool)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT id,account_id,subject,from_json,to_json,cc_json,reply_to_json,received_at,is_read,snippet,body_text \
+             FROM mail_messages WHERE user_id=$1 AND received_at >= datetime('now','-30 days') \
+             AND ($2='' OR lower(subject) LIKE $3 OR lower(coalesce(snippet,'')) LIKE $3 \
+                  OR lower(coalesce(body_text,'')) LIKE $3 OR lower(CAST(from_json AS TEXT)) LIKE $3) \
+             AND ($4=0 OR is_read=0) ORDER BY received_at DESC LIMIT $5",
+        )
+        .bind(ctx.user_id)
+        .bind(&query)
+        .bind(pattern)
+        .bind(unread_only)
+        .bind(limit)
+        .fetch_all(&ctx.pool)
+        .await?
+    };
 
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
