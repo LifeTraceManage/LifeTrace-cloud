@@ -31,7 +31,7 @@ AGENT_SANDBOX_MAX_OUTPUT_BYTES=65536
 AGENT_SANDBOX_ENABLED=true
 ```
 
-然后重新部署 Cloud。
+然后重新部署 Cloud。启用后，Cloud 会自动确保 `AGENT_SANDBOX_JOBS_DIR` 存在，因此已有的 `/data` volume 不需要手工预建目录；Job manifest 和 entrypoint 仍需由服务器管理员部署。
 
 ## 注册 Job
 
