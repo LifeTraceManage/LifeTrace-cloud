@@ -10,36 +10,12 @@ import {
 import { useApp } from "../../app/AppContext";
 import {
   AssistantApi,
+  type AgentPageContext,
   type AssistantApproval,
   type AssistantSession,
 } from "../../services/core";
 
-export interface AgentSelectedEntityContext {
-  entityType: string;
-  entityId: string;
-}
-
-export interface AgentTemporalContext {
-  date?: string;
-  rangeStart?: string;
-  rangeEnd?: string;
-}
-
-export interface AgentSearchContext {
-  query?: string;
-  folderId?: string;
-  projectId?: string;
-  mailbox?: string;
-}
-
-export interface AgentPageContext {
-  workspace: string;
-  view?: string;
-  label?: string;
-  selectedEntity?: AgentSelectedEntityContext;
-  temporalContext?: AgentTemporalContext;
-  searchContext?: AgentSearchContext;
-}
+export type { AgentPageContext } from "../../services/core";
 
 export type AgentSidebarMessage = {
   role: "user" | "assistant";
