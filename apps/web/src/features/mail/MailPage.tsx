@@ -1,8 +1,8 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   Archive, ArrowLeft, CalendarPlus, CheckSquare2, Clock3, FileText, Inbox, Loader2,
-  Mail, MailOpen, NotebookPen, PenLine, RefreshCw, Reply, ReplyAll, RotateCcw,
-  Search, Send, Settings, Star, Trash2,
+  Mail, MailOpen, NotebookPen, PenLine, Pencil, Plus, RefreshCw, Reply, ReplyAll,
+  RotateCcw, Search, Send, Settings, Star, Tag, Trash2,
 } from "lucide-react";
 import { useApp } from "../../app/AppContext";
 import { Badge, Button, Dialog, EmptyState, Input, cn } from "../../components/ui";
@@ -92,6 +92,13 @@ export function MailPage() {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [accountId, setAccountId] = useState<string | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [categoryName, setCategoryName] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+  const [pendingCategoryIds, setPendingCategoryIds] = useState<string[]>([]);
+  const [categoryBusy, setCategoryBusy] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -108,16 +115,29 @@ export function MailPage() {
   const [integrationBusy, setIntegrationBusy] = useState(false);
 
   const {
-    runtime, accounts, identities, drafts, messages, selectedId, selectedMessage,
+    runtime, accounts, identities, drafts, categories, messages, selectedId, selectedMessage,
     runtimeLoading, listLoading, detailLoading, error,
     setSelectedId, refresh, send, markRead, setStarred, move,
+    createCategory, updateCategory, deleteCategory, setMessageCategories,
     connectAccount, disconnectAccount, testAccount, syncAccount,
     createIdentity, updateIdentity, deleteIdentity,
     saveDraft, deleteDraft, sendDraft,
     listDraftAttachments, uploadDraftAttachment, deleteDraftAttachment,
-  } = useMailWorkspace(mailbox, deferredQuery, accountId);
+  } = useMailWorkspace(
+    selectedCategoryId ? "" : mailbox,
+    deferredQuery,
+    accountId,
+    selectedCategoryId,
+  );
 
   const current = mailboxes.find((item) => item.id === mailbox) ?? mailboxes[0];
+  const activeCategory = categories.find((item) => item.id === selectedCategoryId) ?? null;
+  const currentLabel = activeCategory ? `分类 · ${activeCategory.name}` : current.label;
+  const isDraftView = !selectedCategoryId && mailbox === "drafts";
+  const categoryById = useMemo(
+    () => new Map(categories.map((item) => [item.id, item])),
+    [categories],
+  );
   const runtimeReady = runtime.status === "ready";
   const account = accounts.find((item) => item.id === accountId) ?? null;
   const messageBody = useMemo(() => plainBody(selectedMessage), [selectedMessage]);
@@ -133,10 +153,23 @@ export function MailPage() {
         .includes(needle);
     });
   }, [accountId, deferredQuery, drafts]);
-  const listCount = mailbox === "drafts" ? visibleDrafts.length : messages.length;
+  const listCount = isDraftView ? visibleDrafts.length : messages.length;
+
+  useEffect(() => {
+    if (selectedCategoryId && !categories.some((item) => item.id === selectedCategoryId)) {
+      setSelectedCategoryId(null);
+    }
+  }, [categories, selectedCategoryId]);
 
   function changeMailbox(next: MailboxId) {
+    setSelectedCategoryId(null);
     setMailbox(next);
+    setMobileDetail(false);
+    setSelectedId(null);
+  }
+
+  function changeCategory(id: string) {
+    setSelectedCategoryId(id);
     setMobileDetail(false);
     setSelectedId(null);
   }
@@ -144,6 +177,66 @@ export function MailPage() {
   function selectMessage(id: string) {
     setSelectedId(id);
     setMobileDetail(true);
+  }
+
+  function openCategoryManager() {
+    setCategoryName("");
+    setEditingCategoryId(null);
+    setCategoryDialogOpen(true);
+  }
+
+  async function submitCategory() {
+    const name = categoryName.trim();
+    if (!name) return;
+    setCategoryBusy(true);
+    try {
+      if (editingCategoryId) {
+        await updateCategory(editingCategoryId, { name });
+      } else {
+        await createCategory({ name });
+      }
+      setCategoryName("");
+      setEditingCategoryId(null);
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "保存分类失败");
+    } finally {
+      setCategoryBusy(false);
+    }
+  }
+
+  async function removeCategory(id: string) {
+    setCategoryBusy(true);
+    try {
+      await deleteCategory(id);
+      if (selectedCategoryId === id) setSelectedCategoryId(null);
+      if (editingCategoryId === id) {
+        setEditingCategoryId(null);
+        setCategoryName("");
+      }
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "删除分类失败");
+    } finally {
+      setCategoryBusy(false);
+    }
+  }
+
+  function openCategoryAssignment() {
+    if (!selectedMessage) return;
+    setPendingCategoryIds(selectedMessage.categoryIds);
+    setAssignmentDialogOpen(true);
+  }
+
+  async function saveCategoryAssignment() {
+    if (!selectedMessage) return;
+    setCategoryBusy(true);
+    try {
+      await setMessageCategories(selectedMessage.id, pendingCategoryIds);
+      setAssignmentDialogOpen(false);
+    } catch {
+      // The workspace action already reports the API error.
+    } finally {
+      setCategoryBusy(false);
+    }
   }
 
   function openComposer(
@@ -309,7 +402,26 @@ export function MailPage() {
           ><Icon size={16} /><span>{label}</span></button>)}
         </nav>
 
-        <div className="mt-5 hidden min-h-0 flex-1 border-t pt-4 lg:flex lg:flex-col">
+        <div className="mt-3 border-t pt-3">
+          <div className="mb-2 flex items-center justify-between px-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">分类</span>
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={openCategoryManager} aria-label="管理邮件分类"><Plus size={14} /></Button>
+          </div>
+          <div className="grid grid-cols-2 gap-1 lg:block lg:max-h-40 lg:space-y-1 lg:overflow-y-auto">
+            {categories.map((category) => <button
+              key={category.id}
+              onClick={() => changeCategory(category.id)}
+              className={cn("flex h-8 min-w-0 items-center gap-2 rounded-md px-2.5 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground lg:w-full", selectedCategoryId === category.id && "bg-accent font-medium text-accent-foreground")}
+            >
+              <Tag size={13} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{category.name}</span>
+              <span className="text-[10px] opacity-70">{category.messageCount}</span>
+            </button>)}
+            {!categories.length ? <button className="col-span-2 w-full rounded-md border border-dashed px-3 py-2 text-left text-[11px] text-muted-foreground" onClick={openCategoryManager}>暂无分类，点击创建</button> : null}
+          </div>
+        </div>
+
+        <div className="mt-4 hidden min-h-0 flex-1 border-t pt-4 lg:flex lg:flex-col">
           <div className="mb-2 shrink-0 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Accounts</div>
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pr-1">
           <button onClick={() => setAccountId(null)} className={cn("mb-1 flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs text-muted-foreground hover:bg-muted", accountId === null && "bg-accent font-medium text-accent-foreground")}><Inbox size={14} /><span className="flex-1">所有邮箱</span></button>
@@ -327,16 +439,16 @@ export function MailPage() {
         <div className="shrink-0 border-b p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h1 className="text-sm font-semibold">{account ? `${account.email} · ${current.label}` : `所有邮箱 · ${current.label}`}</h1>
+              <h1 className="text-sm font-semibold">{account ? `${account.email} · ${currentLabel}` : `所有邮箱 · ${currentLabel}`}</h1>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {runtimeReady ? mailbox === "drafts" ? `${visibleDrafts.length} 个草稿` : `${messages.length} 封 · ${unreadCount} 封未读` : runtimeDescription}
+                {runtimeReady ? isDraftView ? `${visibleDrafts.length} 个草稿` : `${messages.length} 封 · ${unreadCount} 封未读` : runtimeDescription}
               </p>
             </div>
             {listLoading ? <Loader2 size={15} className="animate-spin text-muted-foreground" /> : <Badge>{listCount}</Badge>}
           </div>
           <div className="relative mt-3">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
-            <Input className="h-9 pl-9" placeholder={mailbox === "drafts" ? "搜索草稿" : "搜索主题、发件人、收件人或正文"} value={query} onChange={(event) => setQuery(event.target.value)} disabled={!runtimeReady} />
+            <Input className="h-9 pl-9" placeholder={isDraftView ? "搜索草稿" : "搜索主题、发件人、收件人或正文"} value={query} onChange={(event) => setQuery(event.target.value)} disabled={!runtimeReady} />
           </div>
         </div>
 
@@ -345,7 +457,7 @@ export function MailPage() {
           {runtimeLoading ? <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" />正在连接 LifeTrace Mail…</div> : null}
           {!runtimeLoading && !runtimeReady ? <EmptyState icon={<Inbox size={22} />} title="Mail 服务尚未就绪" description={runtimeDescription} action={<Button size="sm" variant="outline" onClick={() => setSettingsOpen(true)}><Settings size={14} />检查账号配置</Button>} /> : null}
 
-          {runtimeReady && mailbox === "drafts" ? <>
+          {runtimeReady && isDraftView ? <>
             {visibleDrafts.map((draft) => <div key={draft.id} className="mb-1 rounded-md px-3 py-3 hover:bg-muted">
               <button className="w-full text-left" onClick={() => openComposer("draft", null, draft)}>
                 <div className="flex items-center gap-2"><FileText size={13} className="text-muted-foreground" /><span className="min-w-0 flex-1 truncate text-sm font-medium">{draft.subject || "(无主题草稿)"}</span><span className="text-[10px] text-muted-foreground">{new Date(draft.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span></div>
@@ -356,7 +468,7 @@ export function MailPage() {
             </div>)}
             {!visibleDrafts.length ? <EmptyState icon={<FileText size={22} />} title="没有草稿" /> : null}
           </> : <>
-            {runtimeReady && !listLoading && !messages.length ? <EmptyState icon={<MailOpen size={22} />} title={query ? "没有匹配的邮件" : `${current.label}为空`} /> : null}
+            {runtimeReady && !listLoading && !messages.length ? <EmptyState icon={<MailOpen size={22} />} title={query ? "没有匹配的邮件" : `${currentLabel}为空`} /> : null}
             {messages.map((message) => <button key={message.id} onClick={() => selectMessage(message.id)} className={cn("mb-1 w-full rounded-md px-3 py-3 text-left transition-colors hover:bg-muted", selectedId === message.id && "bg-accent", !message.isRead && "font-medium")}>
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-xs">{addressesText(message.from) || "未知发件人"}</span>
@@ -365,13 +477,17 @@ export function MailPage() {
               </div>
               <div className="mt-1 truncate text-sm">{message.subject || "(无主题)"}</div>
               <div className="mt-1 line-clamp-2 text-xs font-normal leading-5 text-muted-foreground">{message.preview || "无预览"}</div>
+              {message.categoryIds.length ? <div className="mt-2 flex flex-wrap gap-1">{message.categoryIds.map((id) => {
+                const category = categoryById.get(id);
+                return category ? <span key={id} className="rounded border px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">{category.name}</span> : null;
+              })}</div> : null}
             </button>)}
           </>}
         </div>
       </section>
 
       <main className={cn("min-w-0 bg-background lg:h-full lg:min-h-0 lg:overflow-hidden", mobileDetail ? "block" : "hidden lg:block")}>
-        {selectedMessage && mailbox !== "drafts" ? <div className="flex min-h-full flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
+        {selectedMessage && !isDraftView ? <div className="flex min-h-full flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
           <div className="shrink-0 border-b p-4 sm:p-5">
             <div className="mb-3 flex items-center gap-2">
               <Button className="lg:hidden" size="icon" variant="ghost" onClick={() => setMobileDetail(false)} aria-label="返回邮件列表"><ArrowLeft size={17} /></Button>
@@ -379,15 +495,20 @@ export function MailPage() {
                 <h2 className="text-lg font-semibold tracking-[-0.02em]">{selectedMessage.subject || "(无主题)"}</h2>
                 <div className="mt-1 text-xs text-muted-foreground">{new Date(selectedMessage.sentAt).toLocaleString("zh-CN")}</div>
               </div>
+              <Button size="icon" variant="ghost" aria-label="设置分类" onClick={openCategoryAssignment}><Tag size={16} /></Button>
               <Button size="icon" variant="ghost" aria-label={selectedMessage.isStarred ? "取消星标" : "添加星标"} onClick={() => void setStarred(selectedMessage.id, !selectedMessage.isStarred)}><Star size={16} className={selectedMessage.isStarred ? "fill-current text-warning" : ""} /></Button>
               <Button size="icon" variant="ghost" aria-label={selectedMessage.isRead ? "标记为未读" : "标记为已读"} onClick={() => void markRead(selectedMessage.id, !selectedMessage.isRead)}>{selectedMessage.isRead ? <Mail size={16} /> : <MailOpen size={16} />}</Button>
-              {mailbox === "trash"
+              {!selectedCategoryId && mailbox === "trash"
                 ? <Button size="icon" variant="ghost" aria-label="恢复到收件箱" onClick={() => void move(selectedMessage.id, "inbox")}><RotateCcw size={16} /></Button>
                 : <>
                   <Button size="icon" variant="ghost" aria-label="归档" onClick={() => void move(selectedMessage.id, "archive")}><Archive size={16} /></Button>
                   <Button size="icon" variant="ghost" aria-label="移到废纸篓" onClick={() => void move(selectedMessage.id, "trash")}><Trash2 size={16} /></Button>
                 </>}
             </div>
+            {selectedMessage.categoryIds.length ? <div className="mb-3 flex flex-wrap gap-1.5">{selectedMessage.categoryIds.map((id) => {
+              const category = categoryById.get(id);
+              return category ? <Badge key={id}>{category.name}</Badge> : null;
+            })}</div> : null}
             <div className="space-y-1 text-xs leading-5 text-muted-foreground">
               <div><span className="font-medium text-foreground">From:</span> {addressesText(selectedMessage.from)}</div>
               <div><span className="font-medium text-foreground">To:</span> {addressesText(selectedMessage.to)}</div>
@@ -421,7 +542,7 @@ export function MailPage() {
         </div> : <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-8 lg:h-full lg:min-h-0">
           <div className="max-w-md text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">{detailLoading ? <Loader2 size={21} className="animate-spin" /> : <Mail size={21} />}</div>
-            <h2 className="mt-4 text-lg font-semibold">{runtimeReady ? mailbox === "drafts" ? "选择或新建草稿" : "选择一封邮件" : "LifeTrace Mail"}</h2>
+            <h2 className="mt-4 text-lg font-semibold">{runtimeReady ? isDraftView ? "选择或新建草稿" : "选择一封邮件" : "LifeTrace Mail"}</h2>
             {!runtimeReady ? <p className="mt-2 text-sm leading-6 text-muted-foreground">{runtimeDescription}</p> : null}
           </div>
         </div>}
@@ -456,6 +577,79 @@ export function MailPage() {
       onUploadAttachment={uploadDraftAttachment}
       onDeleteAttachment={deleteDraftAttachment}
     />
+
+    <Dialog
+      open={categoryDialogOpen}
+      onOpenChange={(open) => {
+        setCategoryDialogOpen(open);
+        if (!open) {
+          setCategoryName("");
+          setEditingCategoryId(null);
+        }
+      }}
+      title="管理邮件分类"
+      description="分类属于 LifeTrace 本地邮箱视图，不会修改外部邮箱服务器的文件夹。"
+    >
+      <div className="space-y-4">
+        <div className="flex gap-2">
+          <Input
+            value={categoryName}
+            maxLength={40}
+            placeholder={editingCategoryId ? "修改分类名称" : "新分类名称"}
+            onChange={(event) => setCategoryName(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") void submitCategory(); }}
+          />
+          <Button disabled={categoryBusy || !categoryName.trim()} onClick={() => void submitCategory()}>
+            {editingCategoryId ? "保存" : "创建"}
+          </Button>
+        </div>
+        {editingCategoryId ? <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setEditingCategoryId(null); setCategoryName(""); }}>取消重命名</button> : null}
+        <div className="max-h-72 space-y-1 overflow-y-auto border-t pt-3">
+          {categories.map((category) => <div key={category.id} className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-muted">
+            <Tag size={14} className="shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate text-sm">{category.name}</span>
+            <span className="text-[11px] text-muted-foreground">{category.messageCount} 封</span>
+            <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="重命名分类" onClick={() => { setEditingCategoryId(category.id); setCategoryName(category.name); }}><Pencil size={13} /></Button>
+            <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="删除分类" disabled={categoryBusy} onClick={() => void removeCategory(category.id)}><Trash2 size={13} /></Button>
+          </div>)}
+          {!categories.length ? <div className="py-6 text-center text-xs text-muted-foreground">还没有分类。</div> : null}
+        </div>
+      </div>
+    </Dialog>
+
+    <Dialog
+      open={assignmentDialogOpen}
+      onOpenChange={setAssignmentDialogOpen}
+      title="设置邮件分类"
+      description={selectedMessage?.subject || undefined}
+    >
+      <div className="space-y-4">
+        <div className="max-h-72 space-y-1 overflow-y-auto">
+          {categories.map((category) => {
+            const checked = pendingCategoryIds.includes(category.id);
+            return <label key={category.id} className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => setPendingCategoryIds((items) => checked
+                  ? items.filter((id) => id !== category.id)
+                  : [...items, category.id])}
+              />
+              <Tag size={14} className="text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-sm">{category.name}</span>
+            </label>;
+          })}
+          {!categories.length ? <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">还没有分类，请先创建分类。</div> : null}
+        </div>
+        <div className="flex justify-between gap-2 border-t pt-3">
+          <Button variant="ghost" onClick={() => { setAssignmentDialogOpen(false); openCategoryManager(); }}><Plus size={14} />管理分类</Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => setAssignmentDialogOpen(false)}>取消</Button>
+            <Button disabled={categoryBusy || !selectedMessage} onClick={() => void saveCategoryAssignment()}>{categoryBusy ? <Loader2 size={14} className="animate-spin" /> : null}保存</Button>
+          </div>
+        </div>
+      </div>
+    </Dialog>
 
     <Dialog
       open={integrationMode !== null}
