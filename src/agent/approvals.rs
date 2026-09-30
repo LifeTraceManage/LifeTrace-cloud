@@ -13,6 +13,8 @@ use uuid::Uuid;
 
 use crate::agent::context::{AgentAccessPartition, AgentInvocationContext};
 use crate::auth::AuthenticatedPrincipal;
+use crate::mail::domain::SendMailInput;
+use crate::mail::MailService;
 use crate::state::AppState;
 
 const APPROVAL_TTL_MINUTES: i64 = 15;
@@ -311,6 +313,50 @@ pub struct UpdateReminderArgs {
     pub supersedes_approval_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendMailArgs {
+    pub account_id: String,
+    #[serde(default)]
+    pub identity_id: Option<String>,
+    pub to: Vec<String>,
+    #[serde(default)]
+    pub cc: Vec<String>,
+    #[serde(default)]
+    pub bcc: Vec<String>,
+    pub subject: String,
+    pub body_text: String,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplyMailArgs {
+    pub message_id: String,
+    #[serde(default)]
+    pub identity_id: Option<String>,
+    pub body_text: String,
+    #[serde(default)]
+    pub reply_all: bool,
+    #[serde(default)]
+    pub supersedes_approval_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SendMailAction {
+    account_id: Uuid,
+    identity_id: Option<Uuid>,
+    to: Vec<String>,
+    cc: Vec<String>,
+    bcc: Vec<String>,
+    subject: String,
+    body_text: String,
+    source_message_id: Option<Uuid>,
+    in_reply_to_header: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateTaskAction {
@@ -474,6 +520,8 @@ pub struct ProposeCreateWaitingItemTool;
 pub struct ProposeUpdateWaitingItemTool;
 pub struct ProposeCreateReminderTool;
 pub struct ProposeUpdateReminderTool;
+pub struct ProposeSendMailTool;
+pub struct ProposeReplyMailTool;
 
 impl Tool for ProposeCreateTaskTool {
     const NAME: &'static str = "lifetrace_propose_create_task";
