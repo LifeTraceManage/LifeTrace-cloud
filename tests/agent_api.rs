@@ -6,8 +6,9 @@ use axum::http::{Method, Request, StatusCode};
 use axum::Router;
 use lifetrace_cloud::agent::{
     approvals::{
-        CreateProjectArgs, CreateTaskArgs, ProposeCreateProjectTool, ProposeCreateTaskTool,
-        ProposeReplyMailTool, ProposeSendMailTool, ReplyMailArgs, SendMailArgs,
+        CreateNoteArgs, CreateProjectArgs, CreateTaskArgs, ProposeCreateNoteTool,
+        ProposeCreateProjectTool, ProposeCreateTaskTool, ProposeReplyMailTool,
+        ProposeSendMailTool, ReplyMailArgs, SendMailArgs,
     },
     context::{AgentAccessPartition, AgentInvocationContext},
     session as agent_session,
@@ -1608,4 +1609,91 @@ async fn assistant_mail_tools_create_reviewable_send_and_reply_approvals() {
         .await
         .unwrap();
     assert_eq!(outbox_count, 0);
+}
+
+
+#[tokio::test]
+async fn assistant_note_tool_creates_note_only_after_approval() {
+    let (state, app) = test_state_and_app().await;
+    let (status, first) = send(
+        app.clone(),
+        Method::POST,
+        "/api/v1/assistant",
+        json!({"prompt":"准备测试创建笔记审批"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let session_id = Uuid::parse_str(first["sessionId"].as_str().unwrap()).unwrap();
+    let run_id = Uuid::parse_str(first["runId"].as_str().unwrap()).unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT user_id FROM agent_sessions WHERE id=$1")
+        .bind(session_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+
+    let scopes = BTreeSet::from([
+        "sync:write".to_owned(),
+        "notes:read".to_owned(),
+        "notes:write".to_owned(),
+    ]);
+    let mut tool_context = ToolContext::new();
+    tool_context.insert(AgentInvocationContext {
+        pool: state.pool.clone(),
+        user_id,
+        scopes: Arc::new(scopes),
+        run_id,
+        session_id,
+    });
+
+    let proposal = ProposeCreateNoteTool
+        .call(
+            &mut tool_context,
+            CreateNoteArgs {
+                title: Some("Agent 创建的笔记".to_owned()),
+                content_markdown: "# 测试笔记\n\n这是通过 Agent 起草的 Markdown 内容。".to_owned(),
+                folder_id: None,
+                note_type: Some("quick".to_owned()),
+                supersedes_approval_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(proposal["requiresApproval"], true);
+    assert_eq!(proposal["actionName"], "create_note");
+    let approval_id = Uuid::parse_str(proposal["approvalId"].as_str().unwrap()).unwrap();
+
+    let before_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sync_entities WHERE user_id=$1 AND entity_type='note.note' AND is_deleted=0",
+    )
+    .bind(user_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(before_count, 0);
+
+    let (status, approved) = send(
+        app,
+        Method::POST,
+        &format!("/api/v1/assistant/approvals/{approval_id}/decision"),
+        json!({"decision":"approve"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(approved["approval"]["status"], "approved");
+    assert_eq!(approved["result"]["entityType"], "note.note");
+
+    let stored: (String, String, String, Option<String>) = sqlx::query_as(
+        "SELECT payload->>'title',payload->>'contentMarkdown',payload->>'noteType',payload->>'folderId' \
+         FROM sync_entities WHERE user_id=$1 AND entity_type='note.note' AND is_deleted=0 LIMIT 1",
+    )
+    .bind(user_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(stored.0, "Agent 创建的笔记");
+    assert_eq!(stored.1, "# 测试笔记\n\n这是通过 Agent 起草的 Markdown 内容。");
+    assert_eq!(stored.2, "quick");
+    assert_eq!(stored.3, None);
 }
