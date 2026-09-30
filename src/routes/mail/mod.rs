@@ -2,7 +2,6 @@
 
 mod api;
 mod attachment;
-mod categories;
 mod events;
 mod list;
 mod workspace;
@@ -16,6 +15,5 @@ pub fn router() -> Router<AppState> {
         .merge(events::router())
         .merge(list::router())
         .merge(attachment::router())
-        .merge(categories::router())
         .merge(workspace::router())
 }

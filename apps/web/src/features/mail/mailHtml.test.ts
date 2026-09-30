@@ -15,7 +15,6 @@ function message(html: string): MailMessageDetail {
     sentAt: new Date(0).toISOString(),
     isRead: true,
     isStarred: false,
-    categoryIds: [],
     html,
     text: null,
     attachments: [

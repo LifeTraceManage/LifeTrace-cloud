@@ -76,17 +76,6 @@ export interface MailAttachment {
   downloadUrl?: string | null;
 }
 
-export interface MailCategory {
-  id: string;
-  name: string;
-  messageCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface MailCategoryInput {
-  name: string;
-}
 
 export interface MailMessageSummary {
   id: string;
@@ -102,7 +91,6 @@ export interface MailMessageSummary {
   isStarred: boolean;
   isArchived?: boolean;
   hasAttachments?: boolean;
-  categoryIds: string[];
 }
 
 export interface MailMessageDetail extends MailMessageSummary {
@@ -172,7 +160,6 @@ export interface MailListQuery {
   query?: string;
   unreadOnly?: boolean | null;
   starredOnly?: boolean | null;
-  categoryId?: string | null;
   offset?: number;
   limit?: number;
 }

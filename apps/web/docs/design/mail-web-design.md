@@ -488,7 +488,7 @@ Unified Inbox 默认提供“按来源”视图，用于压缩同一服务、组
 - 点击来源后进入该来源的逐封邮件列表，所有既有邮件操作继续针对单封 Message 执行；
 - 搜索、账号切换和实时同步后重新基于当前结果计算来源分组。
 
-“来源”与用户自定义“分类/标签”是两个概念：来源用于自动归并发送方，分类用于用户表达工作、账单、重要等业务语义。
+Mail 不再提供用户手动创建的分类/标签。来源聚合是系统自动生成的展示层分组，不新增业务标签体系，也不修改邮件服务器数据。
 
 ---
 
@@ -1245,7 +1245,6 @@ Mailbox sync
 - PGP；
 - Advanced Search；
 - Semantic Search；
-- Smart Categories；
 - AI triage；
 - Thread summary；
 - Follow-up detection。
