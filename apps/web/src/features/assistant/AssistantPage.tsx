@@ -20,12 +20,19 @@ function approvalLabel(approval: AssistantApproval): string {
   if (approval.actionName === "update_waiting_item") return "修改 Waiting Item";
   if (approval.actionName === "create_reminder") return "创建提醒";
   if (approval.actionName === "update_reminder") return "修改提醒";
+  if (approval.actionName === "send_mail") return "发送邮件";
+  if (approval.actionName === "reply_mail") return "回复邮件";
   return approval.actionName;
 }
 
 function approvalSummary(approval: AssistantApproval): string {
   const action = approval.actionJson;
   const title = typeof action.title === "string" ? action.title : "";
+  if (approval.actionName === "send_mail" || approval.actionName === "reply_mail") {
+    const to = Array.isArray(action.to) ? action.to.map(String).join("、") : "";
+    const subject = typeof action.subject === "string" ? action.subject : "(无主题)";
+    return `${to ? `To: ${to} · ` : ""}${subject}`;
+  }
   if (approval.actionName === "create_task") {
     const schedule =
       typeof action.scheduledStartAt === "string"
@@ -132,6 +139,22 @@ function approvalSummary(approval: AssistantApproval): string {
     return parts.length ? parts.join(" · ") : `Reminder ${String(action.reminderId ?? "")}`;
   }
   return "待确认写操作";
+}
+
+function mailApprovalDetail(approval: AssistantApproval): {
+  to: string;
+  cc: string;
+  subject: string;
+  body: string;
+} | null {
+  if (approval.actionName !== "send_mail" && approval.actionName !== "reply_mail") return null;
+  const action = approval.actionJson;
+  return {
+    to: Array.isArray(action.to) ? action.to.map(String).join(", ") : "",
+    cc: Array.isArray(action.cc) ? action.cc.map(String).join(", ") : "",
+    subject: typeof action.subject === "string" ? action.subject : "",
+    body: typeof action.bodyText === "string" ? action.bodyText : "",
+  };
 }
 
 function statusLabel(approval: AssistantApproval): string {
@@ -383,6 +406,15 @@ export function AssistantPage() {
                         </div>
                         <Badge>{statusLabel(approval)}</Badge>
                       </div>
+                      {mailApprovalDetail(approval) ? (() => {
+                        const detail = mailApprovalDetail(approval)!;
+                        return <div className="mt-3 rounded-md border bg-muted/30 p-3 text-xs">
+                          <div><span className="font-medium">To:</span> {detail.to}</div>
+                          {detail.cc ? <div className="mt-1"><span className="font-medium">Cc:</span> {detail.cc}</div> : null}
+                          <div className="mt-1"><span className="font-medium">Subject:</span> {detail.subject || "(无主题)"}</div>
+                          <pre className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap break-words border-t pt-3 font-sans leading-5">{detail.body}</pre>
+                        </div>;
+                      })() : null}
                       <div className="mt-3 flex gap-2">
                         <Button
                           size="sm"
@@ -390,7 +422,7 @@ export function AssistantPage() {
                           disabled={Boolean(decidingApprovalId)}
                         >
                           <Check size={14} />
-                          批准并执行
+                          {approval.actionName === "send_mail" || approval.actionName === "reply_mail" ? "批准并发送" : "批准并执行"}
                         </Button>
                         <Button
                           size="sm"
