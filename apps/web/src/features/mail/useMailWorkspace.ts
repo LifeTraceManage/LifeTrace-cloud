@@ -6,8 +6,6 @@ import type {
   MailAccount,
   MailAccountInput,
   MailConnectionTest,
-  MailCategory,
-  MailCategoryInput,
   MailDraft,
   MailDraftAttachment,
   MailDraftInput,
@@ -23,7 +21,6 @@ export function useMailWorkspace(
   mailboxRole: string,
   query: string,
   accountId: string | null,
-  categoryId: string | null,
 ) {
   const { session } = useApp();
   const api = useMemo(() => new MailApi(session?.csrfToken), [session?.csrfToken]);
@@ -36,7 +33,6 @@ export function useMailWorkspace(
   const [identities, setIdentities] = useState<MailIdentity[]>([]);
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [drafts, setDrafts] = useState<MailDraft[]>([]);
-  const [categories, setCategories] = useState<MailCategory[]>([]);
   const [messages, setMessages] = useState<MailMessageSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<MailMessageDetail | null>(null);
@@ -49,11 +45,10 @@ export function useMailWorkspace(
     setRuntimeLoading(true);
     setError("");
     try {
-      const [nextAccounts, nextIdentities, nextDrafts, nextCategories] = await Promise.all([
+      const [nextAccounts, nextIdentities, nextDrafts] = await Promise.all([
         api.accounts(),
         api.identities(),
         api.drafts(),
-        api.categories().catch(() => []),
       ]);
       const folderGroups = await Promise.all(nextAccounts.map((item) => api.mailboxes(item.id)));
       setRuntime({
@@ -65,7 +60,6 @@ export function useMailWorkspace(
       setIdentities(nextIdentities);
       setMailboxes(folderGroups.flat());
       setDrafts(nextDrafts);
-      setCategories(nextCategories);
     } catch (cause) {
       setRuntime({
         status: "unavailable",
@@ -76,7 +70,6 @@ export function useMailWorkspace(
       setIdentities([]);
       setMailboxes([]);
       setDrafts([]);
-      setCategories([]);
       setMessages([]);
       setError(cause instanceof Error ? cause.message : "LifeTrace Mail 暂不可用");
     } finally {
@@ -94,7 +87,6 @@ export function useMailWorkspace(
         mailboxRole,
         query: query.trim(),
         starredOnly: mailboxRole === "starred",
-        categoryId,
         limit: 100,
       });
       setMessages(page.items);
@@ -110,7 +102,7 @@ export function useMailWorkspace(
     } finally {
       if (!silent) setListLoading(false);
     }
-  }, [accountId, api, categoryId, mailboxRole, query, runtime.status]);
+  }, [accountId, api, mailboxRole, query, runtime.status]);
 
   useEffect(() => {
     void loadBootstrap();
@@ -250,64 +242,6 @@ export function useMailWorkspace(
     }
   }, [api, messages, selectedId, selectedMessage]);
 
-  const createCategory = useCallback(async (input: MailCategoryInput) => {
-    const value = await api.createCategory(input);
-    setCategories((items) => [...items, value].sort((left, right) => left.name.localeCompare(right.name, "zh-CN")));
-    return value;
-  }, [api]);
-
-  const updateCategory = useCallback(async (id: string, input: MailCategoryInput) => {
-    const value = await api.updateCategory(id, input);
-    setCategories((items) => items
-      .map((item) => item.id === id ? value : item)
-      .sort((left, right) => left.name.localeCompare(right.name, "zh-CN")));
-    return value;
-  }, [api]);
-
-  const deleteCategory = useCallback(async (id: string) => {
-    await api.deleteCategory(id);
-    setCategories((items) => items.filter((item) => item.id !== id));
-    setMessages((items) => items.map((item) => ({
-      ...item,
-      categoryIds: item.categoryIds.filter((category) => category !== id),
-    })));
-    setSelectedMessage((item) => item ? {
-      ...item,
-      categoryIds: item.categoryIds.filter((category) => category !== id),
-    } : item);
-  }, [api]);
-
-  const setMessageCategories = useCallback(async (messageId: string, categoryIds: string[]) => {
-    const previousMessages = messages;
-    const previousSelectedMessage = selectedMessage;
-    const normalized = Array.from(new Set(categoryIds));
-
-    setMessages((items) => items.map((item) => item.id === messageId
-      ? { ...item, categoryIds: normalized }
-      : item));
-    setSelectedMessage((item) => item?.id === messageId
-      ? { ...item, categoryIds: normalized }
-      : item);
-
-    try {
-      const saved = await api.setMessageCategories(messageId, normalized);
-      setMessages((items) => items.map((item) => item.id === messageId
-        ? { ...item, categoryIds: saved }
-        : item));
-      setSelectedMessage((item) => item?.id === messageId
-        ? { ...item, categoryIds: saved }
-        : item);
-      const nextCategories = await api.categories();
-      setCategories(nextCategories);
-      return saved;
-    } catch (cause) {
-      setMessages(previousMessages);
-      setSelectedMessage(previousSelectedMessage);
-      setError(cause instanceof Error ? cause.message : "更新邮件分类失败");
-      throw cause;
-    }
-  }, [api, messages, selectedMessage]);
-
   const connectAccount = useCallback(async (input: MailAccountInput) => {
     const created = await api.createAccount(input);
     await loadBootstrap();
@@ -386,10 +320,9 @@ export function useMailWorkspace(
   );
 
   return {
-    runtime, accounts, identities, mailboxes, drafts, categories, messages, selectedId, selectedMessage,
+    runtime, accounts, identities, mailboxes, drafts, messages, selectedId, selectedMessage,
     runtimeLoading, listLoading, detailLoading, error,
     setSelectedId, refresh, send, markRead, setStarred, move,
-    createCategory, updateCategory, deleteCategory, setMessageCategories,
     connectAccount, disconnectAccount, testAccount, syncAccount,
     createIdentity, updateIdentity, deleteIdentity,
     saveDraft, deleteDraft, sendDraft,
