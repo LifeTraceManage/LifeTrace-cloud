@@ -25,6 +25,7 @@ function approvalLabel(approval: AssistantApproval): string {
     create_note: "创建笔记",
     send_mail: "发送邮件",
     reply_mail: "回复邮件",
+    run_sandbox_job: "运行沙盒 Job",
   };
   return labels[approval.actionName] ?? approval.actionName;
 }
@@ -32,6 +33,14 @@ function approvalLabel(approval: AssistantApproval): string {
 function approvalSummary(approval: AssistantApproval): string {
   const action = approval.actionJson;
   const title = typeof action.title === "string" ? action.title : "";
+  if (approval.actionName === "run_sandbox_job") {
+    const jobId = typeof action.jobId === "string" ? action.jobId : "未知 Job";
+    const input = action.input && typeof action.input === "object"
+      ? JSON.stringify(action.input)
+      : "{}";
+    const preview = input.length > 120 ? `${input.slice(0, 120)}…` : input;
+    return `${jobId} · 输入 ${preview}`;
+  }
   if (approval.actionName === "create_note") {
     const title = typeof action.title === "string" && action.title.trim() ? action.title : "未命名笔记";
     const folder = typeof action.folderId === "string" && action.folderId ? " · 指定文件夹" : " · Notes 根目录";
@@ -290,7 +299,9 @@ export function AgentSidebar() {
                             ? "批准并发送"
                             : approval.actionName === "create_note"
                               ? "批准并创建"
-                              : "批准并执行"}
+                              : approval.actionName === "run_sandbox_job"
+                                ? "批准并运行"
+                                : "批准并执行"}
                         </Button>
                         <Button
                           size="sm"
