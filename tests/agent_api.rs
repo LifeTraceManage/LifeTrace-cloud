@@ -109,10 +109,7 @@ async fn seed_approval(
     approval_id
 }
 
-async fn seed_agent_mail_fixture(
-    state: &AppState,
-    user_id: Uuid,
-) -> (Uuid, Uuid, Uuid) {
+async fn seed_agent_mail_fixture(state: &AppState, user_id: Uuid) -> (Uuid, Uuid, Uuid) {
     let account_id = Uuid::new_v4();
     let identity_id = Uuid::new_v4();
     let folder_id = Uuid::new_v4();
@@ -1484,8 +1481,7 @@ async fn assistant_mail_tools_create_reviewable_send_and_reply_approvals() {
     assert_eq!(send_proposal["actionName"], "send_mail");
     assert_eq!(send_proposal["preview"]["from"], "me@example.com");
 
-    let send_approval_id =
-        Uuid::parse_str(send_proposal["approvalId"].as_str().unwrap()).unwrap();
+    let send_approval_id = Uuid::parse_str(send_proposal["approvalId"].as_str().unwrap()).unwrap();
     let send_action: Value =
         sqlx::query_scalar("SELECT action_json FROM agent_approvals WHERE id=$1")
             .bind(send_approval_id)
@@ -1525,12 +1521,19 @@ async fn assistant_mail_tools_create_reviewable_send_and_reply_approvals() {
             .fetch_one(&state.pool)
             .await
             .unwrap();
-    assert_eq!(reply_action["sourceMessageId"], source_message_id.to_string());
+    assert_eq!(
+        reply_action["sourceMessageId"],
+        source_message_id.to_string()
+    );
     assert_eq!(reply_action["inReplyToHeader"], "<source-1@example.com>");
     assert_eq!(reply_action["subject"], "Re: Status update");
     let cc = reply_action["cc"].as_array().unwrap();
-    assert!(cc.iter().any(|value| value.as_str() == Some("Bob <bob@example.com>")));
-    assert!(cc.iter().any(|value| value.as_str() == Some("Carol <carol@example.com>")));
+    assert!(cc
+        .iter()
+        .any(|value| value.as_str() == Some("Bob <bob@example.com>")));
+    assert!(cc
+        .iter()
+        .any(|value| value.as_str() == Some("Carol <carol@example.com>")));
     assert!(!cc.iter().any(|value| value
         .as_str()
         .is_some_and(|value| value.contains("me@example.com"))));
@@ -1545,11 +1548,10 @@ async fn assistant_mail_tools_create_reviewable_send_and_reply_approvals() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(rejected["approval"]["status"], "rejected");
 
-    let outbox_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM mail_outbox WHERE user_id=$1")
-            .bind(user_id)
-            .fetch_one(&state.pool)
-            .await
-            .unwrap();
+    let outbox_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mail_outbox WHERE user_id=$1")
+        .bind(user_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
     assert_eq!(outbox_count, 0);
 }
