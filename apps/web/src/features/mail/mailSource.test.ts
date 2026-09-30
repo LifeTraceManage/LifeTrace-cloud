@@ -17,7 +17,6 @@ function message(
     sentAt,
     isRead: options.isRead ?? true,
     isStarred: false,
-    categoryIds: [],
   };
 }
 
