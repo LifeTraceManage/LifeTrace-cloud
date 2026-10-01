@@ -6,9 +6,11 @@ import { ErrorBoundary } from "./app/ErrorBoundary";
 import { AgentSidebarProvider } from "./features/assistant/AgentSidebarContext";
 import { router } from "./app/router";
 import { installGlobalErrorHandlers } from "./services/clientObservability";
+import { installButtonHoverNames } from "./services/buttonHoverNames";
 import "./styles/globals.css";
 
 installGlobalErrorHandlers();
+installButtonHoverNames();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
