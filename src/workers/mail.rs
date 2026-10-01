@@ -35,11 +35,7 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send
         "mail worker started"
     );
 
-    let idle = run_idle_loop(
-        state.clone(),
-        credential_cipher,
-        Arc::clone(&active_syncs),
-    );
+    let idle = run_idle_loop(state.clone(), credential_cipher, Arc::clone(&active_syncs));
     let poll = run_poll_loop(state.clone(), Arc::clone(&active_syncs));
     let reconcile = run_reconcile_loop(state, active_syncs);
     tokio::try_join!(idle, poll, reconcile)?;
