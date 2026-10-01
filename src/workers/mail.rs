@@ -372,21 +372,24 @@ async fn load_poll_accounts(
 ) -> Result<Vec<(Uuid, Uuid)>, sqlx::Error> {
     sqlx::query_as::<_, (Uuid, Uuid)>(
         r#"
-        SELECT DISTINCT a.user_id,a.id
+        SELECT a.user_id,a.id
         FROM mail_accounts a
-        JOIN mail_folders f
-          ON f.user_id=a.user_id
-         AND f.account_id=a.id
-         AND f.normalized_role='inbox'
-         AND f.sync_enabled=TRUE
         WHERE a.deleted_at IS NULL
           AND a.status IN ('active','degraded')
-          AND (
-                a.idle_supported=FALSE
-                OR f.last_sync_at IS NULL
-                OR f.last_sync_at <= datetime('now','-60 seconds')
+          AND EXISTS (
+                SELECT 1
+                FROM mail_folders f
+                WHERE f.user_id=a.user_id
+                  AND f.account_id=a.id
+                  AND f.normalized_role='inbox'
+                  AND f.sync_enabled=TRUE
+                  AND (
+                        a.idle_supported=FALSE
+                        OR f.last_sync_at IS NULL
+                        OR f.last_sync_at <= datetime('now','-60 seconds')
+                      )
               )
-        ORDER BY f.last_sync_at NULLS FIRST
+        ORDER BY a.last_sync_at NULLS FIRST
         LIMIT $1
         "#,
     )
