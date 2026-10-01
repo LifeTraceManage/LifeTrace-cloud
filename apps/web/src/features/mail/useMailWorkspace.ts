@@ -58,6 +58,7 @@ export function useMailWorkspace(
       setAccounts(nextAccounts);
       setIdentities(nextIdentities);
       setDrafts(nextDrafts);
+      setRuntimeLoading(false);
 
       // Folder metadata is secondary UI data. Do not hold the entire Mail
       // workspace or the message list behind N per-account mailbox requests.
