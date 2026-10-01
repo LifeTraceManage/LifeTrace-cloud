@@ -24,8 +24,12 @@ export function LoginPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    await login(email.trim(), password, publicDevice);
-    navigate(destination, { replace: true });
+    try {
+      await login(email.trim(), password, publicDevice);
+      navigate(destination, { replace: true });
+    } catch {
+      // AppContext already exposes the login error to the form.
+    }
   }
 
   return <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
