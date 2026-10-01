@@ -75,7 +75,12 @@ export class AuthApi {
     this.fetcher = bindFetch(fetcher);
   }
 
-  private async request<T>(url: string, init: RequestInit = {}, csrfToken?: string): Promise<T> {
+  private async request<T>(
+    url: string,
+    init: RequestInit = {},
+    csrfToken?: string,
+    options?: { allowUnauthorized?: boolean },
+  ): Promise<T> {
     const headers = new Headers(init.headers);
     if (init.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json");
     if (csrfToken) headers.set("x-csrf-token", csrfToken);
@@ -87,6 +92,7 @@ export class AuthApi {
       throw cloudTransportError(cause, "无法连接 LifeTrace 云端，请检查网络后重试");
     }
     const payload = await readJson(response);
+    if (response.status === 401 && options?.allowUnauthorized) return null as T;
     if (!response.ok) {
       const error = new Error(errorMessage(payload, `请求失败 (${response.status})`));
       logHttpFailure("web-auth", url, response, error);
@@ -99,7 +105,14 @@ export class AuthApi {
     return this.request("/api/v1/web/session/login", { method: "POST", body: JSON.stringify({ email, password, requestedScopes: REQUESTED_SCOPES, publicDevice }) });
   }
 
-  session(): Promise<WebSession> { return this.request("/api/v1/web/session"); }
+  session(): Promise<WebSession | null> {
+    return this.request<WebSession | null>(
+      "/api/v1/web/session",
+      {},
+      undefined,
+      { allowUnauthorized: true },
+    );
+  }
 
   async logout(csrfToken?: string): Promise<void> {
     const token = csrfToken || (await this.request<{ csrfToken: string }>("/api/v1/web/csrf")).csrfToken;
