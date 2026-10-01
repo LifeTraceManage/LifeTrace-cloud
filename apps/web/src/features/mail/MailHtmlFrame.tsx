@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 
+export function measureMailDocumentHeight(document: Document | null): number | null {
+  const root = document?.documentElement;
+  if (!document || !root) return null;
+  return Math.max(
+    120,
+    root.scrollHeight,
+    document.body?.scrollHeight ?? 0,
+  );
+}
+
 export function MailHtmlFrame({
   html,
   title,
@@ -20,25 +30,20 @@ export function MailHtmlFrame({
     const syncHeight = () => {
       cancelAnimationFrame(animationFrame);
       animationFrame = requestAnimationFrame(() => {
-        const document = frame.contentDocument;
-        if (!document) return;
-        const nextHeight = Math.max(
-          120,
-          document.documentElement.scrollHeight,
-          document.body?.scrollHeight ?? 0,
-        );
-        setHeight(nextHeight);
+        const nextHeight = measureMailDocumentHeight(frame.contentDocument);
+        if (nextHeight !== null) setHeight(nextHeight);
       });
     };
 
     const attach = () => {
       observer?.disconnect();
       const document = frame.contentDocument;
-      if (!document) return;
+      const root = document?.documentElement;
+      if (!document || !root) return;
 
       syncHeight();
       observer = new ResizeObserver(syncHeight);
-      observer.observe(document.documentElement);
+      observer.observe(root);
       if (document.body) observer.observe(document.body);
 
       document.querySelectorAll("img").forEach((image) => {
