@@ -50,7 +50,6 @@ export function useMailWorkspace(
         api.identities(),
         api.drafts(),
       ]);
-      const folderGroups = await Promise.all(nextAccounts.map((item) => api.mailboxes(item.id)));
       setRuntime({
         status: "ready",
         provider: "lifetrace-cloud",
@@ -58,8 +57,16 @@ export function useMailWorkspace(
       });
       setAccounts(nextAccounts);
       setIdentities(nextIdentities);
-      setMailboxes(folderGroups.flat());
       setDrafts(nextDrafts);
+
+      // Folder metadata is secondary UI data. Do not hold the entire Mail
+      // workspace or the message list behind N per-account mailbox requests.
+      const folderGroups = await Promise.allSettled(
+        nextAccounts.map((item) => api.mailboxes(item.id)),
+      );
+      setMailboxes(folderGroups.flatMap((result) =>
+        result.status === "fulfilled" ? result.value : []
+      ));
     } catch (cause) {
       setRuntime({
         status: "unavailable",
@@ -70,7 +77,6 @@ export function useMailWorkspace(
       setIdentities([]);
       setMailboxes([]);
       setDrafts([]);
-      setMessages([]);
       setError(cause instanceof Error ? cause.message : "LifeTrace Mail 暂不可用");
     } finally {
       setRuntimeLoading(false);
@@ -78,7 +84,7 @@ export function useMailWorkspace(
   }, [api]);
 
   const loadMessages = useCallback(async (silent = false) => {
-    if (runtime.status !== "ready") return;
+    if (!session?.user.id) return;
     if (!silent) setListLoading(true);
     setError("");
     try {
@@ -102,7 +108,7 @@ export function useMailWorkspace(
     } finally {
       if (!silent) setListLoading(false);
     }
-  }, [accountId, api, mailboxRole, query, runtime.status]);
+  }, [accountId, api, mailboxRole, query, session?.user.id]);
 
   useEffect(() => {
     void loadBootstrap();
@@ -113,7 +119,7 @@ export function useMailWorkspace(
   }, [loadMessages]);
 
   useEffect(() => {
-    if (runtime.status !== "ready" || typeof WebSocket === "undefined") return;
+    if (!session?.user.id || typeof WebSocket === "undefined") return;
 
     let socket: WebSocket | null = null;
     let reconnectTimer: number | undefined;
@@ -159,11 +165,11 @@ export function useMailWorkspace(
       window.removeEventListener("focus", refreshOnFocus);
       document.removeEventListener("visibilitychange", refreshOnFocus);
     };
-  }, [api, loadMessages, runtime.status]);
+  }, [api, loadMessages, session?.user.id]);
 
   useEffect(() => {
     let active = true;
-    if (!selectedId || runtime.status !== "ready") {
+    if (!selectedId || !session?.user.id) {
       setSelectedMessage(null);
       return;
     }
@@ -173,11 +179,10 @@ export function useMailWorkspace(
       .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "无法读取邮件详情"); })
       .finally(() => { if (active) setDetailLoading(false); });
     return () => { active = false; };
-  }, [api, runtime.status, selectedId]);
+  }, [api, selectedId, session?.user.id]);
 
   const refresh = useCallback(async () => {
-    await loadBootstrap();
-    await loadMessages();
+    await Promise.all([loadBootstrap(), loadMessages()]);
   }, [loadBootstrap, loadMessages]);
 
   const send = useCallback(async (input: ComposeMailInput) => {
