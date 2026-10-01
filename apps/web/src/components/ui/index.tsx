@@ -38,7 +38,7 @@ export function Badge({ className, ...props }: HTMLAttributes<HTMLSpanElement>) 
 export type ButtonVariant = "default" | "secondary" | "ghost" | "outline" | "destructive";
 
 export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: "sm" | "md" | "icon" }>(
-  ({ className, variant = "default", size = "md", type = "button", ...props }, ref) => {
+  ({ className, variant = "default", size = "md", type = "button", title, "aria-label": ariaLabel, ...props }, ref) => {
     const variants: Record<ButtonVariant, string> = {
       default: "bg-primary text-primary-foreground hover:bg-primary/90",
       secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/75",
@@ -47,7 +47,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
     };
     const sizes = { sm: "h-8 px-3 text-xs", md: "h-9 px-3.5 text-sm", icon: "h-9 w-9 p-0" };
-    return <button ref={ref} type={type} className={cn("inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-50", variants[variant], sizes[size], className)} {...props} />;
+    const hoverName = title ?? (size === "icon" && typeof ariaLabel === "string" ? ariaLabel : undefined);
+    return <button ref={ref} type={type} title={hoverName} aria-label={ariaLabel} className={cn("inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-50", variants[variant], sizes[size], className)} {...props} />;
   },
 );
 Button.displayName = "Button";
