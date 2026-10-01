@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::mail::credential::CredentialCipher;
@@ -5,6 +7,7 @@ use crate::mail::domain::MailAccountSecret;
 use crate::mail::{protocol, MailService};
 use crate::AppState;
 use lifetrace_contracts::UserId;
+use tokio::sync::Mutex;
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
@@ -16,9 +19,12 @@ const RECONCILE_INTERVAL: Duration = Duration::from_secs(300);
 const MAX_IDLE_ACCOUNTS: i64 = 32;
 const MAX_POLL_ACCOUNTS: i64 = 100;
 
+type ActiveSyncs = Arc<Mutex<HashSet<Uuid>>>;
+
 pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Fail before entering the worker loops when the external envelope key is absent or malformed.
     let credential_cipher = CredentialCipher::from_config(&state.config)?;
+    let active_syncs = Arc::new(Mutex::new(HashSet::new()));
 
     tracing::info!(
         target: "lifetrace::mail",
@@ -29,16 +35,29 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error + Send
         "mail worker started"
     );
 
-    let idle = run_idle_loop(state.clone(), credential_cipher);
-    let poll = run_poll_loop(state.clone());
-    let reconcile = run_reconcile_loop(state);
+    let idle = run_idle_loop(
+        state.clone(),
+        credential_cipher,
+        Arc::clone(&active_syncs),
+    );
+    let poll = run_poll_loop(state.clone(), Arc::clone(&active_syncs));
+    let reconcile = run_reconcile_loop(state, active_syncs);
     tokio::try_join!(idle, poll, reconcile)?;
     Ok(())
+}
+
+async fn try_begin_sync(active_syncs: &ActiveSyncs, account_id: Uuid) -> bool {
+    active_syncs.lock().await.insert(account_id)
+}
+
+async fn finish_sync(active_syncs: &ActiveSyncs, account_id: Uuid) {
+    active_syncs.lock().await.remove(&account_id);
 }
 
 async fn run_idle_loop(
     state: AppState,
     credential_cipher: CredentialCipher,
+    active_syncs: ActiveSyncs,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let service = MailService::new(state.pool.clone(), state.config.clone());
 
@@ -95,6 +114,16 @@ async fn run_idle_loop(
 
             match changed {
                 Ok(true) => {
+                    if !try_begin_sync(&active_syncs, account_id).await {
+                        tracing::debug!(
+                            target: "lifetrace::mail",
+                            account_id = %account_id,
+                            trigger = "idle",
+                            "mail inbox sync skipped because account is already synchronizing"
+                        );
+                        continue;
+                    }
+
                     let user = UserId::new(user_id.to_string());
                     let started = Instant::now();
                     tracing::debug!(
@@ -103,10 +132,12 @@ async fn run_idle_loop(
                         trigger = "idle",
                         "mail inbox change detected"
                     );
-                    match service
+                    let sync_result = service
                         .sync_folder_role_incremental(&user, account_id, "inbox")
-                        .await
-                    {
+                        .await;
+                    finish_sync(&active_syncs, account_id).await;
+
+                    match sync_result {
                         Ok(synced_messages) => {
                             let duration_ms = started.elapsed().as_millis() as u64;
                             if synced_messages > 0 {
@@ -166,6 +197,7 @@ async fn run_idle_loop(
 
 async fn run_poll_loop(
     state: AppState,
+    active_syncs: ActiveSyncs,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let service = MailService::new(state.pool.clone(), state.config.clone());
 
@@ -173,12 +205,18 @@ async fn run_poll_loop(
         match load_poll_accounts(&state, MAX_POLL_ACCOUNTS).await {
             Ok(accounts) => {
                 for (user_id, account_id) in accounts {
+                    if !try_begin_sync(&active_syncs, account_id).await {
+                        continue;
+                    }
+
                     let user = UserId::new(user_id.to_string());
                     let started = Instant::now();
-                    match service
+                    let sync_result = service
                         .sync_folder_role_incremental(&user, account_id, "inbox")
-                        .await
-                    {
+                        .await;
+                    finish_sync(&active_syncs, account_id).await;
+
+                    match sync_result {
                         Ok(synced_messages) => {
                             let duration_ms = started.elapsed().as_millis() as u64;
                             if synced_messages > 0 {
@@ -235,6 +273,7 @@ async fn run_poll_loop(
 
 async fn run_reconcile_loop(
     state: AppState,
+    active_syncs: ActiveSyncs,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let service = MailService::new(state.pool.clone(), state.config.clone());
 
@@ -242,44 +281,63 @@ async fn run_reconcile_loop(
     tokio::time::sleep(RECONCILE_INTERVAL).await;
 
     loop {
-        match service.sync_due_accounts(MAX_POLL_ACCOUNTS).await {
-            Ok(stats) if stats.messages_synced > 0 => {
-                tracing::info!(
-                    target: "lifetrace::mail",
-                    attempted = stats.attempted,
-                    succeeded = stats.succeeded,
-                    failed = stats.failed,
-                    messages_synced = stats.messages_synced,
-                    trigger = "reconcile",
-                    "mail full-folder reconciliation synchronized changes"
-                );
-                state.mail_realtime.publish_global_updated("reconcile");
-            }
-            Ok(stats) if stats.failed > 0 => {
-                tracing::warn!(
-                    target: "lifetrace::mail",
-                    attempted = stats.attempted,
-                    succeeded = stats.succeeded,
-                    failed = stats.failed,
-                    trigger = "reconcile",
-                    "mail full-folder reconciliation completed with failures"
-                );
-            }
-            Ok(stats) => {
-                tracing::debug!(
-                    target: "lifetrace::mail",
-                    attempted = stats.attempted,
-                    succeeded = stats.succeeded,
-                    trigger = "reconcile",
-                    "mail full-folder reconciliation completed without changes"
-                );
+        match load_reconcile_accounts(&state, MAX_POLL_ACCOUNTS).await {
+            Ok(accounts) => {
+                for (user_id, account_id) in accounts {
+                    if !try_begin_sync(&active_syncs, account_id).await {
+                        continue;
+                    }
+
+                    let user = UserId::new(user_id.to_string());
+                    let started = Instant::now();
+                    let sync_result = service.sync_account_incremental(&user, account_id).await;
+                    finish_sync(&active_syncs, account_id).await;
+
+                    match sync_result {
+                        Ok(synced_messages) if synced_messages > 0 => {
+                            tracing::info!(
+                                target: "lifetrace::mail",
+                                account_id = %account_id,
+                                messages_synced = synced_messages,
+                                duration_ms = started.elapsed().as_millis() as u64,
+                                trigger = "reconcile",
+                                "mail full-folder reconciliation synchronized changes"
+                            );
+                            state.mail_realtime.publish_account_updated(
+                                user.as_str(),
+                                account_id,
+                                synced_messages,
+                                "reconcile",
+                            );
+                        }
+                        Ok(_) => {
+                            tracing::debug!(
+                                target: "lifetrace::mail",
+                                account_id = %account_id,
+                                duration_ms = started.elapsed().as_millis() as u64,
+                                trigger = "reconcile",
+                                "mail full-folder reconciliation completed without changes"
+                            );
+                        }
+                        Err(error) => {
+                            tracing::warn!(
+                                target: "lifetrace::mail",
+                                account_id = %account_id,
+                                duration_ms = started.elapsed().as_millis() as u64,
+                                error = %error,
+                                trigger = "reconcile",
+                                "mail full-folder reconciliation failed"
+                            );
+                        }
+                    }
+                }
             }
             Err(error) => {
                 tracing::error!(
                     target: "lifetrace::mail",
                     error = %error,
                     trigger = "reconcile",
-                    "mail full-folder reconciliation failed"
+                    "mail reconciliation account scan failed"
                 );
             }
         }
@@ -329,6 +387,26 @@ async fn load_poll_accounts(
                 OR f.last_sync_at <= datetime('now','-60 seconds')
               )
         ORDER BY f.last_sync_at NULLS FIRST
+        LIMIT $1
+        "#,
+    )
+    .bind(limit.clamp(1, 100))
+    .fetch_all(&state.pool)
+    .await
+}
+
+async fn load_reconcile_accounts(
+    state: &AppState,
+    limit: i64,
+) -> Result<Vec<(Uuid, Uuid)>, sqlx::Error> {
+    sqlx::query_as::<_, (Uuid, Uuid)>(
+        r#"
+        SELECT user_id,id
+        FROM mail_accounts
+        WHERE deleted_at IS NULL
+          AND status IN ('active','degraded')
+          AND (last_sync_at IS NULL OR last_sync_at < datetime('now','-2 minutes'))
+        ORDER BY last_sync_at NULLS FIRST
         LIMIT $1
         "#,
     )
