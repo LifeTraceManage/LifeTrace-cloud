@@ -153,9 +153,17 @@ async fn login(
 async fn session(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<WebSessionResponseV1>, ApiError> {
-    let (principal, _) = web_principal(&state, &headers).await?;
-    state.auth_service.web_session(&principal).await.map(Json)
+) -> Result<axum::response::Response, ApiError> {
+    let raw = cookie_value(&headers, &state.config.auth_cookie_name);
+    let Some(raw) = raw else {
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    };
+    let principal = state
+        .auth
+        .authenticate(AuthCredential::WebSession(Some(raw.as_str())))
+        .await?;
+    let body = state.auth_service.web_session(&principal).await?;
+    Ok(Json(body).into_response())
 }
 
 async fn csrf(
