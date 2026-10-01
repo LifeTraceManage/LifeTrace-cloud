@@ -113,7 +113,7 @@ export function AppShell() {
 
     {moreOpen ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 lg:items-center" role="dialog" aria-modal="true" aria-label="账户与更多菜单" onMouseDown={(event) => { if (event.currentTarget === event.target) setMoreOpen(false); }}>
       <div className="w-full rounded-t-xl border bg-popover p-4 shadow-2xl sm:max-w-md sm:rounded-xl">
-        <div className="flex items-center justify-between"><div><div className="font-semibold">{session?.user.displayName || "LifeTrace 用户"}</div><div className="text-xs text-muted-foreground">{session?.user.email}</div></div><Button size="icon" variant="ghost" onClick={() => setMoreOpen(false)}><X size={17} /></Button></div>
+        <div className="flex items-center justify-between"><div><div className="font-semibold">{session?.user.displayName || "LifeTrace 用户"}</div><div className="text-xs text-muted-foreground">{session?.user.email}</div></div><Button size="icon" variant="ghost" onClick={() => setMoreOpen(false)} aria-label="关闭账户菜单"><X size={17} /></Button></div>
         <div className="mt-4 grid gap-2">
           <Button variant="outline" className="justify-start" onClick={() => { setMoreOpen(false); navigate("/app/search"); }}><Search size={16} />全局搜索</Button>
           <Button variant="outline" className="justify-start" onClick={() => { setMoreOpen(false); navigate("/app/settings"); }}><Settings size={16} />设置</Button>
