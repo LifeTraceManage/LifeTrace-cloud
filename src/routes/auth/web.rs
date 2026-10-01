@@ -8,7 +8,7 @@ use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use lifetrace_contracts::auth::v1::{
     AcceptedResponseV1, CsrfResponseV1, DeviceInstallationV1, DeviceListV1, Scope, SessionListV1,
-    UpdateDeviceRequestV1, WebLoginRequestV1, WebSessionResponseV1,
+    UpdateDeviceRequestV1, WebLoginRequestV1,
 };
 use serde::Deserialize;
 
