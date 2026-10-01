@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { CloudDataStore } from "./api";
+import { describe, expect, it, vi } from "vitest";
+import { AuthApi, CloudDataStore } from "./api";
 
 describe("CloudDataStore sync client identity", () => {
   it("uses the authenticated desktop application identity when supplied", async () => {
@@ -28,5 +28,29 @@ describe("CloudDataStore sync client identity", () => {
       platform: "windows",
       deviceId: "device-1",
     });
+  });
+});
+
+
+describe("AuthApi session probe", () => {
+  it("accepts HTTP 204 as the normal no-cookie signed-out state", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const api = new AuthApi(async () => new Response(null, { status: 204 }));
+
+    await expect(api.session()).resolves.toBeNull();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("treats HTTP 401 as a normal signed-out state without error logging", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const api = new AuthApi(async () => new Response(
+      JSON.stringify({ message: "authentication required" }),
+      { status: 401, headers: { "content-type": "application/json" } },
+    ));
+
+    await expect(api.session()).resolves.toBeNull();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });
