@@ -33,6 +33,15 @@ describe("CloudDataStore sync client identity", () => {
 
 
 describe("AuthApi session probe", () => {
+  it("accepts HTTP 204 as the normal no-cookie signed-out state", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const api = new AuthApi(async () => new Response(null, { status: 204 }));
+
+    await expect(api.session()).resolves.toBeNull();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it("treats HTTP 401 as a normal signed-out state without error logging", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const api = new AuthApi(async () => new Response(
