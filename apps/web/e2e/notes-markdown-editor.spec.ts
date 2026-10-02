@@ -56,7 +56,7 @@ test("notes workspace uses one left sidebar and a right outline/properties inspe
   await expect(inspector.getByTestId("note-properties")).toBeVisible();
 });
 
-test("outline and inline live preview update immediately from the local editor state", async ({ page }) => {
+test("all common Markdown constructs render inline while the outline updates immediately", async ({ page }) => {
   const pushes: PushBody[] = [];
   await installMocks(page, pushes);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -65,13 +65,43 @@ test("outline and inline live preview update immediately from the local editor s
   const editorRoot = page.getByTestId("markdown-editor");
   const editor = editorRoot.locator(".cm-content");
   await expect(editorRoot).toHaveAttribute("data-live-preview", "true");
+  await expect(editorRoot).toHaveAttribute("data-render-engine", "full");
 
-  await editor.fill("# Live heading\n\n## Instant outline\n\n**Rendered** text");
+  await editor.fill([
+    "# Live heading",
+    "",
+    "## Instant outline",
+    "",
+    "**Bold** *italic* ~~strike~~ `inline` [docs](https://example.com)",
+    "",
+    "- [x] completed task",
+    "1. ordered item",
+    "> quoted text",
+    "",
+    "| Name | Value |",
+    "| --- | --- |",
+    "| A | B |",
+    "",
+    "![sample](https://example.com/image.png)",
+    "",
+    "---",
+  ].join("\n"));
+
   const inspector = page.getByTestId("notes-inspector");
   await expect(inspector.getByTestId("note-outline")).toContainText("Live heading");
   await expect(inspector.getByTestId("note-outline")).toContainText("Instant outline");
-  await expect(editorRoot.locator(".cm-live-heading-1")).toContainText("Live heading");
-  await expect(editorRoot.locator(".cm-live-strong")).toContainText("Rendered");
+
+  await expect(editorRoot.locator(".cm-task-checkbox")).toBeVisible();
+  await expect(editorRoot.locator(".cm-ordered-marker")).toContainText("1.");
+  await expect(editorRoot.locator(".cm-blockquote")).toContainText("quoted text");
+  await expect(editorRoot.locator(".cm-table-widget")).toContainText("Name");
+  await expect(editorRoot.locator(".cm-table-widget")).toContainText("Value");
+  await expect(editorRoot.locator(".cm-image-widget")).toHaveAttribute("alt", "sample");
+  await expect(editorRoot.locator(".cm-hr-widget")).toBeVisible();
+
+  await expect(editor).toContainText("Bold italic strike inline docs");
+  await expect(editor).not.toContainText("**Bold**");
+  await expect(editor).not.toContainText("[docs](https://example.com)");
 });
 
 test("CodeMirror edits Markdown and autosaves the note to LifeTrace Cloud", async ({ page }) => {

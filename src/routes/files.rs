@@ -2,6 +2,7 @@
 
 use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::StatusCode;
+use axum::response::Redirect;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
@@ -104,6 +105,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/files", get(list).post(prepare))
         .route("/api/v1/files/orphans", get(orphans))
         .route("/api/v1/files/{id}", get(metadata).delete(delete_metadata))
+        .route("/api/v1/files/{id}/content", get(content))
         .route("/api/v1/files/{id}/upload-url", post(refresh_upload_url))
         .route("/api/v1/files/{id}/complete", post(mark_complete))
         .route("/api/v1/files/{id}/fail", post(mark_failed))
@@ -308,6 +310,24 @@ async fn mark_failed(
     .map_err(database_error)?
     .ok_or_else(not_found)?;
     Ok(Json(row_to_metadata(&row)?))
+}
+
+async fn content(
+    State(state): State<AppState>,
+    principal: AuthenticatedPrincipal,
+    AxumPath(id): AxumPath<Uuid>,
+) -> Result<Redirect, ApiError> {
+    principal.require_scope("files:read")?;
+    let row = owned_row(&state, &principal.user_id, id).await?;
+    let status: String = row.try_get("status").map_err(database_error)?;
+    if status != "available" {
+        return Err(bad_request("文件尚未完成上传"));
+    }
+    let key: String = row.try_get("storage_key").map_err(database_error)?;
+    let signed = storage_config(&state)?
+        .presign_get(&key, Utc::now())
+        .map_err(storage_error)?;
+    Ok(Redirect::temporary(&signed.url))
 }
 
 async fn download_url(
