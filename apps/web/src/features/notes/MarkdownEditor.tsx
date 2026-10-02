@@ -1,7 +1,8 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, type ReactNode } from "react";
 import { autocompletion, type CompletionContext } from "@codemirror/autocomplete";
 import { markdown } from "@codemirror/lang-markdown";
-import { basicSetup, EditorView } from "codemirror";
+import { basicSetup } from "codemirror";
+import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import {
   Bold, Code2, Heading2, Italic, Link2, List, ListChecks, ListOrdered, Minus,
   Quote, Strikethrough, Table2,
@@ -16,6 +17,10 @@ type Draft = {
 export interface WikiSuggestion {
   title: string;
   aliases?: string[];
+}
+
+export interface MarkdownEditorHandle {
+  focusLine(lineNumber: number): void;
 }
 
 export interface MarkdownEditorProps {
@@ -116,6 +121,26 @@ const editorTheme = EditorView.theme({
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: "hsl(var(--foreground))",
   },
+  ".cm-live-heading": {
+    fontWeight: "700",
+    lineHeight: "1.35",
+    marginTop: "0.45em",
+    marginBottom: "0.1em",
+  },
+  ".cm-live-heading-1": { fontSize: "1.75em" },
+  ".cm-live-heading-2": { fontSize: "1.45em" },
+  ".cm-live-heading-3": { fontSize: "1.22em" },
+  ".cm-live-heading-4": { fontSize: "1.08em" },
+  ".cm-live-heading-5, .cm-live-heading-6": { fontSize: "1em" },
+  ".cm-live-quote": {
+    borderLeft: "3px solid hsl(var(--border))",
+    paddingLeft: "12px !important",
+    color: "hsl(var(--muted-foreground))",
+  },
+  ".cm-live-bullet, .cm-live-task": {
+    color: "hsl(var(--primary))",
+    fontWeight: "700",
+  },
   ".cm-tooltip": {
     border: "1px solid hsl(var(--border))",
     borderRadius: "8px",
@@ -131,6 +156,85 @@ const editorTheme = EditorView.theme({
     backgroundColor: "hsl(var(--accent))",
     color: "hsl(var(--accent-foreground))",
   },
+});
+
+class InlinePreviewWidget extends WidgetType {
+  constructor(private readonly value: string, private readonly className: string) {
+    super();
+  }
+
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = this.className;
+    span.textContent = this.value;
+    return span;
+  }
+
+  eq(other: InlinePreviewWidget) {
+    return other.value === this.value && other.className === this.className;
+  }
+}
+
+function livePreviewDecorations(view: EditorView): DecorationSet {
+  const ranges: any[] = [];
+  const activeLine = view.state.doc.lineAt(view.state.selection.main.head).number;
+
+  for (const visible of view.visibleRanges) {
+    let line = view.state.doc.lineAt(visible.from);
+    while (line.from <= visible.to) {
+      const source = line.text;
+      const heading = source.match(/^(\\s*)(#{1,6})\\s+/);
+      const task = source.match(/^(\\s*)[-*+]\\s+\\[([ xX])\\]\\s+/);
+      const bullet = task ? null : source.match(/^(\\s*)[-*+]\\s+/);
+      const quote = source.match(/^(\\s*)>\\s?/);
+
+      if (heading) {
+        const level = heading[2].length;
+        ranges.push(Decoration.line({ attributes: { class: `cm-live-heading cm-live-heading-${level}` } }).range(line.from));
+        if (line.number !== activeLine) {
+          const markerFrom = line.from + heading[1].length;
+          ranges.push(Decoration.replace({}).range(markerFrom, markerFrom + heading[2].length + 1));
+        }
+      } else if (quote) {
+        ranges.push(Decoration.line({ attributes: { class: "cm-live-quote" } }).range(line.from));
+        if (line.number !== activeLine) {
+          const markerFrom = line.from + quote[1].length;
+          ranges.push(Decoration.replace({}).range(markerFrom, markerFrom + quote[0].length - quote[1].length));
+        }
+      } else if (task && line.number !== activeLine) {
+        const markerFrom = line.from + task[1].length;
+        ranges.push(Decoration.replace({
+          widget: new InlinePreviewWidget(task[2].trim() ? "☑ " : "☐ ", "cm-live-task"),
+        }).range(markerFrom, markerFrom + task[0].length - task[1].length));
+      } else if (bullet && line.number !== activeLine) {
+        const markerFrom = line.from + bullet[1].length;
+        ranges.push(Decoration.replace({
+          widget: new InlinePreviewWidget("• ", "cm-live-bullet"),
+        }).range(markerFrom, markerFrom + bullet[0].length - bullet[1].length));
+      }
+
+      if (line.to >= view.state.doc.length) break;
+      line = view.state.doc.line(line.number + 1);
+    }
+  }
+
+  return Decoration.set(ranges, true);
+}
+
+const livePreviewPlugin = ViewPlugin.fromClass(class {
+  decorations: DecorationSet;
+
+  constructor(view: EditorView) {
+    this.decorations = livePreviewDecorations(view);
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.selectionSet || update.viewportChanged) {
+      this.decorations = livePreviewDecorations(update.view);
+    }
+  }
+}, {
+  decorations: (value) => value.decorations,
 });
 
 function ToolButton({
@@ -154,7 +258,7 @@ function ToolButton({
   </button>;
 }
 
-export function MarkdownEditor({
+export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(function MarkdownEditor({
   value,
   cacheKey,
   legacyCacheKey,
@@ -163,7 +267,7 @@ export function MarkdownEditor({
   onChange,
   onSave,
   onSelectionChange,
-}: MarkdownEditorProps) {
+}, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorView | null>(null);
   const valueRef = useRef(value);
@@ -178,6 +282,20 @@ export function MarkdownEditor({
   onSaveRef.current = onSave;
   onSelectionChangeRef.current = onSelectionChange;
   wikiSuggestionsRef.current = wikiSuggestions;
+
+  useImperativeHandle(ref, () => ({
+    focusLine(lineNumber: number) {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const safeLine = Math.max(1, Math.min(lineNumber, editor.state.doc.lines));
+      const line = editor.state.doc.line(safeLine);
+      editor.dispatch({
+        selection: { anchor: line.from },
+        effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+      });
+      editor.focus();
+    },
+  }), []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -220,6 +338,7 @@ export function MarkdownEditor({
         markdown(),
         EditorView.lineWrapping,
         editorTheme,
+        livePreviewPlugin,
         autocompletion({
           activateOnTyping: true,
           override: [wikiCompletion],
@@ -338,7 +457,7 @@ export function MarkdownEditor({
     editor.focus();
   }
 
-  return <div className="min-w-0 overflow-hidden rounded-md border bg-background" data-testid="markdown-editor">
+  return <div className="min-w-0 overflow-hidden rounded-md border bg-background" data-testid="markdown-editor" data-live-preview="true">
     <div className="scrollbar-thin flex items-center gap-0.5 overflow-x-auto border-b bg-muted/20 px-2 py-1">
       <ToolButton label="二级标题" onClick={() => prefixLines("## ")}><Heading2 size={15} /></ToolButton>
       <ToolButton label="粗体" onClick={() => wrapSelection("**")}><Bold size={15} /></ToolButton>
@@ -361,4 +480,4 @@ export function MarkdownEditor({
     </div>
     <div ref={hostRef} />
   </div>;
-}
+);
