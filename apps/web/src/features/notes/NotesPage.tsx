@@ -677,7 +677,7 @@ export function NotesPage() {
   >
     {notice ? <div className="mx-3 mt-3 flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2 text-xs sm:mx-5"><span>{notice}</span><button className="text-muted-foreground hover:text-foreground" onClick={() => setNotice("")}>关闭</button></div> : null}
     <div className="grid min-h-[calc(100vh-6rem)] lg:min-h-[calc(100vh-4rem)] lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_300px]">
-      <aside className={cn(
+      <aside data-testid="notes-sidebar" className={cn(
         "min-w-0 border-r bg-card/45",
         mobileEditing ? "hidden lg:flex lg:flex-col" : "flex flex-col",
       )}>
@@ -943,7 +943,7 @@ export function NotesPage() {
         </> : <EmptyState title="选择一篇笔记" />}
       </main>
 
-      <aside className="scrollbar-thin hidden min-w-0 border-l bg-card/30 p-3 xl:block xl:max-h-[calc(100vh-4rem)] xl:overflow-y-auto">
+      <aside data-testid="notes-inspector" className="scrollbar-thin hidden min-w-0 border-l bg-card/30 p-3 xl:block xl:max-h-[calc(100vh-4rem)] xl:overflow-y-auto">
         {selected ? <div className="space-y-4">
           <NoteOutlinePanel markdown={content} onSelect={(heading) => editorRef.current?.focusLine(heading.line)} />
           <NotePropertiesPanel
