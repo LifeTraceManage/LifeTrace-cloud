@@ -183,10 +183,10 @@ function livePreviewDecorations(view: EditorView): DecorationSet {
     let line = view.state.doc.lineAt(visible.from);
     while (line.from <= visible.to) {
       const source = line.text;
-      const heading = source.match(/^(\\s*)(#{1,6})\\s+/);
-      const task = source.match(/^(\\s*)[-*+]\\s+\\[([ xX])\\]\\s+/);
-      const bullet = task ? null : source.match(/^(\\s*)[-*+]\\s+/);
-      const quote = source.match(/^(\\s*)>\\s?/);
+      const heading = source.match(/^(\s*)(#{1,6})\s+/);
+      const task = source.match(/^(\s*)[-*+]\s+\[([ xX])\]\s+/);
+      const bullet = task ? null : source.match(/^(\s*)[-*+]\s+/);
+      const quote = source.match(/^(\s*)>\s?/);
 
       if (heading) {
         const level = heading[2].length;
@@ -480,4 +480,4 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     </div>
     <div ref={hostRef} />
   </div>;
-);
+});
