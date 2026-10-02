@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, CalendarDays, Check, CheckSquare2, Clock3, Command, Folder, FolderPlus, History, Inbox, Loader2, Network, NotebookPen,
-  Plus, RotateCcw, Save, Search, Settings2, Star, Tag, Trash2, X,
+  Plus, RotateCcw, Save, Search, Settings2, Star, Tag, Trash2,
 } from "lucide-react";
 import { useApp } from "../../app/AppContext";
 import { useAgentPageContext } from "../assistant/AgentSidebarContext";
@@ -25,7 +25,8 @@ import { NotesKnowledgePanel } from "./NotesKnowledgePanel";
 import {
   mergeNoteProperties, noteAliases, parseFrontmatter, storedNoteProperties, type NoteProperties,
 } from "./properties";
-import { MarkdownEditor } from "./MarkdownEditor";
+import { MarkdownEditor, type MarkdownEditorHandle } from "./MarkdownEditor";
+import { NoteOutlinePanel } from "./NoteOutlinePanel";
 
 type SaveState = "saved" | "saving" | "dirty" | "error";
 type BuiltinScope = "inbox" | "all" | "recent" | "favorites" | "trash";
@@ -123,6 +124,7 @@ export function NotesPage() {
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [openedIds, setOpenedIds] = useState<string[]>([]);
   const autosaveRef = useRef<number | null>(null);
+  const editorRef = useRef<MarkdownEditorHandle | null>(null);
 
   const noteTagIds = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -674,180 +676,296 @@ export function NotesPage() {
     </>}
   >
     {notice ? <div className="mx-3 mt-3 flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2 text-xs sm:mx-5"><span>{notice}</span><button className="text-muted-foreground hover:text-foreground" onClick={() => setNotice("")}>关闭</button></div> : null}
-    <div className="grid min-h-[calc(100vh-6rem)] lg:min-h-[calc(100vh-4rem)] lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[224px_320px_minmax(0,1fr)]">
-      <aside className="hidden border-r bg-card/45 p-3 xl:block">
-        <div className="mb-4 px-2 pt-1">
-          <div className="text-xs font-semibold">知识库</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">LifeTrace Notes</div>
-        </div>
-
-        <nav className="space-y-1" aria-label="笔记导航">
-          {builtinViews.map(({ id, label, icon: Icon, count }) => <button
-            key={id}
-            onClick={() => void changeScope(id)}
-            className={cn("flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", scope === id && "bg-accent font-medium text-accent-foreground")}
-          ><Icon size={16} /><span className="flex-1 text-left">{label}</span><span className="text-[11px]">{count}</span></button>)}
-        </nav>
-
-        <div className="mt-5 border-t pt-4">
-          <div className="mb-1 flex items-center justify-between px-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Folders</div>
-            <div className="flex items-center gap-0.5">
-              {activeFolder ? <button className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setFolderSettingsOpen(true)} aria-label="文件夹设置"><Settings2 size={14} /></button> : null}
-              <button className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setNewFolderParentId(scopeId(scope, "folder") ?? ""); setShowNewFolder((value) => !value); }} aria-label="新建文件夹"><FolderPlus size={14} /></button>
-            </div>
-          </div>
-          {showNewFolder ? <form className="mb-2 space-y-1.5" onSubmit={(event) => void submitFolder(event)}>
-            <div className="flex gap-1">
-              <Input autoFocus className="h-8 px-2 text-xs" value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} placeholder="文件夹名称" />
-              <Button size="icon" className="h-8 w-8" type="submit" aria-label="创建文件夹"><Check size={14} /></Button>
-            </div>
-            <select className="h-8 w-full rounded-md border bg-background px-2 text-xs text-muted-foreground" value={newFolderParentId} onChange={(event) => setNewFolderParentId(event.target.value)} aria-label="父文件夹">
-              <option value="">根目录</option>
-              {folderRows.map(({ folder, depth, path }) => <option key={folder.meta.id} value={folder.meta.id}>{`${"— ".repeat(depth)}${path}`}</option>)}
-            </select>
-          </form> : null}
-          <div className="space-y-1">
-            {folderRows.map(({ folder, depth }) => {
-              const id = folder.meta.id;
-              const count = activeNotes.filter((note) => text(note, "folderId") === id).length;
-              return <button
-                key={id}
-                onClick={() => void changeScope(`folder:${id}`)}
-                style={{ paddingLeft: `${10 + depth * 14}px` }}
-                className={cn("flex h-8 w-full items-center gap-2 rounded-md pr-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground", scope === `folder:${id}` && "bg-accent font-medium text-accent-foreground")}
-              ><Folder size={14} className="shrink-0" /><span className="flex-1 truncate text-left">{text(folder, "name", "未命名")}</span><span className="text-[10px]">{count}</span></button>;
-            })}
-            {!folders.length && !showNewFolder ? <div className="px-2 py-1 text-[11px] text-muted-foreground">还没有文件夹</div> : null}
-          </div>
-        </div>
-
-        <div className="mt-4 border-t pt-4">
-          <div className="mb-1 flex items-center justify-between px-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Tags</div>
-            <button className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setShowNewTag((value) => !value)} aria-label="新建标签"><Plus size={14} /></button>
-          </div>
-          {showNewTag ? <form className="mb-2 flex gap-1" onSubmit={(event) => void submitTag(event)}>
-            <Input autoFocus className="h-8 px-2 text-xs" value={newTagName} onChange={(event) => setNewTagName(event.target.value)} placeholder="标签名称" />
-            <Button size="icon" className="h-8 w-8" type="submit" aria-label="创建标签"><Check size={14} /></Button>
-          </form> : null}
-          <div className="space-y-1">
-            {tags.map((tagItem) => {
-              const id = tagItem.meta.id;
-              const count = activeNotes.filter((note) => noteTagIds.get(note.meta.id)?.has(id)).length;
-              return <button key={id} onClick={() => void changeScope(`tag:${id}`)} className={cn("flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground", scope === `tag:${id}` && "bg-accent font-medium text-accent-foreground")}><Tag size={14} /><span className="flex-1 truncate text-left">{text(tagItem, "name", "未命名")}</span><span className="text-[10px]">{count}</span></button>;
-            })}
-            {!tags.length && !showNewTag ? <div className="px-2 py-1 text-[11px] text-muted-foreground">还没有标签</div> : null}
-          </div>
-        </div>
-      </aside>
-
-      <section className={cn("min-w-0 border-b lg:block lg:border-b-0 lg:border-r", mobileEditing && "hidden lg:block")}>
+    <div className="grid min-h-[calc(100vh-6rem)] lg:min-h-[calc(100vh-4rem)] lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_300px]">
+      <aside data-testid="notes-sidebar" className={cn(
+        "min-w-0 border-r bg-card/45",
+        mobileEditing ? "hidden lg:flex lg:flex-col" : "flex flex-col",
+      )}>
         <div className="border-b p-3">
-          <div className="mb-2 flex items-center justify-between gap-2 xl:hidden">
-            <select className="h-8 max-w-[68%] rounded-md border bg-background px-2 text-xs" value={scope} onChange={(event) => void changeScope(event.target.value as NotesScope)} aria-label="笔记范围">
-              <optgroup label="笔记">
-                {builtinViews.map((item) => <option key={item.id} value={item.id}>{item.label} ({item.count})</option>)}
-              </optgroup>
-              {folderRows.length ? <optgroup label="文件夹">{folderRows.map(({ folder, depth }) => <option key={folder.meta.id} value={`folder:${folder.meta.id}`}>{`${"— ".repeat(depth)}${text(folder, "name")}`}</option>)}</optgroup> : null}
-              {tags.length ? <optgroup label="标签">{tags.map((tagItem) => <option key={tagItem.meta.id} value={`tag:${tagItem.meta.id}`}>#{text(tagItem, "name")}</option>)}</optgroup> : null}
-            </select>
-            <Button size="sm" onClick={() => void newNote()}><Plus size={14} />新建</Button>
-          </div>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="min-w-0 flex-1 truncate text-xs font-medium">{activeScopeLabel}</div>
-            {activeFolder ? <Button className="xl:hidden" size="icon" variant="ghost" aria-label="文件夹设置" onClick={() => setFolderSettingsOpen(true)}><Settings2 size={13} /></Button> : null}
-            <span className="text-[11px] text-muted-foreground">{visibleNotes.length} 篇</span>
+          <div className="mb-2 flex items-center gap-2">
+            <Button className="flex-1 justify-center" size="sm" onClick={() => void newNote()}>
+              <Plus size={14} />新建笔记
+            </Button>
+            <Button size="icon" variant="ghost" aria-label="打开命令面板" onClick={() => setCommandOpen(true)}>
+              <Command size={15} />
+            </Button>
           </div>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
-            <Input className="h-9 border-0 bg-muted/55 pl-9 focus:ring-0" placeholder="搜索标题、正文、文件夹或标签" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <Input
+              className="h-9 border-0 bg-muted/55 pl-9 focus:ring-0"
+              placeholder="搜索标题、正文、文件夹或标签"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
           </div>
         </div>
-        <div className="scrollbar-thin max-h-[calc(100vh-12rem)] overflow-y-auto p-2 lg:max-h-[calc(100vh-10rem)]">
-          {visibleNotes.length ? visibleNotes.map((note) => <button key={note.meta.id} onClick={() => void selectNote(note.meta.id)} className={cn("mb-1 w-full rounded-md px-3 py-2.5 text-left", selectedId === note.meta.id ? "bg-accent" : "hover:bg-muted")}>
+
+        <div className="scrollbar-thin max-h-[42vh] overflow-y-auto border-b p-2">
+          <nav className="space-y-0.5" aria-label="笔记导航">
+            {builtinViews.map(({ id, label, icon: Icon, count }) => <button
+              key={id}
+              onClick={() => void changeScope(id)}
+              className={cn(
+                "flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                scope === id && "bg-accent font-medium text-accent-foreground",
+              )}
+            >
+              <Icon size={15} />
+              <span className="flex-1 text-left">{label}</span>
+              <span className="text-[10px]">{count}</span>
+            </button>)}
+          </nav>
+
+          <div className="mt-3 border-t pt-3">
+            <div className="mb-1 flex items-center justify-between px-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Folders</div>
+              <div className="flex items-center gap-0.5">
+                {activeFolder ? <button
+                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => setFolderSettingsOpen(true)}
+                  aria-label="文件夹设置"
+                ><Settings2 size={14} /></button> : null}
+                <button
+                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => {
+                    setNewFolderParentId(scopeId(scope, "folder") ?? "");
+                    setShowNewFolder((value) => !value);
+                  }}
+                  aria-label="新建文件夹"
+                ><FolderPlus size={14} /></button>
+              </div>
+            </div>
+            {showNewFolder ? <form className="mb-2 space-y-1.5" onSubmit={(event) => void submitFolder(event)}>
+              <div className="flex gap-1">
+                <Input
+                  autoFocus
+                  className="h-8 px-2 text-xs"
+                  value={newFolderName}
+                  onChange={(event) => setNewFolderName(event.target.value)}
+                  placeholder="文件夹名称"
+                />
+                <Button size="icon" className="h-8 w-8" type="submit" aria-label="创建文件夹"><Check size={14} /></Button>
+              </div>
+              <select
+                className="h-8 w-full rounded-md border bg-background px-2 text-xs text-muted-foreground"
+                value={newFolderParentId}
+                onChange={(event) => setNewFolderParentId(event.target.value)}
+                aria-label="父文件夹"
+              >
+                <option value="">根目录</option>
+                {folderRows.map(({ folder, depth, path }) => <option key={folder.meta.id} value={folder.meta.id}>{`${"— ".repeat(depth)}${path}`}</option>)}
+              </select>
+            </form> : null}
+            <div className="space-y-0.5">
+              {folderRows.map(({ folder, depth }) => {
+                const id = folder.meta.id;
+                const count = activeNotes.filter((note) => text(note, "folderId") === id).length;
+                return <button
+                  key={id}
+                  onClick={() => void changeScope(`folder:${id}`)}
+                  style={{ paddingLeft: `${10 + depth * 14}px` }}
+                  className={cn(
+                    "flex h-8 w-full items-center gap-2 rounded-md pr-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground",
+                    scope === `folder:${id}` && "bg-accent font-medium text-accent-foreground",
+                  )}
+                >
+                  <Folder size={14} className="shrink-0" />
+                  <span className="flex-1 truncate text-left">{text(folder, "name", "未命名")}</span>
+                  <span className="text-[10px]">{count}</span>
+                </button>;
+              })}
+              {!folders.length && !showNewFolder ? <div className="px-2 py-1 text-[11px] text-muted-foreground">还没有文件夹</div> : null}
+            </div>
+          </div>
+
+          <div className="mt-3 border-t pt-3">
+            <div className="mb-1 flex items-center justify-between px-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Tags</div>
+              <button
+                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                onClick={() => setShowNewTag((value) => !value)}
+                aria-label="新建标签"
+              ><Plus size={14} /></button>
+            </div>
+            {showNewTag ? <form className="mb-2 flex gap-1" onSubmit={(event) => void submitTag(event)}>
+              <Input
+                autoFocus
+                className="h-8 px-2 text-xs"
+                value={newTagName}
+                onChange={(event) => setNewTagName(event.target.value)}
+                placeholder="标签名称"
+              />
+              <Button size="icon" className="h-8 w-8" type="submit" aria-label="创建标签"><Check size={14} /></Button>
+            </form> : null}
+            <div className="space-y-0.5">
+              {tags.map((tagItem) => {
+                const id = tagItem.meta.id;
+                const count = activeNotes.filter((note) => noteTagIds.get(note.meta.id)?.has(id)).length;
+                return <button
+                  key={id}
+                  onClick={() => void changeScope(`tag:${id}`)}
+                  className={cn(
+                    "flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground",
+                    scope === `tag:${id}` && "bg-accent font-medium text-accent-foreground",
+                  )}
+                >
+                  <Tag size={14} />
+                  <span className="flex-1 truncate text-left">{text(tagItem, "name", "未命名")}</span>
+                  <span className="text-[10px]">{count}</span>
+                </button>;
+              })}
+              {!tags.length && !showNewTag ? <div className="px-2 py-1 text-[11px] text-muted-foreground">还没有标签</div> : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+          <div className="min-w-0 truncate text-xs font-medium">{activeScopeLabel}</div>
+          <span className="shrink-0 text-[11px] text-muted-foreground">{visibleNotes.length} 篇</span>
+        </div>
+        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-2">
+          {visibleNotes.length ? visibleNotes.map((note) => <button
+            key={note.meta.id}
+            onClick={() => void selectNote(note.meta.id)}
+            className={cn(
+              "mb-1 w-full rounded-md px-3 py-2.5 text-left transition-colors",
+              selectedId === note.meta.id ? "bg-accent" : "hover:bg-muted",
+            )}
+          >
             <div className="flex items-center gap-2">
               <div className="min-w-0 flex-1 truncate text-sm font-medium">{text(note, "title", "无标题")}</div>
               {note.isFavorite === true ? <Star size={12} className="shrink-0 fill-current text-warning" /> : null}
             </div>
-            <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{text(note, "summary", markdownSummary(noteMarkdown(note)) || "空笔记")}</div>
+            <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+              {text(note, "summary", markdownSummary(noteMarkdown(note)) || "空笔记")}
+            </div>
             <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
               <span>{new Date(note.meta.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
               {text(note, "folderId") ? <span className="truncate">· {text(folderById.get(text(note, "folderId")), "name")}</span> : null}
             </div>
           </button>) : <EmptyState title={query ? "没有匹配的笔记" : "这里还没有笔记"} />}
         </div>
-      </section>
+      </aside>
 
       <main className={cn("min-w-0 bg-background p-3 sm:p-5", !mobileEditing && "hidden lg:block")}>
         {selected ? <>
           <NoteTabs notes={notes} openedIds={openedIds} activeId={selectedId} onSelect={(id) => void selectNote(id)} onClose={closeTab} />
           <div className="mb-3 flex items-center gap-2">
-            <Button className="lg:hidden" variant="ghost" size="icon" aria-label="返回笔记列表" onClick={() => setMobileEditing(false)}><ArrowLeft size={17} /></Button>
-            <Input className="h-auto min-w-0 flex-1 border-0 px-0 text-xl font-semibold shadow-none focus:ring-0" placeholder="无标题" value={title} disabled={selected.isArchived === true} onChange={(event) => { setTitle(event.target.value); setSaveState("dirty"); }} />
-            <span className={cn("hidden items-center gap-1 text-xs sm:flex", saveState === "error" ? "text-destructive" : "text-muted-foreground")}>{saveState === "saving" ? <Loader2 size={13} className="animate-spin" /> : saveState === "saved" ? <Check size={13} /> : null}{selected.isArchived === true ? "废纸篓" : saveLabel}</span>
+            <Button className="lg:hidden" variant="ghost" size="icon" aria-label="返回笔记列表" onClick={() => setMobileEditing(false)}>
+              <ArrowLeft size={17} />
+            </Button>
+            <Input
+              className="h-auto min-w-0 flex-1 border-0 px-0 text-xl font-semibold shadow-none focus:ring-0"
+              placeholder="无标题"
+              value={title}
+              disabled={selected.isArchived === true}
+              onChange={(event) => {
+                setTitle(event.target.value);
+                setSaveState("dirty");
+              }}
+            />
+            <span className="hidden shrink-0 text-[11px] text-muted-foreground md:inline">
+              {plainTextFromMarkdown(content).length} 字
+            </span>
+            <span className={cn(
+              "hidden shrink-0 items-center gap-1 text-xs sm:flex",
+              saveState === "error" ? "text-destructive" : "text-muted-foreground",
+            )}>
+              {saveState === "saving" ? <Loader2 size={13} className="animate-spin" /> : saveState === "saved" ? <Check size={13} /> : null}
+              {selected.isArchived === true ? "废纸篓" : saveLabel}
+            </span>
             {selected.isArchived === true ? <>
               <Button variant="outline" size="icon" aria-label="恢复笔记" onClick={() => void restoreSelected()}><RotateCcw size={15} /></Button>
               <Button variant="destructive" size="icon" aria-label="永久删除笔记" onClick={() => void permanentlyDeleteSelected()}><Trash2 size={15} /></Button>
             </> : <>
-              <Button variant="ghost" size="icon" aria-label={selected.isFavorite === true ? "取消收藏" : "收藏笔记"} onClick={() => void toggleFavorite()}><Star size={16} className={selected.isFavorite === true ? "fill-current text-warning" : ""} /></Button>
-              <Button variant="ghost" size="icon" aria-label="从笔记创建任务" title={editorSelection.trim() ? "从选中文本创建 Task" : "从当前笔记创建 Task"} onClick={() => void createTaskFromNote()}><CheckSquare2 size={16} /></Button>
+              <Button variant="ghost" size="icon" aria-label={selected.isFavorite === true ? "取消收藏" : "收藏笔记"} onClick={() => void toggleFavorite()}>
+                <Star size={16} className={selected.isFavorite === true ? "fill-current text-warning" : ""} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="从笔记创建任务"
+                title={editorSelection.trim() ? "从选中文本创建 Task" : "从当前笔记创建 Task"}
+                onClick={() => void createTaskFromNote()}
+              ><CheckSquare2 size={16} /></Button>
               <Button variant="ghost" size="icon" aria-label="版本历史" title="版本历史" onClick={() => setRevisionOpen(true)}><History size={15} /></Button>
               <Button variant="outline" size="icon" aria-label="保存笔记" onClick={() => void save().catch(() => undefined)}><Save size={15} /></Button>
               <Button variant="ghost" size="icon" aria-label="移到废纸篓" onClick={() => void archiveSelected()}><Trash2 size={15} /></Button>
             </>}
           </div>
 
-          {selected.isArchived !== true ? <div className="mb-3 flex flex-wrap items-center gap-2 border-y py-2">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Folder size={14} />文件夹</div>
-            <select className="h-8 rounded-md border bg-background px-2 text-xs" value={text(selected, "folderId")} onChange={(event) => void moveSelected(event.target.value)} aria-label="移动笔记到文件夹">
-              <option value="">Inbox</option>
-              {folderRows.map(({ folder, depth }) => <option key={folder.meta.id} value={folder.meta.id}>{`${"— ".repeat(depth)}${text(folder, "name")}`}</option>)}
-            </select>
-            <div className="ml-1 flex items-center gap-1.5 text-xs text-muted-foreground"><Tag size={14} />标签</div>
-            {[...selectedTagIds].map((tagId) => {
-              const tagItem = tagById.get(tagId);
-              if (!tagItem) return null;
-              return <span key={tagId} className="inline-flex h-7 items-center gap-1 rounded-md border bg-muted/40 px-2 text-xs">#{text(tagItem, "name")}<button aria-label={`移除标签 ${text(tagItem, "name")}`} onClick={() => void removeSelectedTag(tagId)} className="text-muted-foreground hover:text-foreground"><X size={12} /></button></span>;
-            })}
-            {tags.some((tagItem) => !selectedTagIds.has(tagItem.meta.id)) ? <select className="h-8 rounded-md border bg-background px-2 text-xs text-muted-foreground" value="" onChange={(event) => void addSelectedTag(event.target.value)} aria-label="添加标签">
-              <option value="">+ 添加标签</option>
-              {tags.filter((tagItem) => !selectedTagIds.has(tagItem.meta.id)).map((tagItem) => <option key={tagItem.meta.id} value={tagItem.meta.id}>#{text(tagItem, "name")}</option>)}
-            </select> : null}
-          </div> : null}
+          <div className={selected.isArchived === true ? "pointer-events-none opacity-80" : undefined}>
+            <MarkdownEditor
+              ref={editorRef}
+              key={selected.meta.id}
+              value={content}
+              cacheKey={`lifetrace:notes:draft:${session?.user.id ?? "anonymous"}:${selected.meta.id}`}
+              legacyCacheKey={`lifetrace:vditor:${session?.user.id ?? "anonymous"}:${selected.meta.id}`}
+              cloudSaveRevision={cloudSavedNoteId === selected.meta.id ? cloudSaveRevision : 0}
+              wikiSuggestions={activeNotes
+                .filter((note) => note.meta.id !== selected.meta.id)
+                .map((note) => ({ title: text(note, "title", "无标题"), aliases: noteAliases(note.contentJson) }))}
+              onSelectionChange={setEditorSelection}
+              onChange={(next) => {
+                if (selected.isArchived !== true) {
+                  setContent(next);
+                  setSaveState("dirty");
+                }
+              }}
+              onSave={() => {
+                if (selected.isArchived !== true) void save().catch(() => undefined);
+              }}
+            />
+          </div>
 
-          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_260px]">
-            <div className={selected.isArchived === true ? "pointer-events-none opacity-80" : undefined}>
-              <MarkdownEditor
-                key={selected.meta.id}
-                value={content}
-                cacheKey={`lifetrace:notes:draft:${session?.user.id ?? "anonymous"}:${selected.meta.id}`}
-                legacyCacheKey={`lifetrace:vditor:${session?.user.id ?? "anonymous"}:${selected.meta.id}`}
-                cloudSaveRevision={cloudSavedNoteId === selected.meta.id ? cloudSaveRevision : 0}
-                wikiSuggestions={activeNotes
-                  .filter((note) => note.meta.id !== selected.meta.id)
-                  .map((note) => ({ title: text(note, "title", "无标题"), aliases: noteAliases(note.contentJson) }))}
-                onSelectionChange={setEditorSelection}
-                onChange={(next) => { if (selected.isArchived !== true) { setContent(next); setSaveState("dirty"); } }}
-                onSave={() => { if (selected.isArchived !== true) void save().catch(() => undefined); }}
-              />
-            </div>
-            <div className="space-y-4">
-              <NotePropertiesPanel
-                note={selected}
-                title={title}
-                properties={properties}
-                tagNames={[...selectedTagIds].map((tagId) => text(tagById.get(tagId), "name")).filter(Boolean)}
-                favorite={(frontmatterFavorite ?? selected.isFavorite === true)}
-                disabled={selected.isArchived === true}
-                onChange={updateProperties}
-              />
-              <NotesKnowledgePanel note={selected} notes={activeNotes} relations={noteRelations} onOpenNote={(id) => void selectNote(id)} />
-              {selected.isArchived !== true ? <NoteAttachments noteId={selected.meta.id} onInsertMarkdown={insertMarkdown} /> : null}
-            </div>
+          <div className="mt-4 space-y-4 xl:hidden">
+            <NoteOutlinePanel markdown={content} onSelect={(heading) => editorRef.current?.focusLine(heading.line)} />
+            <NotePropertiesPanel
+              note={selected}
+              title={title}
+              properties={properties}
+              tagNames={[...selectedTagIds].map((tagId) => text(tagById.get(tagId), "name")).filter(Boolean)}
+              favorite={(frontmatterFavorite ?? selected.isFavorite === true)}
+              disabled={selected.isArchived === true}
+              wordCount={plainTextFromMarkdown(content).length}
+              folderId={text(selected, "folderId")}
+              folders={folderRows.map(({ folder, depth }) => ({ id: folder.meta.id, name: text(folder, "name", "未命名"), depth }))}
+              tags={tags.map((tagItem) => ({ id: tagItem.meta.id, name: text(tagItem, "name", "未命名"), selected: selectedTagIds.has(tagItem.meta.id) }))}
+              onMoveFolder={(folderId) => void moveSelected(folderId)}
+              onAddTag={(tagId) => void addSelectedTag(tagId)}
+              onRemoveTag={(tagId) => void removeSelectedTag(tagId)}
+              onChange={updateProperties}
+            />
+            <NotesKnowledgePanel note={selected} notes={activeNotes} relations={noteRelations} onOpenNote={(id) => void selectNote(id)} />
+            {selected.isArchived !== true ? <NoteAttachments noteId={selected.meta.id} onInsertMarkdown={insertMarkdown} /> : null}
           </div>
         </> : <EmptyState title="选择一篇笔记" />}
       </main>
+
+      <aside data-testid="notes-inspector" className="scrollbar-thin hidden min-w-0 border-l bg-card/30 p-3 xl:block xl:max-h-[calc(100vh-4rem)] xl:overflow-y-auto">
+        {selected ? <div className="space-y-4">
+          <NoteOutlinePanel markdown={content} onSelect={(heading) => editorRef.current?.focusLine(heading.line)} />
+          <NotePropertiesPanel
+            note={selected}
+            title={title}
+            properties={properties}
+            tagNames={[...selectedTagIds].map((tagId) => text(tagById.get(tagId), "name")).filter(Boolean)}
+            favorite={(frontmatterFavorite ?? selected.isFavorite === true)}
+            disabled={selected.isArchived === true}
+            wordCount={plainTextFromMarkdown(content).length}
+            folderId={text(selected, "folderId")}
+            folders={folderRows.map(({ folder, depth }) => ({ id: folder.meta.id, name: text(folder, "name", "未命名"), depth }))}
+            tags={tags.map((tagItem) => ({ id: tagItem.meta.id, name: text(tagItem, "name", "未命名"), selected: selectedTagIds.has(tagItem.meta.id) }))}
+            onMoveFolder={(folderId) => void moveSelected(folderId)}
+            onAddTag={(tagId) => void addSelectedTag(tagId)}
+            onRemoveTag={(tagId) => void removeSelectedTag(tagId)}
+            onChange={updateProperties}
+          />
+          <NotesKnowledgePanel note={selected} notes={activeNotes} relations={noteRelations} onOpenNote={(id) => void selectNote(id)} />
+          {selected.isArchived !== true ? <NoteAttachments noteId={selected.meta.id} onInsertMarkdown={insertMarkdown} /> : null}
+        </div> : null}
+      </aside>
     </div>
     <Dialog open={graphOpen} onOpenChange={setGraphOpen} title="Notes Graph" description="点击节点打开笔记。">
       <NotesGraphView notes={activeNotes} relations={noteRelations} onOpenNote={(id) => { setGraphOpen(false); void selectNote(id); }} />

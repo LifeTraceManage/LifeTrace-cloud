@@ -38,6 +38,42 @@ function noteMarkdownPush(pushes: PushBody[]) {
   return null;
 }
 
+
+test("notes workspace uses one left sidebar and a right outline/properties inspector", async ({ page }) => {
+  const pushes: PushBody[] = [];
+  await installMocks(page, pushes, "# Product note\n\n## Goals\n\nBody");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/app/notes");
+
+  const sidebar = page.getByTestId("notes-sidebar");
+  const inspector = page.getByTestId("notes-inspector");
+  await expect(sidebar).toBeVisible();
+  await expect(sidebar.getByRole("navigation", { name: "笔记导航" })).toBeVisible();
+  await expect(sidebar).toContainText("Markdown note");
+  await expect(inspector).toBeVisible();
+  await expect(inspector.getByTestId("note-outline")).toContainText("Product note");
+  await expect(inspector.getByTestId("note-outline")).toContainText("Goals");
+  await expect(inspector.getByTestId("note-properties")).toBeVisible();
+});
+
+test("outline and inline live preview update immediately from the local editor state", async ({ page }) => {
+  const pushes: PushBody[] = [];
+  await installMocks(page, pushes);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/app/notes");
+
+  const editorRoot = page.getByTestId("markdown-editor");
+  const editor = editorRoot.locator(".cm-content");
+  await expect(editorRoot).toHaveAttribute("data-live-preview", "true");
+
+  await editor.fill("# Live heading\n\n## Instant outline\n\n**Rendered** text");
+  const inspector = page.getByTestId("notes-inspector");
+  await expect(inspector.getByTestId("note-outline")).toContainText("Live heading");
+  await expect(inspector.getByTestId("note-outline")).toContainText("Instant outline");
+  await expect(editorRoot.locator(".cm-live-heading-1")).toContainText("Live heading");
+  await expect(editorRoot.locator(".cm-live-strong")).toContainText("Rendered");
+});
+
 test("CodeMirror edits Markdown and autosaves the note to LifeTrace Cloud", async ({ page }) => {
   const pushes: PushBody[] = [];
   await installMocks(page, pushes);
