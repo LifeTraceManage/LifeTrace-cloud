@@ -141,6 +141,25 @@ const editorTheme = EditorView.theme({
     color: "hsl(var(--primary))",
     fontWeight: "700",
   },
+  ".cm-live-strong": {
+    fontWeight: "700",
+  },
+  ".cm-live-strike": {
+    textDecoration: "line-through",
+    color: "hsl(var(--muted-foreground))",
+  },
+  ".cm-live-code": {
+    borderRadius: "4px",
+    backgroundColor: "hsl(var(--muted))",
+    padding: "1px 4px",
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+    fontSize: "0.92em",
+  },
+  ".cm-live-link": {
+    color: "hsl(var(--primary))",
+    textDecoration: "underline",
+    textUnderlineOffset: "2px",
+  },
   ".cm-tooltip": {
     border: "1px solid hsl(var(--border))",
     borderRadius: "8px",
@@ -175,6 +194,44 @@ class InlinePreviewWidget extends WidgetType {
   }
 }
 
+function addInlinePreview(ranges: any[], lineFrom: number, source: string) {
+  const patterns: Array<{
+    regex: RegExp;
+    className: string;
+    open: number;
+    close: number;
+  }> = [
+    { regex: /\*\*([^*\n]+)\*\*/g, className: "cm-live-strong", open: 2, close: 2 },
+    { regex: /__([^_\n]+)__/g, className: "cm-live-strong", open: 2, close: 2 },
+    { regex: /~~([^~\n]+)~~/g, className: "cm-live-strike", open: 2, close: 2 },
+    { regex: /`([^`\n]+)`/g, className: "cm-live-code", open: 1, close: 1 },
+  ];
+
+  for (const pattern of patterns) {
+    pattern.regex.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.regex.exec(source)) !== null) {
+      const from = lineFrom + match.index;
+      const contentFrom = from + pattern.open;
+      const contentTo = from + match[0].length - pattern.close;
+      ranges.push(Decoration.replace({}).range(from, contentFrom));
+      ranges.push(Decoration.mark({ class: pattern.className }).range(contentFrom, contentTo));
+      ranges.push(Decoration.replace({}).range(contentTo, from + match[0].length));
+    }
+  }
+
+  const linkRegex = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
+  let link: RegExpExecArray | null;
+  while ((link = linkRegex.exec(source)) !== null) {
+    const from = lineFrom + link.index;
+    const labelFrom = from + 1;
+    const labelTo = labelFrom + link[1].length;
+    ranges.push(Decoration.replace({}).range(from, labelFrom));
+    ranges.push(Decoration.mark({ class: "cm-live-link" }).range(labelFrom, labelTo));
+    ranges.push(Decoration.replace({}).range(labelTo, from + link[0].length));
+  }
+}
+
 function livePreviewDecorations(view: EditorView): DecorationSet {
   const ranges: any[] = [];
   const activeLine = view.state.doc.lineAt(view.state.selection.main.head).number;
@@ -187,6 +244,8 @@ function livePreviewDecorations(view: EditorView): DecorationSet {
       const task = source.match(/^(\s*)[-*+]\s+\[([ xX])\]\s+/);
       const bullet = task ? null : source.match(/^(\s*)[-*+]\s+/);
       const quote = source.match(/^(\s*)>\s?/);
+
+      if (line.number !== activeLine) addInlinePreview(ranges, line.from, source);
 
       if (heading) {
         const level = heading[2].length;
