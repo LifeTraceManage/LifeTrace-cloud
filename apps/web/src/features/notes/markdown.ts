@@ -62,3 +62,44 @@ export function appendMarkdownLink(markdown: string, value: string): string {
   const trimmed = markdown.replace(/\s+$/, "");
   return `${trimmed}${trimmed ? "\n\n" : ""}${value}\n`;
 }
+
+
+export interface MarkdownHeading {
+  level: number;
+  text: string;
+  line: number;
+}
+
+/**
+ * Build the document outline directly from the in-memory Markdown value.
+ * Fenced code blocks are ignored so headings inside examples never leak into
+ * the outline. The returned line number is 1-based and can be passed straight
+ * to the CodeMirror editor navigation handle.
+ */
+export function extractMarkdownHeadings(markdown: string): MarkdownHeading[] {
+  const headings: MarkdownHeading[] = [];
+  const lines = markdown.split(/\r?\n/);
+  let fenced = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^\s*```/.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) continue;
+
+    const match = line.match(/^\s*(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (!match) continue;
+
+    const label = plainTextFromMarkdown(match[2]).trim();
+    if (!label) continue;
+    headings.push({
+      level: match[1].length,
+      text: label,
+      line: index + 1,
+    });
+  }
+
+  return headings;
+}
