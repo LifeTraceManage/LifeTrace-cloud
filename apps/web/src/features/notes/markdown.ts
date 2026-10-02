@@ -83,7 +83,7 @@ export function extractMarkdownHeadings(markdown: string): MarkdownHeading[] {
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    if (/^\s*```/.test(line)) {
+    if (/^\s*(?:```|~~~)/.test(line)) {
       fenced = !fenced;
       continue;
     }
