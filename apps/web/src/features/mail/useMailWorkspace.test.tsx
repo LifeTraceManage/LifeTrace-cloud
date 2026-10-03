@@ -11,6 +11,7 @@ const apiMock = vi.hoisted(() => ({
   messages: vi.fn(),
   message: vi.fn(),
   markRead: vi.fn(),
+  markReadBulk: vi.fn(),
   eventsUrl: vi.fn(() => "ws://127.0.0.1/mail"),
 }));
 
@@ -32,6 +33,7 @@ vi.mock("./api", () => ({
     messages = apiMock.messages;
     message = apiMock.message;
     markRead = apiMock.markRead;
+    markReadBulk = apiMock.markReadBulk;
     eventsUrl = apiMock.eventsUrl;
   },
 }));
@@ -44,7 +46,9 @@ function Harness() {
     <span data-testid="selected-read-state">
       {workspace.selectedMessage ? (workspace.selectedMessage.isRead ? "read" : "unread") : "none"}
     </span>
+    <span data-testid="unread-count">{workspace.messages.filter((message) => !message.isRead).length}</span>
     <button type="button" onClick={() => workspace.openMessage("message-1")}>open</button>
+    <button type="button" onClick={() => void workspace.markAllRead(workspace.messages.filter((message) => !message.isRead).map((message) => message.id))}>bulk</button>
   </div>;
 }
 
@@ -87,6 +91,11 @@ describe("useMailWorkspace read state", () => {
       html: null,
     });
     apiMock.markRead.mockResolvedValue(undefined);
+    apiMock.markReadBulk.mockResolvedValue({
+      updatedCount: 0,
+      updatedMessageIds: [],
+      failedMessageIds: [],
+    });
   });
 
   it("does not consume unread state on automatic selection, then marks read when explicitly opened", async () => {
@@ -99,5 +108,50 @@ describe("useMailWorkspace read state", () => {
 
     await waitFor(() => expect(apiMock.markRead).toHaveBeenCalledWith("message-1", true));
     await waitFor(() => expect(screen.getByTestId("selected-read-state").textContent).toBe("read"));
+  });
+
+  it("marks unread messages in one bulk call and restores only failures", async () => {
+    apiMock.messages.mockResolvedValue({
+      items: [
+        {
+          id: "message-1",
+          accountId: "account-1",
+          mailboxId: "folder-1",
+          subject: "First unread",
+          preview: "Preview",
+          from: [{ email: "alice@example.com" }],
+          sentAt: "2026-10-03T00:00:00.000Z",
+          isRead: false,
+          isStarred: false,
+        },
+        {
+          id: "message-2",
+          accountId: "account-1",
+          mailboxId: "folder-1",
+          subject: "Second unread",
+          preview: "Preview",
+          from: [{ email: "bob@example.com" }],
+          sentAt: "2026-10-03T00:01:00.000Z",
+          isRead: false,
+          isStarred: false,
+        },
+      ],
+      hasMore: false,
+      nextOffset: 2,
+    });
+    apiMock.markReadBulk.mockResolvedValue({
+      updatedCount: 1,
+      updatedMessageIds: ["message-1"],
+      failedMessageIds: ["message-2"],
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByTestId("unread-count").textContent).toBe("2"));
+
+    fireEvent.click(screen.getByRole("button", { name: "bulk" }));
+
+    await waitFor(() => expect(apiMock.markReadBulk).toHaveBeenCalledTimes(1));
+    expect(apiMock.markReadBulk).toHaveBeenCalledWith(["message-1", "message-2"], true);
+    await waitFor(() => expect(screen.getByTestId("unread-count").textContent).toBe("1"));
   });
 });
