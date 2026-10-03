@@ -115,7 +115,7 @@ export function MailPage() {
   const {
     runtime, accounts, identities, drafts, messages, selectedId, selectedMessage,
     runtimeLoading, listLoading, detailLoading, error,
-    setSelectedId, refresh, send, markRead, setStarred, move,
+    setSelectedId, openMessage, refresh, send, markRead, setStarred, move,
     connectAccount, disconnectAccount, testAccount, syncAccount,
     createIdentity, updateIdentity, deleteIdentity,
     saveDraft, deleteDraft, sendDraft,
@@ -214,7 +214,7 @@ export function MailPage() {
   }
 
   function selectMessage(id: string) {
-    setSelectedId(id);
+    openMessage(id);
     setMobileDetail(true);
   }
 
