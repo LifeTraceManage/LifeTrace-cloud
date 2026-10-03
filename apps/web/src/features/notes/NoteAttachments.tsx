@@ -77,8 +77,8 @@ export function NoteAttachments({
     }
   }
 
-  return <section className="border-t pt-4">
-    <div className="mb-2 flex items-center justify-between">
+  return <section className="py-3" data-inspector-section="attachments">
+    <div className="mb-2 flex items-center justify-between px-1">
       <div className="flex items-center gap-2 text-xs font-semibold"><Paperclip size={14} />Attachments</div>
       <div className="flex items-center gap-2">
         <Badge>{items.length}</Badge>
@@ -99,9 +99,9 @@ export function NoteAttachments({
     </div>
     {loading ? <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground"><Loader2 size={13} className="animate-spin" />加载附件…</div> : null}
     {error ? <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">{error}</div> : null}
-    {!loading && !items.length ? <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">暂无附件</div> : null}
-    <div className="space-y-1">
-      {items.map((item) => <div key={item.id} className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-xs">
+    {!loading && !items.length ? <div className="px-1 py-2 text-xs text-muted-foreground">暂无附件</div> : null}
+    <div className="divide-y divide-border/60">
+      {items.map((item) => <div key={item.id} className="flex items-center gap-2 px-1 py-2 text-xs hover:bg-muted/40">
         <Paperclip size={13} className="shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1"><div className="truncate font-medium">{item.originalName}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{item.mimeType} · {sizeLabel(item.sizeBytes)}</div></div>
         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onInsertMarkdown(attachmentMarkdown(item))} aria-label="插入附件引用"><Plus size={13} /></Button>

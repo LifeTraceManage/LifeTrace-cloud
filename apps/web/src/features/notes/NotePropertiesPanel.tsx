@@ -74,12 +74,12 @@ export function NotePropertiesPanel({
   const selectedTags = tags.filter((item) => item.selected);
   const availableTags = tags.filter((item) => !item.selected);
 
-  return <section className="rounded-md border bg-card/35" data-testid="note-properties">
-    <div className="flex items-center gap-2 border-b px-3 py-2.5 text-xs font-semibold">
+  return <section className="py-3" data-testid="note-properties" data-inspector-section="properties">
+    <div className="flex items-center gap-2 px-1 py-1.5 text-xs font-semibold">
       <Braces size={14} />
       Properties
     </div>
-    <div className="space-y-3 p-3">
+    <div className="space-y-3 px-1 pt-2">
       <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-2 text-xs">
         <span className="text-muted-foreground">title</span>
         <span className="truncate font-medium">{title.trim() || "无标题"}</span>
