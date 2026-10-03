@@ -285,6 +285,28 @@ mod tests {
     }
 
     #[test]
+    fn desktop_travel_entities_have_read_and_write_scopes() {
+        let granted = allowed_scopes(AppId::DESKTOP);
+        assert!(granted.contains("travel:read"));
+        assert!(granted.contains("travel:write"));
+        for entity_type in [
+            "travel.trip",
+            "travel.place",
+            "travel.visit",
+            "travel.photo_link",
+        ] {
+            assert_eq!(
+                required_entity_scope(entity_type, false),
+                Some("travel:read")
+            );
+            assert_eq!(
+                required_entity_scope(entity_type, true),
+                Some("travel:write")
+            );
+        }
+    }
+
+    #[test]
     fn desktop_mail_scope_is_available() {
         let granted = allowed_scopes(AppId::DESKTOP);
         assert!(granted.contains("mail:read"));
