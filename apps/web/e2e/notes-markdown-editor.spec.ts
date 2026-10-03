@@ -110,6 +110,49 @@ test("all common Markdown constructs render inline while the outline updates imm
   await expect(editor).not.toContainText("[docs](https://example.com)");
 });
 
+test("Markdown editor follows LifeTrace dark theme tokens", async ({ page }) => {
+  const pushes: PushBody[] = [];
+  await installMocks(page, pushes, [
+    "# Dark note",
+    "",
+    "> quote",
+    "",
+    "| Name | Value |",
+    "| --- | --- |",
+    "| A | B |",
+  ].join("\n"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/app/notes");
+
+  const html = page.locator("html");
+  if (await html.getAttribute("data-theme") !== "dark") {
+    await page.getByRole("button", { name: "切换主题" }).click();
+  }
+  await expect(html).toHaveAttribute("data-theme", "dark");
+
+  const editorRoot = page.getByTestId("markdown-editor");
+  const themeState = await editorRoot.evaluate((node) => {
+    const content = node.querySelector(".cm-content");
+    const tableHead = node.querySelector(".cm-table-widget thead th");
+    const bodyStyle = getComputedStyle(document.body);
+    const rootStyle = getComputedStyle(node);
+    return {
+      bodyColor: bodyStyle.color,
+      contentColor: content ? getComputedStyle(content).color : "",
+      editorBackground: getComputedStyle(node).backgroundColor,
+      tableHeadBackground: tableHead ? getComputedStyle(tableHead).backgroundColor : "",
+      cdsTextPrimary: rootStyle.getPropertyValue("--cds-text-primary").trim(),
+      cdsLayerAccent: rootStyle.getPropertyValue("--cds-layer-accent-01").trim(),
+    };
+  });
+
+  expect(themeState.contentColor).toBe(themeState.bodyColor);
+  expect(themeState.cdsTextPrimary).toContain("var(--foreground)");
+  expect(themeState.cdsLayerAccent).toContain("var(--muted)");
+  expect(themeState.editorBackground).not.toBe("rgb(255, 255, 255)");
+  expect(themeState.tableHeadBackground).not.toBe("rgb(232, 232, 232)");
+});
+
 test("CodeMirror edits Markdown and autosaves the note to LifeTrace Cloud", async ({ page }) => {
   const pushes: PushBody[] = [];
   await installMocks(page, pushes);
