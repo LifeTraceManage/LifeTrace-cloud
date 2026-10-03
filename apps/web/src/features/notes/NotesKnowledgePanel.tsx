@@ -1,5 +1,5 @@
 import { Link2, Link2Off, Undo2 } from "lucide-react";
-import { Badge, EmptyState } from "../../components/ui";
+import { Badge } from "../../components/ui";
 import { text } from "../../lib/entities";
 import type { JsonEntity } from "../../services/core";
 import { extractWikiLinks } from "./markdown";
@@ -51,7 +51,7 @@ export function NotesKnowledgePanel({
         <div className="flex items-center gap-2 text-xs font-semibold"><Undo2 size={14} />Backlinks</div>
         <Badge>{backlinks.length}</Badge>
       </div>
-      {backlinks.length ? <div className="space-y-1">{backlinks.map((source) => <button key={source.meta.id} onClick={() => onOpenNote(source.meta.id)} className="flex w-full items-center gap-2 rounded px-1.5 py-1.5 text-left text-xs hover:bg-muted/60"><Undo2 size={12} className="shrink-0 text-primary" /><span className="truncate">{text(source, "title", "无标题")}</span></button>)}</div> : <EmptyState title="暂无反向链接" />}
+      {backlinks.length ? <div className="space-y-1">{backlinks.map((source) => <button key={source.meta.id} onClick={() => onOpenNote(source.meta.id)} className="flex w-full items-center gap-2 rounded px-1.5 py-1.5 text-left text-xs hover:bg-muted/60"><Undo2 size={12} className="shrink-0 text-primary" /><span className="truncate">{text(source, "title", "无标题")}</span></button>)}</div> : <div className="px-1 py-2 text-xs text-muted-foreground">暂无反向链接</div>}
     </section>
   </aside>;
 }
