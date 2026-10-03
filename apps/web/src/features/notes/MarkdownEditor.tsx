@@ -367,6 +367,26 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     data-testid="markdown-editor"
     data-live-preview="true"
     data-render-engine="full"
+    onMouseMoveCapture={(event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".cm-table-inserter")) return;
+      if (target.closest("[data-cell-from]")) return;
+
+      const wrap = target.closest<HTMLElement>("[data-tablev2-from]");
+      if (!wrap) return;
+
+      // live-markdown hides quick inserters as soon as the pointer leaves a
+      // table cell, even when it is merely crossing the gutter to reach the
+      // button rendered there. Preserve the current inserters while traversing
+      // that same table wrapper; the upstream mouseleave still hides them once
+      // the pointer exits the editor/table interaction area.
+      const hasVisibleInserter = Array.from(
+        wrap.querySelectorAll<HTMLElement>(".cm-table-inserter"),
+      ).some((button) => button.style.display !== "none");
+
+      if (hasVisibleInserter) event.stopPropagation();
+    }}
     onMouseDownCapture={(event) => {
       const target = event.target as Element;
       if (!target.closest(".cm-table-inserter")) return;
