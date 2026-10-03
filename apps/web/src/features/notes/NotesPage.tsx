@@ -676,12 +676,12 @@ export function NotesPage() {
     </>}
   >
     {notice ? <div className="mx-3 mt-3 flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2 text-xs sm:mx-5"><span>{notice}</span><button className="text-muted-foreground hover:text-foreground" onClick={() => setNotice("")}>关闭</button></div> : null}
-    <div className="grid min-h-[calc(100vh-6rem)] lg:min-h-[calc(100vh-4rem)] lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_300px]">
+    <div className="grid h-[calc(100dvh-6rem)] min-h-0 overflow-hidden lg:h-[calc(100dvh-4rem)] lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_300px]">
       <aside data-testid="notes-sidebar" className={cn(
-        "min-w-0 border-r bg-card/45",
-        mobileEditing ? "hidden lg:flex lg:flex-col" : "flex flex-col",
+        "scrollbar-thin min-h-0 min-w-0 overflow-y-auto border-r bg-card/45",
+        mobileEditing ? "hidden lg:block" : "block",
       )}>
-        <div className="border-b p-3">
+        <div className="sticky top-0 z-10 border-b bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/85">
           <div className="mb-2 flex items-center gap-2">
             <Button className="flex-1 justify-center" size="sm" onClick={() => void newNote()}>
               <Plus size={14} />新建笔记
@@ -701,7 +701,7 @@ export function NotesPage() {
           </div>
         </div>
 
-        <div className="scrollbar-thin max-h-[42vh] overflow-y-auto border-b p-2">
+        <div className="border-b p-2">
           <nav className="space-y-0.5" aria-label="笔记导航">
             {builtinViews.map(({ id, label, icon: Icon, count }) => <button
               key={id}
@@ -824,7 +824,7 @@ export function NotesPage() {
           <div className="min-w-0 truncate text-xs font-medium">{activeScopeLabel}</div>
           <span className="shrink-0 text-[11px] text-muted-foreground">{visibleNotes.length} 篇</span>
         </div>
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-2">
+        <div className="p-2">
           {visibleNotes.length ? visibleNotes.map((note) => <button
             key={note.meta.id}
             onClick={() => void selectNote(note.meta.id)}
@@ -848,7 +848,7 @@ export function NotesPage() {
         </div>
       </aside>
 
-      <main className={cn("min-w-0 bg-background p-3 sm:p-5", !mobileEditing && "hidden lg:block")}>
+      <main data-testid="notes-editor-column" className={cn("scrollbar-thin min-h-0 min-w-0 overflow-y-auto bg-background p-3 sm:p-5", !mobileEditing && "hidden lg:block")}>
         {selected ? <>
           <NoteTabs notes={notes} openedIds={openedIds} activeId={selectedId} onSelect={(id) => void selectNote(id)} onClose={closeTab} />
           <div className="mb-3 flex items-center gap-2">
@@ -919,7 +919,7 @@ export function NotesPage() {
             />
           </div>
 
-          <div className="mt-4 space-y-4 xl:hidden">
+          <div className="mt-4 divide-y border-t xl:hidden">
             <NoteOutlinePanel markdown={content} onSelect={(heading) => editorRef.current?.focusLine(heading.line)} />
             <NotePropertiesPanel
               note={selected}
@@ -943,8 +943,8 @@ export function NotesPage() {
         </> : <EmptyState title="选择一篇笔记" />}
       </main>
 
-      <aside data-testid="notes-inspector" className="scrollbar-thin hidden min-w-0 border-l bg-card/30 p-3 xl:block xl:max-h-[calc(100vh-4rem)] xl:overflow-y-auto">
-        {selected ? <div className="space-y-4">
+      <aside data-testid="notes-inspector" className="scrollbar-thin hidden min-h-0 min-w-0 overflow-y-auto border-l bg-background px-4 xl:block">
+        {selected ? <div className="divide-y divide-border/70">
           <NoteOutlinePanel markdown={content} onSelect={(heading) => editorRef.current?.focusLine(heading.line)} />
           <NotePropertiesPanel
             note={selected}
