@@ -100,8 +100,16 @@ test("all common Markdown constructs render inline while the outline updates imm
   await expect(editorRoot.locator(".cm-task-checkbox")).toBeVisible();
   await expect(editorRoot.locator(".cm-ordered-marker")).toContainText("1.");
   await expect(editorRoot.locator(".cm-blockquote")).toContainText("quoted text");
-  await expect(editorRoot.locator(".cm-table-widget")).toContainText("Name");
-  await expect(editorRoot.locator(".cm-table-widget")).toContainText("Value");
+  const table = editorRoot.locator(".cm-table-widget");
+  await expect(table).toContainText("Name");
+  await expect(table).toContainText("Value");
+
+  await table.locator("tbody td").first().hover();
+  const rowInserter = editorRoot.locator(".cm-table-inserter--row");
+  await expect(rowInserter).toBeVisible();
+  await rowInserter.click();
+  await expect(table.locator("tbody tr")).toHaveCount(2);
+
   await expect(editorRoot.locator(".cm-image-widget")).toHaveAttribute("alt", "sample");
   await expect(editorRoot.locator(".cm-hr-widget")).toBeVisible();
 
