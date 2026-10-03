@@ -138,6 +138,26 @@
     background: hsl(var(--background));
     color: hsl(var(--foreground));
   }
+
+  /*
+   * Table quick-insert controls live inside an atomic CodeMirror widget.
+   * Keep them above selection/decorations and make the SVG transparent to
+   * pointer hit-testing so the actual button remains the event target.
+   */
+  .lifetrace-markdown-theme .cm-table-wrap {
+    overflow: visible;
+  }
+
+  .lifetrace-markdown-theme .cm-table-inserter {
+    z-index: 20;
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+
+  .lifetrace-markdown-theme .cm-table-inserter > svg,
+  .lifetrace-markdown-theme .cm-table-inserter > svg * {
+    pointer-events: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
