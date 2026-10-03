@@ -363,10 +363,19 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
   );
 
   return <div
-    className="min-w-0 overflow-hidden rounded-md border bg-background [&_.cm-editor-host]:min-h-[520px] [&_.cm-editor-host]:bg-background [&_.cm-editor-host__scroll]:min-h-[520px]"
+    className="lifetrace-markdown-theme min-w-0 overflow-hidden rounded-md border bg-background text-foreground [&_.cm-editor-host]:min-h-[520px] [&_.cm-editor-host]:bg-background [&_.cm-editor-host__scroll]:min-h-[520px]"
     data-testid="markdown-editor"
     data-live-preview="true"
     data-render-engine="full"
+    onMouseDownCapture={(event) => {
+      const target = event.target as Element;
+      if (!target.closest(".cm-table-inserter")) return;
+      // The inserter's click listener belongs to live-markdown. Only keep
+      // CodeMirror's selection/focus machinery from consuming the preceding
+      // mouse-down and rebuilding the widget before click can fire.
+      event.preventDefault();
+      event.stopPropagation();
+    }}
   >
     <CodeMirrorMarkdownEditor
       value={editorValue}

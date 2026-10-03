@@ -76,17 +76,6 @@ const fn server_managed(entity_type: &'static str) -> EntityDescriptor {
     }
 }
 
-const fn shared_catalog(entity_type: &'static str) -> EntityDescriptor {
-    EntityDescriptor {
-        entity_type,
-        schema_version: 1,
-        ownership: EntityOwnership::SharedCatalog,
-        sync_mode: SyncMode::ServerToClient,
-        conflict_mode: ConflictMode::ServerAuthoritative,
-        contains_file_references: false,
-    }
-}
-
 /// Complete static registry. Finance entities introduced by the Android
 /// bookkeeping client deliberately use the same generic LifeTrace sync store;
 /// registering them here is enough for push/pull/snapshot persistence and

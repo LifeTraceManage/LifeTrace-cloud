@@ -43,7 +43,7 @@ test("notes workspace uses one left sidebar and a right outline/properties inspe
   const pushes: PushBody[] = [];
   await installMocks(page, pushes, "# Product note\n\n## Goals\n\nBody");
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/app/notes");
+  await page.goto("/notes");
 
   const sidebar = page.getByTestId("notes-sidebar");
   const inspector = page.getByTestId("notes-inspector");
@@ -66,7 +66,7 @@ test("all common Markdown constructs render inline while the outline updates imm
   const pushes: PushBody[] = [];
   await installMocks(page, pushes);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/app/notes");
+  await page.goto("/notes");
 
   const editorRoot = page.getByTestId("markdown-editor");
   const editor = editorRoot.locator(".cm-content");
@@ -100,8 +100,16 @@ test("all common Markdown constructs render inline while the outline updates imm
   await expect(editorRoot.locator(".cm-task-checkbox")).toBeVisible();
   await expect(editorRoot.locator(".cm-ordered-marker")).toContainText("1.");
   await expect(editorRoot.locator(".cm-blockquote")).toContainText("quoted text");
-  await expect(editorRoot.locator(".cm-table-widget")).toContainText("Name");
-  await expect(editorRoot.locator(".cm-table-widget")).toContainText("Value");
+  const table = editorRoot.locator(".cm-table-widget");
+  await expect(table).toContainText("Name");
+  await expect(table).toContainText("Value");
+
+  await table.locator("tbody td").first().hover();
+  const rowInserter = editorRoot.locator(".cm-table-inserter--row");
+  await expect(rowInserter).toBeVisible();
+  await rowInserter.click();
+  await expect(table.locator("tbody tr")).toHaveCount(2);
+
   await expect(editorRoot.locator(".cm-image-widget")).toHaveAttribute("alt", "sample");
   await expect(editorRoot.locator(".cm-hr-widget")).toBeVisible();
 
@@ -110,10 +118,55 @@ test("all common Markdown constructs render inline while the outline updates imm
   await expect(editor).not.toContainText("[docs](https://example.com)");
 });
 
+test("Markdown editor follows LifeTrace dark theme tokens", async ({ page }) => {
+  const pushes: PushBody[] = [];
+  await installMocks(page, pushes, [
+    "# Dark note",
+    "",
+    "> quote",
+    "",
+    "| Name | Value |",
+    "| --- | --- |",
+    "| A | B |",
+  ].join("\n"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.context().addCookies([{
+    name: "lifetrace_theme",
+    value: "dark",
+    url: "http://127.0.0.1:4173",
+  }]);
+  await page.goto("/notes");
+
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("data-theme", "dark");
+
+  const editorRoot = page.getByTestId("markdown-editor");
+  const themeState = await editorRoot.evaluate((node) => {
+    const content = node.querySelector(".cm-content");
+    const tableHead = node.querySelector(".cm-table-widget thead th");
+    const bodyStyle = getComputedStyle(document.body);
+    const rootStyle = getComputedStyle(node);
+    return {
+      bodyColor: bodyStyle.color,
+      contentColor: content ? getComputedStyle(content).color : "",
+      editorBackground: getComputedStyle(node).backgroundColor,
+      tableHeadBackground: tableHead ? getComputedStyle(tableHead).backgroundColor : "",
+      cdsTextPrimary: rootStyle.getPropertyValue("--cds-text-primary").trim(),
+      cdsLayerAccent: rootStyle.getPropertyValue("--cds-layer-accent-01").trim(),
+    };
+  });
+
+  expect(themeState.contentColor).toBe(themeState.bodyColor);
+  expect(themeState.cdsTextPrimary).toContain("var(--foreground)");
+  expect(themeState.cdsLayerAccent).toContain("var(--muted)");
+  expect(themeState.editorBackground).not.toBe("rgb(255, 255, 255)");
+  expect(themeState.tableHeadBackground).not.toBe("rgb(232, 232, 232)");
+});
+
 test("CodeMirror edits Markdown and autosaves the note to LifeTrace Cloud", async ({ page }) => {
   const pushes: PushBody[] = [];
   await installMocks(page, pushes);
-  await page.goto("/app/notes");
+  await page.goto("/notes");
 
   const editor = page.getByTestId("markdown-editor").locator(".cm-content");
   await expect(editor).toBeVisible();
@@ -136,7 +189,7 @@ test("dirty CodeMirror localStorage draft is restored and promoted to Cloud auto
   }, { key: markdownCacheKey });
 
   await installMocks(page, pushes, "# Cloud version\n\nOlder cloud text");
-  await page.goto("/app/notes");
+  await page.goto("/notes");
 
   const editor = page.getByTestId("markdown-editor").locator(".cm-content");
   await expect(editor).toContainText("Recovered draft");
@@ -152,7 +205,7 @@ test("dirty legacy Vditor draft migrates into CodeMirror and Cloud autosave", as
   }, { key: legacyCacheKey });
 
   await installMocks(page, pushes, "# Cloud version\n\nOlder cloud text");
-  await page.goto("/app/notes");
+  await page.goto("/notes");
 
   const editor = page.getByTestId("markdown-editor").locator(".cm-content");
   await expect(editor).toContainText("Legacy recovered draft");
