@@ -44,6 +44,10 @@ pub fn router() -> Router<AppState> {
             get(message_attachments),
         )
         .route(
+            "/api/v1/mail/messages/read-bulk",
+            axum::routing::post(set_read_bulk),
+        )
+        .route(
             "/api/v1/mail/messages/{id}/read",
             axum::routing::post(set_read),
         )
@@ -268,6 +272,50 @@ async fn message_attachments(
 #[serde(rename_all = "camelCase")]
 struct ReadInput {
     read: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BulkReadInput {
+    message_ids: Vec<Uuid>,
+    read: bool,
+}
+
+async fn set_read_bulk(
+    State(state): State<AppState>,
+    principal: AuthenticatedPrincipal,
+    Json(input): Json<BulkReadInput>,
+) -> Result<Json<Value>, ApiError> {
+    principal.require_scope("mail:write")?;
+    if input.message_ids.len() > 500 {
+        return Err(ApiError::new(
+            ErrorCode::InvalidRequest,
+            "too many mail messages in one read-state update",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let outcome = service(&state)
+        .set_messages_read(&principal.user_id, input.message_ids, input.read)
+        .await
+        .map_err(map_error)?;
+
+    for account_id in &outcome.updated_account_ids {
+        state.mail_realtime.publish_account_updated(
+            principal.user_id.as_str(),
+            *account_id,
+            outcome.updated_message_ids.len(),
+            "read_state_bulk",
+        );
+    }
+
+    Ok(Json(json!({
+        "ok": outcome.failed_message_ids.is_empty(),
+        "read": input.read,
+        "updatedCount": outcome.updated_message_ids.len(),
+        "updatedMessageIds": outcome.updated_message_ids,
+        "failedMessageIds": outcome.failed_message_ids
+    })))
 }
 
 async fn set_read(
