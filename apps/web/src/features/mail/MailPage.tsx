@@ -18,6 +18,7 @@ import { WorkspaceShell } from "../../layouts/WorkspaceShell";
 import { MailAccountSettings } from "./MailAccountSettings";
 import { MailComposer, type ComposeMode } from "./MailComposer";
 import { MailHtmlFrame } from "./MailHtmlFrame";
+import { MailMessageRow } from "./MailMessageRow";
 import { renderableMailHtml } from "./mailHtml";
 import { groupMessagesBySource, type MailSourceGroup } from "./mailSource";
 import type { MailAddress, MailDraft, MailMessageDetail } from "./types";
@@ -474,15 +475,12 @@ export function MailPage() {
                 <span className="shrink-0 text-[10px] font-normal text-muted-foreground">{new Date(source.latestMessage.sentAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
               </div>
               <div className="mt-1 line-clamp-1 text-xs font-normal leading-5 text-muted-foreground">{source.latestMessage.preview || "无预览"}</div>
-            </button>) : visibleMessages.map((message) => <button key={message.id} onClick={() => selectMessage(message.id)} className={cn("mb-1 w-full rounded-md px-3 py-3 text-left transition-colors hover:bg-muted", selectedId === message.id && "bg-accent", !message.isRead && "font-medium")}>
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-xs">{addressesText(message.from) || "未知发件人"}</span>
-                {message.isStarred ? <Star size={12} className="shrink-0 fill-current text-warning" /> : null}
-                <span className="shrink-0 text-[10px] font-normal text-muted-foreground">{new Date(message.sentAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-              </div>
-              <div className="mt-1 truncate text-sm">{message.subject || "(无主题)"}</div>
-              <div className="mt-1 line-clamp-2 text-xs font-normal leading-5 text-muted-foreground">{message.preview || "无预览"}</div>
-            </button>)}
+            </button>) : visibleMessages.map((message) => <MailMessageRow
+              key={message.id}
+              message={message}
+              selected={selectedId === message.id}
+              onSelect={() => selectMessage(message.id)}
+            />)}
           </>}
         </div>
       </section>
