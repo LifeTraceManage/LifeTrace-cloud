@@ -40,6 +40,17 @@ describe("MarkdownEditor table quick insert", () => {
       return button!;
     });
 
+    const tableWrap = container.querySelector<HTMLElement>("[data-tablev2-from]");
+    expect(tableWrap).not.toBeNull();
+
+    // Reproduce the real pointer path: the quick-insert button sits outside
+    // the table, so the mouse must cross the wrapper gutter before reaching it.
+    fireEvent.mouseMove(tableWrap!);
+    expect(rowInserter.style.display).toBe("flex");
+
+    fireEvent.mouseMove(rowInserter);
+    expect(rowInserter.style.display).toBe("flex");
+
     fireEvent.mouseDown(rowInserter);
     fireEvent.click(rowInserter);
 
