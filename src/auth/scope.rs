@@ -30,6 +30,8 @@ pub const ALL_SCOPES: &[&str] = &[
     "workouts:write",
     "execution:read",
     "execution:write",
+    "travel:read",
+    "travel:write",
     "assets:read",
     "assets:write",
     "links:read",
@@ -165,6 +167,8 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         "workouts"
     } else if entity_type.starts_with("execution.") {
         "execution"
+    } else if entity_type.starts_with("travel.") {
+        "travel"
     } else if entity_type.starts_with("asset.") {
         "assets"
     } else if entity_type.starts_with("mail.") {
@@ -191,6 +195,8 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         ("workouts", _) => "workouts:write",
         ("execution", "read") => "execution:read",
         ("execution", _) => "execution:write",
+        ("travel", "read") => "travel:read",
+        ("travel", _) => "travel:write",
         ("assets", "read") => "assets:read",
         ("assets", _) => "assets:write",
         ("links", "read") => "links:read",
@@ -276,6 +282,28 @@ mod tests {
             required_entity_scope("execution.memo", true),
             Some("execution:write")
         );
+    }
+
+    #[test]
+    fn desktop_travel_entities_have_read_and_write_scopes() {
+        let granted = allowed_scopes(AppId::DESKTOP);
+        assert!(granted.contains("travel:read"));
+        assert!(granted.contains("travel:write"));
+        for entity_type in [
+            "travel.trip",
+            "travel.place",
+            "travel.visit",
+            "travel.photo_link",
+        ] {
+            assert_eq!(
+                required_entity_scope(entity_type, false),
+                Some("travel:read")
+            );
+            assert_eq!(
+                required_entity_scope(entity_type, true),
+                Some("travel:write")
+            );
+        }
     }
 
     #[test]

@@ -124,6 +124,10 @@ pub const REGISTRY: &[EntityDescriptor] = &[
     user_owned(EntityType::EXECUTION_REMINDER, false),
     user_owned(EntityType::EXECUTION_COMPLETION_RESULT, false),
     user_owned(EntityType::EXECUTION_ENTITY_LINK, false),
+    user_owned(EntityType::TRAVEL_TRIP, false),
+    user_owned(EntityType::TRAVEL_PLACE, false),
+    user_owned(EntityType::TRAVEL_VISIT, false),
+    user_owned(EntityType::TRAVEL_PHOTO_LINK, false),
     user_owned(EntityType::FILE_METADATA, true),
     user_owned(EntityType::ENTITY_LINK, false),
     user_owned(EntityType::USER_PREFERENCE, false),
@@ -184,6 +188,10 @@ impl EntityType {
     pub const EXECUTION_REMINDER: &'static str = "execution.reminder";
     pub const EXECUTION_COMPLETION_RESULT: &'static str = "execution.completion_result";
     pub const EXECUTION_ENTITY_LINK: &'static str = "execution.entity_link";
+    pub const TRAVEL_TRIP: &'static str = "travel.trip";
+    pub const TRAVEL_PLACE: &'static str = "travel.place";
+    pub const TRAVEL_VISIT: &'static str = "travel.visit";
+    pub const TRAVEL_PHOTO_LINK: &'static str = "travel.photo_link";
     pub const FILE_METADATA: &'static str = "file.metadata";
     pub const ENTITY_LINK: &'static str = "entity.link";
     pub const USER_PREFERENCE: &'static str = "user.preference";
@@ -236,6 +244,10 @@ impl EntityType {
             Self::EXECUTION_REMINDER,
             Self::EXECUTION_COMPLETION_RESULT,
             Self::EXECUTION_ENTITY_LINK,
+            Self::TRAVEL_TRIP,
+            Self::TRAVEL_PLACE,
+            Self::TRAVEL_VISIT,
+            Self::TRAVEL_PHOTO_LINK,
             Self::FILE_METADATA,
             Self::ENTITY_LINK,
             Self::USER_PREFERENCE,
