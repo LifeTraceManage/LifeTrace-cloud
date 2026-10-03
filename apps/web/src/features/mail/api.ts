@@ -437,6 +437,17 @@ export class MailApi {
     });
   }
 
+  markReadBulk(messageIds: string[], isRead: boolean): Promise<{
+    updatedCount: number;
+    updatedMessageIds: string[];
+    failedMessageIds: string[];
+  }> {
+    return this.request("/api/v1/mail/messages/read-bulk", {
+      method: "POST",
+      body: JSON.stringify({ messageIds, read: isRead }),
+    });
+  }
+
   setStarred(messageId: string, starred: boolean): Promise<void> {
     return this.request(`/api/v1/mail/messages/${encodeURIComponent(messageId)}/star`, {
       method: "POST",
