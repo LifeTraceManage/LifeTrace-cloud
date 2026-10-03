@@ -44,6 +44,14 @@ jobs:
       - name: Verify dist
         run: test -s apps/web/dist/index.html
 
+      - name: Install Chromium for Notes browser regression
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Notes browser regression
+        working-directory: apps/web
+        run: npm run test:e2e -- e2e/notes-markdown-editor.spec.ts
+
   cloud:
     name: Cloud
     runs-on: ubuntu-latest
