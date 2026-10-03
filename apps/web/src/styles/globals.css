@@ -20,8 +20,8 @@
     --accent-foreground: 150 22% 26%;
     --destructive: 7 65% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 130 11% 88%;
-    --input: 130 11% 86%;
+    --border: 135 10% 78%;
+    --input: 135 10% 74%;
     --ring: 150 24% 36%;
     --success: 145 48% 38%;
     --warning: 36 72% 48%;
@@ -82,8 +82,8 @@
   .page-title { @apply text-[26px] font-semibold tracking-[-0.025em] text-foreground; }
   .page-description { @apply mt-1 max-w-3xl text-sm leading-6 text-muted-foreground; }
   .section-title { @apply text-base font-semibold tracking-[-0.01em]; }
-  .surface { @apply rounded-lg border bg-card text-card-foreground; }
-  .surface-muted { @apply rounded-lg border bg-muted/45; }
+  .surface { @apply rounded-lg border border-border bg-card text-card-foreground; }
+  .surface-muted { @apply rounded-lg border border-border bg-muted/55; }
   .metric-value { @apply text-2xl font-semibold tracking-[-0.03em] tabular-nums; }
   .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground; }
   .empty-state { @apply flex min-h-36 flex-col items-center justify-center rounded-lg border border-dashed px-6 py-8 text-center text-sm text-muted-foreground; }
