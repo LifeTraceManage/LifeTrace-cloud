@@ -54,6 +54,12 @@ test("notes workspace uses one left sidebar and a right outline/properties inspe
   await expect(inspector.getByTestId("note-outline")).toContainText("Product note");
   await expect(inspector.getByTestId("note-outline")).toContainText("Goals");
   await expect(inspector.getByTestId("note-properties")).toBeVisible();
+
+  const editorColumn = page.getByTestId("notes-editor-column");
+  await expect.poll(() => sidebar.evaluate((node) => getComputedStyle(node).overflowY)).toBe("auto");
+  await expect.poll(() => editorColumn.evaluate((node) => getComputedStyle(node).overflowY)).toBe("auto");
+  await expect.poll(() => inspector.evaluate((node) => getComputedStyle(node).overflowY)).toBe("auto");
+  await expect(inspector.locator("[data-inspector-section]")).toHaveCount(4);
 });
 
 test("all common Markdown constructs render inline while the outline updates immediately", async ({ page }) => {
