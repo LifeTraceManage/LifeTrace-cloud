@@ -88,6 +88,56 @@
   .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground; }
   .empty-state { @apply flex min-h-36 flex-col items-center justify-center rounded-lg border border-dashed px-6 py-8 text-center text-sm text-muted-foreground; }
   .scrollbar-thin { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+
+  /*
+   * @latentic/live-markdown uses Carbon-style --cds-* tokens internally.
+   * Bind those tokens to LifeTrace's theme variables so every rich Markdown
+   * surface follows data-theme="dark" instead of falling back to light colors.
+   */
+  .lifetrace-markdown-theme {
+    --cds-background: hsl(var(--background));
+    --cds-layer-01: hsl(var(--card));
+    --cds-layer-accent-01: hsl(var(--muted));
+    --cds-layer-accent-hover-01: hsl(var(--accent));
+    --cds-layer-hover-01: hsl(var(--accent));
+    --cds-text-primary: hsl(var(--foreground));
+    --cds-text-secondary: hsl(var(--muted-foreground));
+    --cds-text-error: hsl(var(--destructive));
+    --cds-icon-primary: hsl(var(--foreground));
+    --cds-icon-secondary: hsl(var(--muted-foreground));
+    --cds-link-primary: hsl(var(--primary));
+    --cds-border-subtle-01: hsl(var(--border));
+    --cds-border-subtle-02: hsl(var(--border));
+    --cds-border-interactive: hsl(var(--primary));
+    --cds-highlight: hsl(var(--accent));
+    --cds-focus: hsl(var(--ring));
+    --cds-support-success: hsl(var(--success));
+    --cds-support-error: hsl(var(--destructive));
+  }
+
+  .lifetrace-markdown-theme .cm-tooltip {
+    border-color: hsl(var(--border));
+    background: hsl(var(--popover));
+    color: hsl(var(--popover-foreground));
+  }
+
+  .lifetrace-markdown-theme .cm-tooltip-autocomplete > ul > li[aria-selected] {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+  }
+
+  .lifetrace-markdown-theme .cm-panels,
+  .lifetrace-markdown-theme .cm-search {
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+  }
+
+  .lifetrace-markdown-theme .cm-textfield,
+  .lifetrace-markdown-theme .cm-button {
+    border-color: hsl(var(--input));
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
