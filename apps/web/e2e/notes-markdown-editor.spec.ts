@@ -43,7 +43,7 @@ test("notes workspace uses one left sidebar and a right outline/properties inspe
   const pushes: PushBody[] = [];
   await installMocks(page, pushes, "# Product note\n\n## Goals\n\nBody");
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/app/notes");
+  await page.goto("/notes");
 
   const sidebar = page.getByTestId("notes-sidebar");
   const inspector = page.getByTestId("notes-inspector");
@@ -66,7 +66,7 @@ test("all common Markdown constructs render inline while the outline updates imm
   const pushes: PushBody[] = [];
   await installMocks(page, pushes);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/app/notes");
+  await page.goto("/notes");
 
   const editorRoot = page.getByTestId("markdown-editor");
   const editor = editorRoot.locator(".cm-content");
@@ -130,12 +130,14 @@ test("Markdown editor follows LifeTrace dark theme tokens", async ({ page }) => 
     "| A | B |",
   ].join("\n"));
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/app/notes");
+  await page.context().addCookies([{
+    name: "lifetrace_theme",
+    value: "dark",
+    url: "http://127.0.0.1:4173",
+  }]);
+  await page.goto("/notes");
 
   const html = page.locator("html");
-  if (await html.getAttribute("data-theme") !== "dark") {
-    await page.getByRole("button", { name: "切换主题" }).click();
-  }
   await expect(html).toHaveAttribute("data-theme", "dark");
 
   const editorRoot = page.getByTestId("markdown-editor");
@@ -164,7 +166,7 @@ test("Markdown editor follows LifeTrace dark theme tokens", async ({ page }) => 
 test("CodeMirror edits Markdown and autosaves the note to LifeTrace Cloud", async ({ page }) => {
   const pushes: PushBody[] = [];
   await installMocks(page, pushes);
-  await page.goto("/app/notes");
+  await page.goto("/notes");
 
   const editor = page.getByTestId("markdown-editor").locator(".cm-content");
   await expect(editor).toBeVisible();
@@ -187,7 +189,7 @@ test("dirty CodeMirror localStorage draft is restored and promoted to Cloud auto
   }, { key: markdownCacheKey });
 
   await installMocks(page, pushes, "# Cloud version\n\nOlder cloud text");
-  await page.goto("/app/notes");
+  await page.goto("/notes");
 
   const editor = page.getByTestId("markdown-editor").locator(".cm-content");
   await expect(editor).toContainText("Recovered draft");
@@ -203,7 +205,7 @@ test("dirty legacy Vditor draft migrates into CodeMirror and Cloud autosave", as
   }, { key: legacyCacheKey });
 
   await installMocks(page, pushes, "# Cloud version\n\nOlder cloud text");
-  await page.goto("/app/notes");
+  await page.goto("/notes");
 
   const editor = page.getByTestId("markdown-editor").locator(".cm-content");
   await expect(editor).toContainText("Legacy recovered draft");
