@@ -1,0 +1,56 @@
+// @vitest-environment jsdom
+
+import { fireEvent, render, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { describe, expect, it } from "vitest";
+
+import { MarkdownEditor } from "./MarkdownEditor";
+
+function TableHarness() {
+  const [value, setValue] = useState([
+    "| Name | Value |",
+    "| --- | --- |",
+    "| A | B |",
+  ].join("\n"));
+
+  return <MarkdownEditor
+    value={value}
+    cacheKey="test:markdown:table"
+    cloudSaveRevision={0}
+    onChange={setValue}
+  />;
+}
+
+describe("MarkdownEditor table quick insert", () => {
+  it("keeps the side plus button clickable and inserts a row", async () => {
+    const { container } = render(<TableHarness />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".cm-table-widget tbody td")).not.toBeNull();
+    });
+
+    const firstCell = container.querySelector(".cm-table-widget tbody td");
+    expect(firstCell).not.toBeNull();
+    fireEvent.mouseMove(firstCell!);
+
+    const rowInserter = await waitFor(() => {
+      const button = container.querySelector<HTMLButtonElement>(".cm-table-inserter--row");
+      expect(button).not.toBeNull();
+      expect(button?.style.display).toBe("flex");
+      return button!;
+    });
+
+    fireEvent.mouseDown(rowInserter);
+    fireEvent.click(rowInserter);
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".cm-table-widget tbody tr")).toHaveLength(2);
+    });
+  });
+
+  it("scopes the editor to the LifeTrace Markdown theme bridge", async () => {
+    const { container } = render(<TableHarness />);
+    await waitFor(() => expect(container.querySelector("[data-testid=markdown-editor]")).not.toBeNull());
+    expect(container.querySelector("[data-testid=markdown-editor]")?.classList.contains("lifetrace-markdown-theme")).toBe(true);
+  });
+});
