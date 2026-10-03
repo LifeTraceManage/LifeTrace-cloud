@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../../app/AppContext";
 import { MailApi } from "./api";
 import type {
@@ -40,6 +40,7 @@ export function useMailWorkspace(
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
+  const readOnOpenRef = useRef<string | null>(null);
 
   const loadBootstrap = useCallback(async () => {
     setRuntimeLoading(true);
@@ -191,16 +192,25 @@ export function useMailWorkspace(
     api.message(selectedId)
       .then((message) => {
         if (!active) return;
-        setSelectedMessage(message);
-        // Displaying a message in the reading pane means it has been read.
-        // Apply the state optimistically so the list marker disappears
-        // immediately while the IMAP \\Seen update is persisted remotely.
-        if (!message.isRead) void markRead(message.id, true);
+        const shouldMarkRead = readOnOpenRef.current === message.id && !message.isRead;
+        if (readOnOpenRef.current === message.id) readOnOpenRef.current = null;
+        setSelectedMessage(shouldMarkRead ? { ...message, isRead: true } : message);
+        if (shouldMarkRead) void markRead(message.id, true);
       })
       .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "无法读取邮件详情"); })
       .finally(() => { if (active) setDetailLoading(false); });
     return () => { active = false; };
   }, [api, markRead, selectedId, session?.user.id]);
+
+  const openMessage = useCallback((messageId: string) => {
+    if (selectedId === messageId && selectedMessage?.id === messageId) {
+      readOnOpenRef.current = null;
+      if (!selectedMessage.isRead) void markRead(messageId, true);
+      return;
+    }
+    readOnOpenRef.current = messageId;
+    setSelectedId(messageId);
+  }, [markRead, selectedId, selectedMessage]);
 
   const refresh = useCallback(async () => {
     await Promise.all([loadBootstrap(), loadMessages()]);
@@ -335,7 +345,7 @@ export function useMailWorkspace(
   return {
     runtime, accounts, identities, mailboxes, drafts, messages, selectedId, selectedMessage,
     runtimeLoading, listLoading, detailLoading, error,
-    setSelectedId, refresh, send, markRead, setStarred, move,
+    setSelectedId, openMessage, refresh, send, markRead, setStarred, move,
     connectAccount, disconnectAccount, testAccount, syncAccount,
     createIdentity, updateIdentity, deleteIdentity,
     saveDraft, deleteDraft, sendDraft,
