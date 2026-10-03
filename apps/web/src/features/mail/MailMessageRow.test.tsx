@@ -27,8 +27,8 @@ describe("MailMessageRow", () => {
     const row = screen.getByTestId("mail-message-message-1");
     const indicator = screen.getByTestId("mail-unread-indicator");
 
-    expect(row).toHaveAttribute("data-read-state", "unread");
-    expect(row).toHaveAttribute("aria-label", "未读邮件：Status update");
+    expect(row.getAttribute("data-read-state")).toBe("unread");
+    expect(row.getAttribute("aria-label")).toBe("未读邮件：Status update");
     expect(indicator.classList.contains("bg-primary")).toBe(true);
     expect(row.className).toContain("bg-primary/");
   });
@@ -36,7 +36,7 @@ describe("MailMessageRow", () => {
   it("removes the unread marker once the message is read", () => {
     render(<MailMessageRow message={message(true)} selected={false} onSelect={vi.fn()} />);
 
-    expect(screen.getByTestId("mail-message-message-1")).toHaveAttribute("data-read-state", "read");
+    expect(screen.getByTestId("mail-message-message-1").getAttribute("data-read-state")).toBe("read");
     expect(screen.getByTestId("mail-unread-indicator").classList.contains("bg-transparent")).toBe(true);
   });
 });
