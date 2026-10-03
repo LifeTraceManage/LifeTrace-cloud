@@ -260,14 +260,19 @@ pub async fn fetch_raw_message(
     .map_err(|_| MailProtocolError::Task)?
 }
 
-pub async fn set_flag(
+pub async fn set_flags(
     account: MailAccountSecret,
     secret: String,
     folder: String,
-    uid: u32,
+    mut uids: Vec<u32>,
     flag: &'static str,
     enabled: bool,
 ) -> Result<(), MailProtocolError> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    uids.sort_unstable();
+    uids.dedup();
     tokio::task::spawn_blocking(move || {
         let client = imap_client(&account)?;
         let mut session = client
@@ -282,14 +287,30 @@ pub async fn set_flag(
         } else {
             format!("-FLAGS.SILENT ({flag})")
         };
+        let uid_set = uids
+            .into_iter()
+            .map(|uid| uid.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
         session
-            .uid_store(uid.to_string(), operation)
+            .uid_store(uid_set, operation)
             .map_err(|_| MailProtocolError::State)?;
         let _ = session.logout();
         Ok(())
     })
     .await
     .map_err(|_| MailProtocolError::Task)?
+}
+
+pub async fn set_flag(
+    account: MailAccountSecret,
+    secret: String,
+    folder: String,
+    uid: u32,
+    flag: &'static str,
+    enabled: bool,
+) -> Result<(), MailProtocolError> {
+    set_flags(account, secret, folder, vec![uid], flag, enabled).await
 }
 
 pub async fn set_seen(
@@ -300,6 +321,16 @@ pub async fn set_seen(
     seen: bool,
 ) -> Result<(), MailProtocolError> {
     set_flag(account, secret, folder, uid, "\\Seen", seen).await
+}
+
+pub async fn set_seen_many(
+    account: MailAccountSecret,
+    secret: String,
+    folder: String,
+    uids: Vec<u32>,
+    seen: bool,
+) -> Result<(), MailProtocolError> {
+    set_flags(account, secret, folder, uids, "\\Seen", seen).await
 }
 
 pub async fn move_message(
