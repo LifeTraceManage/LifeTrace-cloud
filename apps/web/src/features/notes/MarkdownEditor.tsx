@@ -328,7 +328,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
 
   const renderToolbar = useCallback(({ view }: { view: EditorView }) => {
     editorRef.current = view;
-    return <div className="scrollbar-thin flex items-center gap-0.5 overflow-x-auto border-b bg-muted/20 px-2 py-1">
+    return <div className="scrollbar-thin flex items-center gap-0.5 overflow-x-auto border-y bg-transparent px-1 py-1">
       <ToolButton label="二级标题" onClick={() => prefixLines(view, "## ")}><Heading2 size={15} /></ToolButton>
       <ToolButton label="粗体" onClick={() => wrapSelection(view, "**")}><Bold size={15} /></ToolButton>
       <ToolButton label="斜体" onClick={() => wrapSelection(view, "_")}><Italic size={15} /></ToolButton>
@@ -363,10 +363,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
   );
 
   return <div
-    className="lifetrace-markdown-theme min-w-0 overflow-hidden rounded-md border bg-background text-foreground [&_.cm-editor-host]:min-h-[520px] [&_.cm-editor-host]:bg-background [&_.cm-editor-host__scroll]:min-h-[520px]"
+    className="lifetrace-markdown-theme min-w-0 overflow-visible bg-background text-foreground [&_.cm-editor-host]:min-h-[520px] [&_.cm-editor-host]:bg-background [&_.cm-editor-host__scroll]:min-h-[520px]"
     data-testid="markdown-editor"
     data-live-preview="true"
     data-render-engine="full"
+    data-editor-surface="flat"
     onMouseMoveCapture={(event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
