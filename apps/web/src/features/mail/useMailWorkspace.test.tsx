@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiMock = vi.hoisted(() => ({
   accounts: vi.fn(),
@@ -51,6 +51,8 @@ function Harness() {
     <button type="button" onClick={() => void workspace.markAllRead(workspace.messages.filter((message) => !message.isRead).map((message) => message.id))}>bulk</button>
   </div>;
 }
+
+afterEach(cleanup);
 
 describe("useMailWorkspace read state", () => {
   beforeEach(() => {
