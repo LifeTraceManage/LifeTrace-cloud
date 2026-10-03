@@ -59,9 +59,13 @@ describe("MarkdownEditor table quick insert", () => {
     });
   });
 
-  it("scopes the editor to the LifeTrace Markdown theme bridge", async () => {
+  it("uses the flat LifeTrace Markdown surface and theme bridge", async () => {
     const { container } = render(<TableHarness />);
     await waitFor(() => expect(container.querySelector("[data-testid=markdown-editor]")).not.toBeNull());
-    expect(container.querySelector("[data-testid=markdown-editor]")?.classList.contains("lifetrace-markdown-theme")).toBe(true);
+    const root = container.querySelector<HTMLElement>("[data-testid=markdown-editor]");
+    expect(root?.classList.contains("lifetrace-markdown-theme")).toBe(true);
+    expect(root?.dataset.editorSurface).toBe("flat");
+    expect(root?.classList.contains("rounded-md")).toBe(false);
+    expect(root?.classList.contains("border")).toBe(false);
   });
 });
