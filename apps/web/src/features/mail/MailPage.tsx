@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
-  Archive, ArrowLeft, CalendarPlus, CheckSquare2, Clock3, FileText, Inbox, Loader2,
+  Archive, ArrowLeft, CalendarPlus, CheckCheck, CheckSquare2, Clock3, FileText, Inbox, Loader2,
   Mail, MailOpen, NotebookPen, PenLine, RefreshCw, Reply, ReplyAll,
   RotateCcw, Search, Send, Settings, Star, Trash2,
 } from "lucide-react";
@@ -111,11 +111,12 @@ export function MailPage() {
   const [waitingFor, setWaitingFor] = useState("");
   const [followUpAt, setFollowUpAt] = useState("");
   const [integrationBusy, setIntegrationBusy] = useState(false);
+  const [markAllReadBusy, setMarkAllReadBusy] = useState(false);
 
   const {
     runtime, accounts, identities, drafts, messages, selectedId, selectedMessage,
     runtimeLoading, listLoading, detailLoading, error,
-    setSelectedId, openMessage, refresh, send, markRead, setStarred, move,
+    setSelectedId, openMessage, refresh, send, markRead, markAllRead, setStarred, move,
     connectAccount, disconnectAccount, testAccount, syncAccount,
     createIdentity, updateIdentity, deleteIdentity,
     saveDraft, deleteDraft, sendDraft,
@@ -146,6 +147,7 @@ export function MailPage() {
   const visibleMessages = sourceGroupingAvailable && listMode === "sources" && activeSource
     ? activeSource.messages
     : messages;
+  const currentUnreadMessages = visibleMessages.filter((message) => !message.isRead);
   const runtimeReady = runtime.status === "ready";
   const account = accounts.find((item) => item.id === accountId) ?? null;
   const messageBody = useMemo(() => plainBody(selectedMessage), [selectedMessage]);
@@ -216,6 +218,23 @@ export function MailPage() {
   function selectMessage(id: string) {
     openMessage(id);
     setMobileDetail(true);
+  }
+
+  async function markCurrentViewRead() {
+    if (!currentUnreadMessages.length || markAllReadBusy) return;
+    setMarkAllReadBusy(true);
+    try {
+      const result = await markAllRead(currentUnreadMessages.map((message) => message.id));
+      if (result.failedCount) {
+        setNotice(`已标记 ${result.updatedCount} 封，${result.failedCount} 封失败。`);
+      } else {
+        setNotice(`已将当前列表的 ${result.updatedCount} 封未读邮件全部标记为已读。`);
+      }
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "一键已读失败");
+    } finally {
+      setMarkAllReadBusy(false);
+    }
   }
 
   function openComposer(
@@ -421,7 +440,20 @@ export function MailPage() {
                   : runtimeDescription}
               </p>
             </div>
-            {listLoading ? <Loader2 size={15} className="animate-spin text-muted-foreground" /> : <Badge>{listCount}</Badge>}
+            <div className="flex shrink-0 items-center gap-1.5">
+              {!isDraftView && currentUnreadMessages.length ? <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[11px]"
+                disabled={markAllReadBusy}
+                onClick={() => void markCurrentViewRead()}
+                title="将当前列表中的未读邮件全部标记为已读"
+              >
+                {markAllReadBusy ? <Loader2 size={13} className="animate-spin" /> : <CheckCheck size={13} />}
+                全部已读
+              </Button> : null}
+              {listLoading ? <Loader2 size={15} className="animate-spin text-muted-foreground" /> : <Badge>{listCount}</Badge>}
+            </div>
           </div>
           <div className="relative mt-3">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
