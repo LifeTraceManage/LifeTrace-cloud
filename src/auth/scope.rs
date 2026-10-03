@@ -30,6 +30,8 @@ pub const ALL_SCOPES: &[&str] = &[
     "workouts:write",
     "execution:read",
     "execution:write",
+    "travel:read",
+    "travel:write",
     "assets:read",
     "assets:write",
     "links:read",
@@ -165,6 +167,8 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         "workouts"
     } else if entity_type.starts_with("execution.") {
         "execution"
+    } else if entity_type.starts_with("travel.") {
+        "travel"
     } else if entity_type.starts_with("asset.") {
         "assets"
     } else if entity_type.starts_with("mail.") {
@@ -191,6 +195,8 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         ("workouts", _) => "workouts:write",
         ("execution", "read") => "execution:read",
         ("execution", _) => "execution:write",
+        ("travel", "read") => "travel:read",
+        ("travel", _) => "travel:write",
         ("assets", "read") => "assets:read",
         ("assets", _) => "assets:write",
         ("links", "read") => "links:read",
