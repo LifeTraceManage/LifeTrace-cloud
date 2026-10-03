@@ -168,30 +168,6 @@ export function useMailWorkspace(
     };
   }, [api, loadMessages, session?.user.id]);
 
-  useEffect(() => {
-    let active = true;
-    if (!selectedId || !session?.user.id) {
-      setSelectedMessage(null);
-      return;
-    }
-    setDetailLoading(true);
-    api.message(selectedId)
-      .then((message) => { if (active) setSelectedMessage(message); })
-      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "无法读取邮件详情"); })
-      .finally(() => { if (active) setDetailLoading(false); });
-    return () => { active = false; };
-  }, [api, selectedId, session?.user.id]);
-
-  const refresh = useCallback(async () => {
-    await Promise.all([loadBootstrap(), loadMessages()]);
-  }, [loadBootstrap, loadMessages]);
-
-  const send = useCallback(async (input: ComposeMailInput) => {
-    await api.send(input);
-    await loadBootstrap();
-    await loadMessages();
-  }, [api, loadBootstrap, loadMessages]);
-
   const markRead = useCallback(async (messageId: string, isRead: boolean) => {
     setError("");
     setMessages((items) => items.map((item) => item.id === messageId ? { ...item, isRead } : item));
@@ -204,6 +180,37 @@ export function useMailWorkspace(
       setError(cause instanceof Error ? cause.message : "更新邮件已读状态失败");
     }
   }, [api]);
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedId || !session?.user.id) {
+      setSelectedMessage(null);
+      return;
+    }
+    setDetailLoading(true);
+    api.message(selectedId)
+      .then((message) => {
+        if (!active) return;
+        setSelectedMessage(message);
+        // Displaying a message in the reading pane means it has been read.
+        // Apply the state optimistically so the list marker disappears
+        // immediately while the IMAP \\Seen update is persisted remotely.
+        if (!message.isRead) void markRead(message.id, true);
+      })
+      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "无法读取邮件详情"); })
+      .finally(() => { if (active) setDetailLoading(false); });
+    return () => { active = false; };
+  }, [api, markRead, selectedId, session?.user.id]);
+
+  const refresh = useCallback(async () => {
+    await Promise.all([loadBootstrap(), loadMessages()]);
+  }, [loadBootstrap, loadMessages]);
+
+  const send = useCallback(async (input: ComposeMailInput) => {
+    await api.send(input);
+    await loadBootstrap();
+    await loadMessages();
+  }, [api, loadBootstrap, loadMessages]);
 
   const setStarred = useCallback(async (messageId: string, isStarred: boolean) => {
     setError("");
