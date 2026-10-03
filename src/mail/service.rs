@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -879,6 +879,80 @@ impl MailService {
         .await?;
         refresh_thread_pool(&self.pool, remote.thread_id).await?;
         Ok(remote.account_id)
+    }
+
+    pub async fn set_messages_read(
+        &self,
+        user_id: &UserId,
+        message_ids: Vec<Uuid>,
+        read: bool,
+    ) -> Result<BulkReadOutcome, MailServiceError> {
+        let user_id = Self::user_uuid(user_id)?;
+        let unique_ids = message_ids.into_iter().collect::<BTreeSet<_>>();
+        let mut groups = BTreeMap::<(Uuid, String), Vec<(Uuid, u32, Uuid)>>::new();
+        let mut failed_message_ids = Vec::new();
+
+        for message_id in unique_ids {
+            match self.remote_message_ref(user_id, message_id).await {
+                Ok(remote) => {
+                    groups
+                        .entry((remote.account_id, remote.folder_name))
+                        .or_default()
+                        .push((message_id, remote.uid as u32, remote.thread_id));
+                }
+                Err(MailServiceError::MessageNotFound) => failed_message_ids.push(message_id),
+                Err(error) => return Err(error),
+            }
+        }
+
+        let mut updated_message_ids = Vec::new();
+        let mut updated_account_ids = BTreeSet::new();
+        let mut updated_thread_ids = BTreeSet::new();
+
+        for ((account_id, folder_name), rows) in groups {
+            let message_ids = rows.iter().map(|(id, _, _)| *id).collect::<Vec<_>>();
+            let uids = rows.iter().map(|(_, uid, _)| *uid).collect::<Vec<_>>();
+            let remote_result = async {
+                let account = self.account_secret(user_id, account_id).await?;
+                let secret = self.decrypt_secret(&account)?;
+                protocol::set_seen_many(account, secret, folder_name, uids, read)
+                    .await
+                    .map_err(MailServiceError::Protocol)
+            }
+            .await;
+
+            if remote_result.is_err() {
+                failed_message_ids.extend(message_ids);
+                continue;
+            }
+
+            let mut transaction = self.pool.begin().await?;
+            for (message_id, _, _) in &rows {
+                sqlx::query(
+                    "UPDATE mail_messages SET is_read=$3,updated_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND id=$2",
+                )
+                .bind(user_id)
+                .bind(message_id)
+                .bind(read)
+                .execute(&mut *transaction)
+                .await?;
+            }
+            transaction.commit().await?;
+
+            updated_account_ids.insert(account_id);
+            updated_message_ids.extend(message_ids);
+            updated_thread_ids.extend(rows.into_iter().map(|(_, _, thread_id)| thread_id));
+        }
+
+        for thread_id in updated_thread_ids {
+            refresh_thread_pool(&self.pool, thread_id).await?;
+        }
+
+        Ok(BulkReadOutcome {
+            updated_message_ids,
+            failed_message_ids,
+            updated_account_ids: updated_account_ids.into_iter().collect(),
+        })
     }
 
     pub async fn set_message_starred(
@@ -1789,6 +1863,13 @@ struct ResolvedAccount {
     smtp_host: String,
     smtp_port: u16,
     smtp_security: MailSecurity,
+}
+
+#[derive(Debug)]
+pub struct BulkReadOutcome {
+    pub updated_message_ids: Vec<Uuid>,
+    pub failed_message_ids: Vec<Uuid>,
+    pub updated_account_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
