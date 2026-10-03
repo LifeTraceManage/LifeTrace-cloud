@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MailMessageRow } from "./MailMessageRow";
 import type { MailMessageSummary } from "./types";
@@ -19,6 +19,8 @@ function message(isRead: boolean): MailMessageSummary {
     isStarred: false,
   };
 }
+
+afterEach(cleanup);
 
 describe("MailMessageRow", () => {
   it("shows an explicit unread marker and stronger unread styling", () => {
