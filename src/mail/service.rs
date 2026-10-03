@@ -863,7 +863,7 @@ impl MailService {
         user_id: &UserId,
         message_id: Uuid,
         read: bool,
-    ) -> Result<(), MailServiceError> {
+    ) -> Result<Uuid, MailServiceError> {
         let user_id = Self::user_uuid(user_id)?;
         let remote = self.remote_message_ref(user_id, message_id).await?;
         let account = self.account_secret(user_id, remote.account_id).await?;
@@ -878,7 +878,7 @@ impl MailService {
         .execute(&self.pool)
         .await?;
         refresh_thread_pool(&self.pool, remote.thread_id).await?;
-        Ok(())
+        Ok(remote.account_id)
     }
 
     pub async fn set_message_starred(

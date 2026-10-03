@@ -277,10 +277,16 @@ async fn set_read(
     Json(input): Json<ReadInput>,
 ) -> Result<Json<Value>, ApiError> {
     principal.require_scope("mail:write")?;
-    service(&state)
+    let account_id = service(&state)
         .set_message_read(&principal.user_id, id, input.read)
         .await
         .map_err(map_error)?;
+    state.mail_realtime.publish_account_updated(
+        principal.user_id.as_str(),
+        account_id,
+        0,
+        "read_state",
+    );
     Ok(Json(json!({ "ok": true, "read": input.read })))
 }
 
