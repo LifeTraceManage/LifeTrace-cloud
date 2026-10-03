@@ -12,13 +12,13 @@ export function NoteOutlinePanel({
 }) {
   const headings = useMemo(() => extractMarkdownHeadings(markdown), [markdown]);
 
-  return <section className="rounded-md border bg-card/35" data-testid="note-outline">
-    <div className="flex items-center gap-2 border-b px-3 py-2.5 text-xs font-semibold">
+  return <section className="py-3" data-testid="note-outline" data-inspector-section="outline">
+    <div className="flex items-center gap-2 px-1 py-1.5 text-xs font-semibold">
       <ListTree size={14} />
       大纲
       <span className="ml-auto text-[10px] font-normal text-muted-foreground">{headings.length}</span>
     </div>
-    <div className="scrollbar-thin max-h-[36vh] overflow-y-auto p-2">
+    <div className="p-1 pt-2">
       {headings.length ? <nav aria-label="笔记大纲" className="space-y-0.5">
         {headings.map((heading) => <button
           key={`${heading.line}:${heading.text}`}
