@@ -182,6 +182,48 @@ export function useMailWorkspace(
     }
   }, [api]);
 
+  const markAllRead = useCallback(async (messageIds: string[]) => {
+    const targets = Array.from(new Set(messageIds));
+    if (!targets.length) return { updatedCount: 0, failedCount: 0 };
+    const targetSet = new Set(targets);
+
+    setError("");
+    setMessages((items) => items.map((item) =>
+      targetSet.has(item.id) ? { ...item, isRead: true } : item
+    ));
+    setSelectedMessage((item) =>
+      item && targetSet.has(item.id) ? { ...item, isRead: true } : item
+    );
+
+    try {
+      const result = await api.markReadBulk(targets, true);
+      const failedSet = new Set(result.failedMessageIds);
+      if (failedSet.size) {
+        setMessages((items) => items.map((item) =>
+          failedSet.has(item.id) ? { ...item, isRead: false } : item
+        ));
+        setSelectedMessage((item) =>
+          item && failedSet.has(item.id) ? { ...item, isRead: false } : item
+        );
+        setError(`${failedSet.size} 封邮件未能标记为已读，请稍后重试`);
+      }
+      return {
+        updatedCount: result.updatedMessageIds.length,
+        failedCount: result.failedMessageIds.length,
+      };
+    } catch (cause) {
+      setMessages((items) => items.map((item) =>
+        targetSet.has(item.id) ? { ...item, isRead: false } : item
+      ));
+      setSelectedMessage((item) =>
+        item && targetSet.has(item.id) ? { ...item, isRead: false } : item
+      );
+      const message = cause instanceof Error ? cause.message : "批量更新邮件已读状态失败";
+      setError(message);
+      throw cause;
+    }
+  }, [api]);
+
   useEffect(() => {
     let active = true;
     if (!selectedId || !session?.user.id) {
@@ -345,7 +387,7 @@ export function useMailWorkspace(
   return {
     runtime, accounts, identities, mailboxes, drafts, messages, selectedId, selectedMessage,
     runtimeLoading, listLoading, detailLoading, error,
-    setSelectedId, openMessage, refresh, send, markRead, setStarred, move,
+    setSelectedId, openMessage, refresh, send, markRead, markAllRead, setStarred, move,
     connectAccount, disconnectAccount, testAccount, syncAccount,
     createIdentity, updateIdentity, deleteIdentity,
     saveDraft, deleteDraft, sendDraft,
