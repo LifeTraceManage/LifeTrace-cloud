@@ -400,7 +400,7 @@ mod tests {
             images: vec![ImageInput {
                 asset_id: "page_1".into(),
                 mime_type: "image/jpeg".into(),
-                base64: STANDARD.encode(&[0xff, 0xd8, 0xff, 0x00]),
+                base64: STANDARD.encode([0xff, 0xd8, 0xff, 0x00]),
             }],
         };
         let urls = validate_input(&input).unwrap();
