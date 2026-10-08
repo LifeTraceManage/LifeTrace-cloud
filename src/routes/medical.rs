@@ -144,18 +144,27 @@ fn validate_input(request: &ExtractRequest) -> Result<Vec<String>, ApiError> {
     for image in &request.images {
         if image.asset_id.is_empty()
             || image.asset_id.len() > 100
-            || !image.asset_id.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
+            || !image
+                .asset_id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
             || !seen.insert(image.asset_id.as_str())
         {
-            return Err(invalid("assetId must be unique and use only safe characters"));
+            return Err(invalid(
+                "assetId must be unique and use only safe characters",
+            ));
         }
-        if !matches!(image.mime_type.as_str(), "image/jpeg" | "image/png" | "image/webp") {
+        if !matches!(
+            image.mime_type.as_str(),
+            "image/jpeg" | "image/png" | "image/webp"
+        ) {
             return Err(invalid("only JPEG, PNG and WebP images are supported"));
         }
         if image.base64.len() > (MAX_IMAGE_BYTES * 4 / 3) + 8 {
             return Err(invalid("image exceeds 5 MiB"));
         }
-        let bytes = STANDARD.decode(image.base64.as_bytes())
+        let bytes = STANDARD
+            .decode(image.base64.as_bytes())
             .map_err(|_| invalid("invalid image base64"))?;
         if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
             return Err(invalid("image exceeds 5 MiB or is empty"));
@@ -163,7 +172,9 @@ fn validate_input(request: &ExtractRequest) -> Result<Vec<String>, ApiError> {
         let signature_ok = match image.mime_type.as_str() {
             "image/jpeg" => bytes.starts_with(&[0xff, 0xd8, 0xff]),
             "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
-            "image/webp" => bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP",
+            "image/webp" => {
+                bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP"
+            }
             _ => false,
         };
         if !signature_ok {
@@ -178,45 +189,74 @@ fn validate_input(request: &ExtractRequest) -> Result<Vec<String>, ApiError> {
     Ok(urls)
 }
 
-fn parse_draft(raw: &str, valid_ids: &std::collections::HashSet<&str>) -> Result<ExtractReply, ApiError> {
-    if raw.len() > MAX_RESPONSE_CHARS { return Err(invalid("model response too long")); }
+fn parse_draft(
+    raw: &str,
+    valid_ids: &std::collections::HashSet<&str>,
+) -> Result<ExtractReply, ApiError> {
+    if raw.len() > MAX_RESPONSE_CHARS {
+        return Err(invalid("model response too long"));
+    }
     let obj: Value = serde_json::from_str(raw.trim())
         .map_err(|_| invalid("vision model returned invalid JSON"))?;
-    let reports = obj.get("reports").cloned()
+    let reports = obj
+        .get("reports")
+        .cloned()
         .ok_or_else(|| invalid("vision model did not return reports"))?;
     let reports: Vec<ReportDraft> = serde_json::from_value(reports)
         .map_err(|_| invalid("vision model returned invalid report fields"))?;
     if reports.is_empty() || reports.len() > 16 {
-        return Err(invalid("vision model returned no reports or too many reports"));
+        return Err(invalid(
+            "vision model returned no reports or too many reports",
+        ));
     }
     for r in &reports {
-        if r.title.trim().is_empty() || r.title.len() > 200
-            || r.sections.len() > 100 || r.observations.len() > 500
+        if r.title.trim().is_empty()
+            || r.title.len() > 200
+            || r.sections.len() > 100
+            || r.observations.len() > 500
             || r.source_asset_ids.is_empty()
-            || !r.source_asset_ids.iter().all(|id| valid_ids.contains(id.as_str()))
+            || !r
+                .source_asset_ids
+                .iter()
+                .all(|id| valid_ids.contains(id.as_str()))
         {
             return Err(invalid("vision model returned invalid report metadata"));
         }
-        for date in [&r.exam_at, &r.collection_at, &r.issued_at].into_iter().flatten() {
-            let valid = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok();
-            if !valid { return Err(invalid("vision model returned invalid date")); }
-        }
-        if r.sections.iter().any(|s| !valid_ids.contains(s.source_asset_id.as_str())
-            || s.text_raw.len() > 30_000 || s.title_raw.len() > 200)
-            || r.observations.iter().any(|v| !valid_ids.contains(v.source_asset_id.as_str())
-                || v.name_raw.is_empty() || v.name_raw.len() > 200
-                || v.value_raw.len() > 200
-                || v.value_number.is_some_and(|n| !n.is_finite()))
+        for date in [&r.exam_at, &r.collection_at, &r.issued_at]
+            .into_iter()
+            .flatten()
         {
+            let valid = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok();
+            if !valid {
+                return Err(invalid("vision model returned invalid date"));
+            }
+        }
+        if r.sections.iter().any(|s| {
+            !valid_ids.contains(s.source_asset_id.as_str())
+                || s.text_raw.len() > 30_000
+                || s.title_raw.len() > 200
+        }) || r.observations.iter().any(|v| {
+            !valid_ids.contains(v.source_asset_id.as_str())
+                || v.name_raw.is_empty()
+                || v.name_raw.len() > 200
+                || v.value_raw.len() > 200
+                || v.value_number.is_some_and(|n| !n.is_finite())
+        }) {
             return Err(invalid("vision model returned invalid source evidence"));
         }
     }
-    let warnings: Vec<String> = serde_json::from_value(obj.get("groupingWarnings").cloned().unwrap_or(json!([])))
-        .map_err(|_| invalid("vision model returned invalid grouping warnings"))?;
+    let warnings: Vec<String> =
+        serde_json::from_value(obj.get("groupingWarnings").cloned().unwrap_or(json!([])))
+            .map_err(|_| invalid("vision model returned invalid grouping warnings"))?;
     if warnings.len() > 50 || warnings.iter().any(|s| s.len() > 500) {
         return Err(invalid("vision model returned too many warnings"));
     }
-    Ok(ExtractReply { schema_version: 1, reports, grouping_warnings: warnings, requires_confirmation: true })
+    Ok(ExtractReply {
+        schema_version: 1,
+        reports,
+        grouping_warnings: warnings,
+        requires_confirmation: true,
+    })
 }
 
 async fn extract(
@@ -226,19 +266,36 @@ async fn extract(
 ) -> Result<Json<ExtractReply>, ApiError> {
     principal.require_scope("files:write")?;
     let urls = validate_input(&input)?;
-    let key = state.config.model_api_key.as_deref()
-        .ok_or_else(|| ApiError::new(ErrorCode::InvalidRequest, "vision model is not configured", StatusCode::SERVICE_UNAVAILABLE))?;
+    let key = state.config.model_api_key.as_deref().ok_or_else(|| {
+        ApiError::new(
+            ErrorCode::InvalidRequest,
+            "vision model is not configured",
+            StatusCode::SERVICE_UNAVAILABLE,
+        )
+    })?;
     let base = state.config.model_base_url.trim_end_matches('/');
     if !base.starts_with("https://") {
-        return Err(ApiError::new(ErrorCode::InvalidRequest, "vision model endpoint must use HTTPS", StatusCode::SERVICE_UNAVAILABLE));
+        return Err(ApiError::new(
+            ErrorCode::InvalidRequest,
+            "vision model endpoint must use HTTPS",
+            StatusCode::SERVICE_UNAVAILABLE,
+        ));
     }
     // Strictly use an admin-configured endpoint. Never accept a model URL from the user.
     let endpoint = format!("{base}/chat/completions");
-    let allowed_ids = input.images.iter().map(|i| i.asset_id.as_str()).collect::<std::collections::HashSet<_>>();
-    let mut content = vec![json!({"type":"text","text":format!("{}\n合法 assetId: {}", EXTRACTION_PROMPT,
-        input.images.iter().map(|i| i.asset_id.as_str()).collect::<Vec<_>>().join(", "))})];
+    let allowed_ids = input
+        .images
+        .iter()
+        .map(|i| i.asset_id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let mut content = vec![
+        json!({"type":"text","text":format!("{}\n合法 assetId: {}", EXTRACTION_PROMPT,
+        input.images.iter().map(|i| i.asset_id.as_str()).collect::<Vec<_>>().join(", "))}),
+    ];
     for (source, url) in input.images.iter().zip(urls) {
-        content.push(json!({"type":"text","text":format!("以下图片的 assetId 为 {}", source.asset_id)}));
+        content.push(
+            json!({"type":"text","text":format!("以下图片的 assetId 为 {}", source.asset_id)}),
+        );
         content.push(json!({"type":"image_url","image_url":{"url":url}}));
     }
     let body = json!({
@@ -247,22 +304,61 @@ async fn extract(
         "stream": false,
         "messages": [{"role":"user","content":content}]
     });
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(90))
-        .build().map_err(|_| ApiError::new(ErrorCode::InvalidRequest, "vision client unavailable", StatusCode::BAD_GATEWAY))?;
-    let response = client.post(&endpoint).bearer_auth(key).json(&body).send().await
-        .map_err(|_| ApiError::new(ErrorCode::InvalidRequest, "vision provider request failed", StatusCode::BAD_GATEWAY))?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(90))
+        .build()
+        .map_err(|_| {
+            ApiError::new(
+                ErrorCode::InvalidRequest,
+                "vision client unavailable",
+                StatusCode::BAD_GATEWAY,
+            )
+        })?;
+    let response = client
+        .post(&endpoint)
+        .bearer_auth(key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                ErrorCode::InvalidRequest,
+                "vision provider request failed",
+                StatusCode::BAD_GATEWAY,
+            )
+        })?;
     if !response.status().is_success() {
         // Provider response might echo patient data; never log or expose its body.
-        return Err(ApiError::new(ErrorCode::InvalidRequest,
+        return Err(ApiError::new(
+            ErrorCode::InvalidRequest,
             "vision provider rejected request; verify model supports image input",
-            StatusCode::BAD_GATEWAY));
+            StatusCode::BAD_GATEWAY,
+        ));
     }
-    let reply: Value = response.json().await
-        .map_err(|_| ApiError::new(ErrorCode::InvalidRequest, "invalid vision provider response", StatusCode::BAD_GATEWAY))?;
-    let text = reply.pointer("/choices/0/message/content").and_then(Value::as_str)
-        .ok_or_else(|| ApiError::new(ErrorCode::InvalidRequest, "vision model returned no text", StatusCode::BAD_GATEWAY))?;
-    let draft = parse_draft(text, &allowed_ids)
-        .map_err(|_| ApiError::new(ErrorCode::InvalidRequest, "vision extraction needs manual review; invalid model response", StatusCode::BAD_GATEWAY))?;
+    let reply: Value = response.json().await.map_err(|_| {
+        ApiError::new(
+            ErrorCode::InvalidRequest,
+            "invalid vision provider response",
+            StatusCode::BAD_GATEWAY,
+        )
+    })?;
+    let text = reply
+        .pointer("/choices/0/message/content")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            ApiError::new(
+                ErrorCode::InvalidRequest,
+                "vision model returned no text",
+                StatusCode::BAD_GATEWAY,
+            )
+        })?;
+    let draft = parse_draft(text, &allowed_ids).map_err(|_| {
+        ApiError::new(
+            ErrorCode::InvalidRequest,
+            "vision extraction needs manual review; invalid model response",
+            StatusCode::BAD_GATEWAY,
+        )
+    })?;
     Ok(Json(draft))
 }
 
@@ -272,24 +368,41 @@ mod tests {
 
     #[test]
     fn rejects_non_image_and_duplicate_sources() {
-        let example = ImageInput { asset_id: "a".into(), mime_type: "image/png".into(),
-            base64: STANDARD.encode(b"\x89PNG\r\n\x1a\nrest") };
-        assert!(validate_input(&ExtractRequest { images: vec![example, ImageInput {
-            asset_id: "a".into(), mime_type: "image/png".into(),
-            base64: STANDARD.encode(b"\x89PNG\r\n\x1a\nrest")
-        }] }).is_err());
-        assert!(validate_input(&ExtractRequest { images: vec![ImageInput {
-            asset_id: "b".into(), mime_type: "text/plain".into(),
-            base64: STANDARD.encode(b"test")
-        }] }).is_err());
+        let example = ImageInput {
+            asset_id: "a".into(),
+            mime_type: "image/png".into(),
+            base64: STANDARD.encode(b"\x89PNG\r\n\x1a\nrest"),
+        };
+        assert!(validate_input(&ExtractRequest {
+            images: vec![
+                example,
+                ImageInput {
+                    asset_id: "a".into(),
+                    mime_type: "image/png".into(),
+                    base64: STANDARD.encode(b"\x89PNG\r\n\x1a\nrest")
+                }
+            ]
+        })
+        .is_err());
+        assert!(validate_input(&ExtractRequest {
+            images: vec![ImageInput {
+                asset_id: "b".into(),
+                mime_type: "text/plain".into(),
+                base64: STANDARD.encode(b"test")
+            }]
+        })
+        .is_err());
     }
 
     #[test]
     fn accepts_supported_image_and_preserves_data() {
-        let input = ExtractRequest { images: vec![ImageInput {
-            asset_id: "page_1".into(), mime_type: "image/jpeg".into(),
-            base64: STANDARD.encode(&[0xff, 0xd8, 0xff, 0x00])
-        }] };
+        let input = ExtractRequest {
+            images: vec![ImageInput {
+                asset_id: "page_1".into(),
+                mime_type: "image/jpeg".into(),
+                base64: STANDARD.encode(&[0xff, 0xd8, 0xff, 0x00]),
+            }],
+        };
         let urls = validate_input(&input).unwrap();
         assert!(urls[0].starts_with("data:image/jpeg;base64,"));
     }
@@ -300,7 +413,9 @@ mod tests {
         let raw = r#"{"reports":[{"title":"彩超","reportType":"ultrasound",
             "examAt":null,"sourceAssetIds":["two"],"sections":[],"observations":[]}]}"#;
         assert!(parse_draft(raw, &ids).is_err());
-        let raw = raw.replace(r#""two""#, r#""one""#).replace(r#""examAt":null"#, r#""examAt":"2026-17-72""#);
+        let raw = raw
+            .replace(r#""two""#, r#""one""#)
+            .replace(r#""examAt":null"#, r#""examAt":"2026-17-72""#);
         assert!(parse_draft(&raw, &ids).is_err());
     }
 
