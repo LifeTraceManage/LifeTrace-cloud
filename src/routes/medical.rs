@@ -39,6 +39,8 @@ const EXTRACTION_PROMPT: &str = r#"你是一个医疗检查报告的**数据转�
 #[serde(rename_all = "camelCase")]
 pub struct ExtractRequest {
     pub images: Vec<ImageInput>,
+    #[serde(default)]
+    pub instruction: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -232,11 +234,11 @@ fn parse_draft(
             }
         }
         if r.sections.iter().any(|s| {
-            !valid_ids.contains(s.source_asset_id.as_str())
+            !r.source_asset_ids.contains(&s.source_asset_id)
                 || s.text_raw.len() > 30_000
                 || s.title_raw.len() > 200
         }) || r.observations.iter().any(|v| {
-            !valid_ids.contains(v.source_asset_id.as_str())
+            !r.source_asset_ids.contains(&v.source_asset_id)
                 || v.name_raw.is_empty()
                 || v.name_raw.len() > 200
                 || v.value_raw.len() > 200
@@ -266,6 +268,9 @@ async fn extract(
 ) -> Result<Json<ExtractReply>, ApiError> {
     principal.require_scope("files:write")?;
     let urls = validate_input(&input)?;
+    if input.instruction.as_ref().is_some_and(|hint| hint.chars().count() > 1000) {
+        return Err(invalid("report description must not exceed 1000 characters"));
+    }
     let key = state.config.model_api_key.as_deref().ok_or_else(|| {
         ApiError::new(
             ErrorCode::InvalidRequest,
@@ -289,9 +294,14 @@ async fn extract(
         .map(|i| i.asset_id.as_str())
         .collect::<std::collections::HashSet<_>>();
     let mut content = vec![
-        json!({"type":"text","text":format!("{}\n合法 assetId: {}", EXTRACTION_PROMPT,
+        json!({"type":"text","text":format!("合法 assetId: {}",
         input.images.iter().map(|i| i.asset_id.as_str()).collect::<Vec<_>>().join(", "))}),
     ];
+    if let Some(instruction) = input.instruction.as_ref().filter(|s| !s.trim().is_empty()) {
+        content.push(json!({"type":"text","text":format!(
+            "用户提供的文件分组说明，仅作为可核验线索，仍以实际报告为准：{instruction}"
+        )}));
+    }
     for (source, url) in input.images.iter().zip(urls) {
         content.push(
             json!({"type":"text","text":format!("以下图片的 assetId 为 {}", source.asset_id)}),
@@ -302,7 +312,8 @@ async fn extract(
         "model": state.config.model_name,
         "temperature": 0.0,
         "stream": false,
-        "messages": [{"role":"user","content":content}]
+        "max_tokens": 8192,
+        "messages": [{"role":"system","content": EXTRACTION_PROMPT}, {"role":"user","content":content}]
     });
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(90))
@@ -374,6 +385,7 @@ mod tests {
             base64: STANDARD.encode(b"\x89PNG\r\n\x1a\nrest"),
         };
         assert!(validate_input(&ExtractRequest {
+            instruction: None,
             images: vec![
                 example,
                 ImageInput {
@@ -385,6 +397,7 @@ mod tests {
         })
         .is_err());
         assert!(validate_input(&ExtractRequest {
+            instruction: None,
             images: vec![ImageInput {
                 asset_id: "b".into(),
                 mime_type: "text/plain".into(),
@@ -397,6 +410,7 @@ mod tests {
     #[test]
     fn accepts_supported_image_and_preserves_data() {
         let input = ExtractRequest {
+            instruction: None,
             images: vec![ImageInput {
                 asset_id: "page_1".into(),
                 mime_type: "image/jpeg".into(),
