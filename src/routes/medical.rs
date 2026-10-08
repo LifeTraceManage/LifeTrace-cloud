@@ -216,8 +216,15 @@ fn parse_draft(
         covered_assets.extend(r.source_asset_ids.iter().map(String::as_str));
         if !matches!(
             r.report_type.as_str(),
-            "laboratory" | "ultrasound" | "ct" | "mri" | "xray" |
-                "ecg" | "pathology" | "endoscopy" | "other"
+            "laboratory"
+                | "ultrasound"
+                | "ct"
+                | "mri"
+                | "xray"
+                | "ecg"
+                | "pathology"
+                | "endoscopy"
+                | "other"
         ) {
             return Err(invalid("vision model returned unsupported report type"));
         }
@@ -257,7 +264,9 @@ fn parse_draft(
         }
     }
     if &covered_assets != valid_ids {
-        return Err(invalid("vision model omitted at least one uploaded report page"));
+        return Err(invalid(
+            "vision model omitted at least one uploaded report page",
+        ));
     }
     let warnings: Vec<String> =
         serde_json::from_value(obj.get("groupingWarnings").cloned().unwrap_or(json!([])))
