@@ -31,6 +31,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .merge(assistant::router())
         .merge(meta::router())
         .merge(files::router())
+        .merge(medical::router())
         .merge(photo::router())
         .merge(mail::router())
         .merge(privacy::router())
