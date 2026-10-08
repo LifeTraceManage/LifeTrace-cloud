@@ -384,7 +384,11 @@ async fn extract(
             StatusCode::BAD_GATEWAY,
         )
     })?;
-    if reply.pointer("/choices/0/finish_reason").and_then(Value::as_str) == Some("length") {
+    if reply
+        .pointer("/choices/0/finish_reason")
+        .and_then(Value::as_str)
+        == Some("length")
+    {
         return Err(ApiError::new(
             ErrorCode::InvalidRequest,
             "medical report extraction exceeded model output length; send fewer pages",
