@@ -268,8 +268,14 @@ async fn extract(
 ) -> Result<Json<ExtractReply>, ApiError> {
     principal.require_scope("files:write")?;
     let urls = validate_input(&input)?;
-    if input.instruction.as_ref().is_some_and(|hint| hint.chars().count() > 1000) {
-        return Err(invalid("report description must not exceed 1000 characters"));
+    if input
+        .instruction
+        .as_ref()
+        .is_some_and(|hint| hint.chars().count() > 1000)
+    {
+        return Err(invalid(
+            "report description must not exceed 1000 characters",
+        ));
     }
     let key = state.config.model_api_key.as_deref().ok_or_else(|| {
         ApiError::new(
@@ -293,10 +299,8 @@ async fn extract(
         .iter()
         .map(|i| i.asset_id.as_str())
         .collect::<std::collections::HashSet<_>>();
-    let mut content = vec![
-        json!({"type":"text","text":format!("合法 assetId: {}",
-        input.images.iter().map(|i| i.asset_id.as_str()).collect::<Vec<_>>().join(", "))}),
-    ];
+    let mut content = vec![json!({"type":"text","text":format!("合法 assetId: {}",
+        input.images.iter().map(|i| i.asset_id.as_str()).collect::<Vec<_>>().join(", "))})];
     if let Some(instruction) = input.instruction.as_ref().filter(|s| !s.trim().is_empty()) {
         content.push(json!({"type":"text","text":format!(
             "用户提供的文件分组说明，仅作为可核验线索，仍以实际报告为准：{instruction}"
