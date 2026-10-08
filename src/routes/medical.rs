@@ -327,19 +327,25 @@ async fn extract(
             "用户提供的文件分组说明，仅作为可核验线索，仍以实际报告为准：{instruction}"
         )}));
     }
+    let is_deepseek = state.config.model_provider.eq_ignore_ascii_case("deepseek")
+        || state.config.model_name == "deepseek-flash";
+    let image_detail = if is_deepseek { "original" } else { "high" };
     for (source, url) in input.images.iter().zip(urls) {
         content.push(
             json!({"type":"text","text":format!("以下图片的 assetId 为 {}", source.asset_id)}),
         );
-        content.push(json!({"type":"image_url","image_url":{"url":url}}));
+        content.push(json!({"type":"image_url","image_url":{"url":url,"detail":image_detail}}));
     }
-    let body = json!({
+    let mut body = json!({
         "model": state.config.model_name,
         "temperature": 0.0,
         "stream": false,
         "max_tokens": 8192,
         "messages": [{"role":"system","content": EXTRACTION_PROMPT}, {"role":"user","content":content}]
     });
+    if is_deepseek {
+        body["response_format"] = json!({"type":"json_object"});
+    }
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(90))
         .build()
@@ -378,6 +384,13 @@ async fn extract(
             StatusCode::BAD_GATEWAY,
         )
     })?;
+    if reply.pointer("/choices/0/finish_reason").and_then(Value::as_str) == Some("length") {
+        return Err(ApiError::new(
+            ErrorCode::InvalidRequest,
+            "medical report extraction exceeded model output length; send fewer pages",
+            StatusCode::BAD_GATEWAY,
+        ));
+    }
     let text = reply
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
