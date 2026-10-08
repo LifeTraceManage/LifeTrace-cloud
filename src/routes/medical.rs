@@ -211,7 +211,16 @@ fn parse_draft(
             "vision model returned no reports or too many reports",
         ));
     }
+    let mut covered_assets = std::collections::HashSet::new();
     for r in &reports {
+        covered_assets.extend(r.source_asset_ids.iter().map(String::as_str));
+        if !matches!(
+            r.report_type.as_str(),
+            "laboratory" | "ultrasound" | "ct" | "mri" | "xray" |
+                "ecg" | "pathology" | "endoscopy" | "other"
+        ) {
+            return Err(invalid("vision model returned unsupported report type"));
+        }
         if r.title.trim().is_empty()
             || r.title.len() > 200
             || r.sections.len() > 100
@@ -246,6 +255,9 @@ fn parse_draft(
         }) {
             return Err(invalid("vision model returned invalid source evidence"));
         }
+    }
+    if &covered_assets != valid_ids {
+        return Err(invalid("vision model omitted at least one uploaded report page"));
     }
     let warnings: Vec<String> =
         serde_json::from_value(obj.get("groupingWarnings").cloned().unwrap_or(json!([])))
@@ -435,6 +447,24 @@ mod tests {
             .replace(r#""two""#, r#""one""#)
             .replace(r#""examAt":null"#, r#""examAt":"2026-17-72""#);
         assert!(parse_draft(&raw, &ids).is_err());
+    }
+
+    #[test]
+    fn rejects_omitted_input_pages_and_wrong_report_source() {
+        let ids = ["one", "two"].into_iter().collect();
+        let incomplete = r#"{"reports":[{"title":"血检","reportType":"laboratory",
+            "sourceAssetIds":["one"],"sections":[],"observations":[]}]}"#;
+        assert!(parse_draft(incomplete, &ids).is_err());
+
+        let wrong_source = r#"{"reports":[{"title":"彩超","reportType":"ultrasound",
+            "sourceAssetIds":["one","two"],
+            "sections":[{"kind":"findings","titleRaw":"所见","textRaw":"甲状腺",
+                "sourceAssetId":"three","pageIndex":0}],"observations":[]}]}"#;
+        assert!(parse_draft(wrong_source, &ids).is_err());
+
+        let wrong_type = r#"{"reports":[{"title":"彩超","reportType":"hallucinated",
+            "sourceAssetIds":["one","two"],"sections":[],"observations":[]}]}"#;
+        assert!(parse_draft(wrong_type, &ids).is_err());
     }
 
     #[test]
