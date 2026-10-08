@@ -7,6 +7,7 @@ pub mod beecount;
 pub mod files;
 pub mod health;
 pub mod mail;
+pub mod medical;
 pub mod meta;
 pub mod photo;
 pub mod privacy;
