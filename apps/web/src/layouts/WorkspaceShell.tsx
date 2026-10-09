@@ -25,7 +25,6 @@ const coreLinks = [
 
 export function WorkspaceShell({
   title,
-  description,
   icon,
   action,
   children,
@@ -55,7 +54,6 @@ export function WorkspaceShell({
           <span className="text-primary">{icon}</span>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{title}</div>
-            {description ? <div className="hidden truncate text-[11px] text-muted-foreground md:block">{description}</div> : null}
           </div>
         </div>
 
