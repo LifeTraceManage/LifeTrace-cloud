@@ -406,7 +406,7 @@ export function MailPage() {
           <button onClick={() => { setAccountId(null); setSelectedSourceKey(null); setSelectedId(null); }} className={cn("mb-1 flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs text-muted-foreground hover:bg-muted", accountId === null && "bg-accent font-medium text-accent-foreground")}><Inbox size={14} /><span className="flex-1">所有邮箱</span></button>
           {accounts.map((item) => <button key={item.id} onClick={() => { setAccountId(item.id); setSelectedSourceKey(null); setSelectedId(null); }} className={cn("mb-1 flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-muted-foreground hover:bg-muted", accountId === item.id && "bg-accent font-medium text-accent-foreground")}>
             <span className={cn("h-2 w-2 shrink-0 rounded-full", item.status === "active" ? "bg-success" : item.status === "degraded" || item.status === "validating" ? "bg-warning" : "bg-muted-foreground")} />
-            <span className="min-w-0 flex-1"><span className="block truncate">{item.displayName || item.email}</span><span className="block truncate text-[10px] opacity-75">{item.email}</span></span>
+            <span className="min-w-0 flex-1"><span className="block truncate">{item.displayName || item.email}</span>{item.displayName && item.displayName !== item.email ? <span className="block truncate text-xs opacity-75">{item.email}</span> : null}</span>
           </button>)}
           {!accounts.length ? <div className="rounded-md border border-dashed px-3 py-3 text-xs leading-5 text-muted-foreground">尚未连接邮箱账号。</div> : null}
           <Button className="mt-2 w-full justify-start" variant="ghost" size="sm" onClick={() => setSettingsOpen(true)}><Settings size={15} />账号设置</Button>
