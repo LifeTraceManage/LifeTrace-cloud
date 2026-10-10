@@ -17,7 +17,7 @@ use crate::state::AppState;
 
 /// Assemble the public Cloud HTTP surface.
 ///
-pub fn router(state: AppState) -> Router<AppState> {
+pub fn router(_state: AppState) -> Router<AppState> {
     Router::<AppState>::new()
         .merge(health::router())
         .merge(auth::router())
