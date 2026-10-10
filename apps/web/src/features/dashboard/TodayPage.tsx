@@ -29,9 +29,6 @@ export function TodayPage() {
       + workouts.filter((item) => text(item, "localDate") === day).length,
   })), [days.join("|"), habitLogs, tasks, workouts]);
 
-  const month = today.slice(0, 7);
-  const monthTx = finance.filter((item) => text(item, "localDate").startsWith(month) && text(item, "status", "confirmed") === "confirmed");
-  const expenses = sum(monthTx.filter((item) => ["expense", "fee"].includes(text(item, "transactionType"))).map((item) => number(item, "amountCents")));
   const habitProgress = habits.length ? Math.round(todayHabitLogs.length / habits.length * 100) : 0;
   const latestReview = reviews.sort((a, b) => text(b, "reviewDate").localeCompare(text(a, "reviewDate")))[0];
 

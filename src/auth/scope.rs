@@ -196,7 +196,6 @@ pub fn require(scopes: &BTreeSet<String>, required: &str) -> Result<(), ApiError
 mod tests {
     use super::*;
 
-
     #[test]
     fn execute_android_has_only_required_product_scopes() {
         assert!(supported_app(AppId::EXECUTE_ANDROID));

@@ -55,7 +55,6 @@ pub struct Config {
     pub graceful_shutdown_seconds: u64,
     pub retention_entries: usize,
 
-
     pub file_object_storage_endpoint: Option<String>,
     pub file_object_storage_bucket: Option<String>,
     pub file_object_storage_region: String,
@@ -538,5 +537,4 @@ mod tests {
         };
         assert!(config.validate().unwrap_err().contains("HTTPS origin"));
     }
-
 }
