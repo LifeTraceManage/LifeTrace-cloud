@@ -165,9 +165,9 @@ async fn file_id_cannot_cross_user_boundary() {
                 .header("authorization", format!("Bearer {}", owner.access_token))
                 .body(Body::from(
                     json!({
-                        "domain": "finance_imports",
-                        "originalName": "statement.csv",
-                        "mimeType": "text/csv",
+                        "domain": "notes_attachments",
+                        "originalName": "notes.txt",
+                        "mimeType": "text/plain",
                         "sizeBytes": 128,
                         "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
                     })

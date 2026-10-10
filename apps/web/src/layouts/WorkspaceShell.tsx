@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Bot, ChevronDown, Dumbbell, HeartPulse, LayoutDashboard, Leaf, LogOut, Mail, Moon, NotebookPen, Settings, Sun, WalletCards } from "lucide-react";
+import { Bot, ChevronDown, Dumbbell, HeartPulse, LayoutDashboard, Leaf, LogOut, Mail, Moon, NotebookPen, Settings, Sun } from "lucide-react";
 import { useApp } from "../app/AppContext";
 import { Badge, Button, cn } from "../components/ui";
 import { AgentSidebar } from "../features/assistant/AgentSidebar";
@@ -14,7 +14,6 @@ const workspaceLinks = [
   { to: "/notes", label: "Notes", icon: NotebookPen },
   { to: "/mail", label: "Mail", icon: Mail },
   { to: "/execute/today", label: "Execute", icon: LayoutDashboard },
-  { to: "/finance", label: "Finance", icon: WalletCards },
 ] as const;
 
 const coreLinks = [

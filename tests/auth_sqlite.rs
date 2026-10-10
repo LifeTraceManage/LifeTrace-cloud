@@ -179,7 +179,7 @@ async fn registered_device_can_sync_without_duplicate_key_error() {
         },
         changes: vec![SyncChangeV1 {
             change_id: ChangeId::new("regression-change-1"),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
             entity_id: EntityId::new("regression-entity-1"),
             operation: ChangeOperation::new(ChangeOperation::DELETE),
             base_server_version: ServerVersion::zero(),
@@ -218,8 +218,8 @@ async fn app_policy_and_sync_scope_prevent_cross_domain_access() {
         .auth_service
         .register(
             register(
-                AppId::FINANCE_ANDROID,
-                vec![Scope::new("finance:read"), Scope::new("notes:write")],
+                AppId::EXECUTE_ANDROID,
+                vec![Scope::new("execution:read"), Scope::new("notes:write")],
             ),
             &context(),
         )
@@ -228,7 +228,7 @@ async fn app_policy_and_sync_scope_prevent_cross_domain_access() {
     assert!(tokens
         .scopes
         .iter()
-        .any(|scope| scope.as_str() == "finance:read"));
+        .any(|scope| scope.as_str() == "execution:read"));
     assert!(!tokens
         .scopes
         .iter()
@@ -240,7 +240,7 @@ async fn app_policy_and_sync_scope_prevent_cross_domain_access() {
         .authenticate(AuthCredential::Bearer(Some(&bearer)))
         .await
         .unwrap();
-    assert!(principal.require_scope("finance:read").is_ok());
+    assert!(principal.require_scope("execution:read").is_ok());
     assert!(principal.require_scope("notes:write").is_err());
 
     let response = app(state)
@@ -254,7 +254,7 @@ async fn app_policy_and_sync_scope_prevent_cross_domain_access() {
                     json!({
                         "requestId": "auth-scope-request",
                         "client": {
-                            "appId": AppId::FINANCE_ANDROID,
+                            "appId": AppId::EXECUTE_ANDROID,
                             "clientVersion": "0.2.1",
                             "platform": "android",
                             "protocolVersion": 1,

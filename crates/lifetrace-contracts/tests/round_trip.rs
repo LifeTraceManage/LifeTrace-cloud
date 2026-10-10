@@ -32,33 +32,12 @@ fn client() -> SyncClientInfo {
     }
 }
 
-fn transaction_payload() -> Transaction {
-    Transaction {
-        meta: meta("tx-1"),
-        transaction_type: TransactionType::new(TransactionType::EXPENSE),
-        amount_cents: 12525,
-        currency: CurrencyCode::cny(),
-        account_id: Some(EntityId::new("wechat-wallet")),
-        to_account_id: None,
-        category_id: Some(EntityId::new("cat-food")),
-        counterparty: Some("coffee shop".to_owned()),
-        merchant: None,
-        item: Some("latte".to_owned()),
-        note: None,
-        occurred_at: stamp(),
-        local_date: LocalDate::new("2026-08-04").unwrap(),
-        status: TransactionStatus::new(TransactionStatus::CONFIRMED),
-        source_type: "manual".to_owned(),
-        external_transaction_id: None,
-    }
-}
-
 fn change() -> SyncChangeV1 {
-    let payload = serde_json::to_value(transaction_payload()).unwrap();
+    let payload = serde_json::json!({"meta":{"id":"note-1"},"title":"test"});
     SyncChangeV1 {
         change_id: ChangeId::new("change-1"),
-        entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-        entity_id: EntityId::new("tx-1"),
+        entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+        entity_id: EntityId::new("note-1"),
         operation: ChangeOperation::new(ChangeOperation::UPSERT),
         base_server_version: ServerVersion::zero(),
         entity_schema_version: 1,
@@ -74,15 +53,14 @@ fn sync_change_v1_round_trips_with_camel_case() {
     let change = change();
     let json = serde_json::to_value(&change).unwrap();
     assert_eq!(json["changeId"], "change-1");
-    assert_eq!(json["entityType"], "finance.transaction");
+    assert_eq!(json["entityType"], "execution.task");
     assert_eq!(json["operation"], "upsert");
     assert_eq!(json["baseServerVersion"], "0");
     assert_eq!(json["entitySchemaVersion"], 1);
     assert!(json.get("atomicGroupId").unwrap().is_null());
     assert_eq!(json["dependencies"], serde_json::json!([]));
     let payload = &json["payload"];
-    assert_eq!(payload["amountCents"], 12525);
-    assert_eq!(payload["transactionType"], "expense");
+    assert_eq!(payload["title"], "test");
 
     let back: SyncChangeV1 = serde_json::from_value(json).unwrap();
     assert_eq!(back, change);
@@ -98,7 +76,7 @@ fn push_request_round_trips() {
     let json = serde_json::to_value(&request).unwrap();
     assert_eq!(json["requestId"], "req-1");
     assert_eq!(json["client"]["appId"], "lifetrace-desktop");
-    assert_eq!(json["changes"][0]["entityId"], "tx-1");
+    assert_eq!(json["changes"][0]["entityId"], "task-1");
     let back: PushRequestV1 = serde_json::from_value(json).unwrap();
     assert_eq!(back, request);
 }
@@ -110,8 +88,8 @@ fn push_response_accepted_round_trips() {
         server_time: stamp(),
         results: vec![PushChangeResultV1::Accepted {
             change_id: ChangeId::new("change-1"),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-            entity_id: EntityId::new("tx-1"),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+            entity_id: EntityId::new("task-1"),
             server_version: ServerVersion::from_u64(42),
             cursor: Cursor::new("42"),
             server_modified_at: stamp(),
@@ -133,8 +111,8 @@ fn push_response_conflict_round_trips() {
         results: vec![PushChangeResultV1::Conflict {
             conflict_id: ConflictId::new("conflict-1"),
             change_id: ChangeId::new("change-1"),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-            entity_id: EntityId::new("tx-1"),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+            entity_id: EntityId::new("task-1"),
             client_base_server_version: ServerVersion::from_u64(7),
             current_server_version: ServerVersion::from_u64(8),
             server_entity: Some(serde_json::json!({"server": true}).into()),
@@ -159,15 +137,15 @@ fn pull_response_with_tombstone_round_trips() {
         server_time: stamp(),
         changes: vec![ServerChangeV1 {
             cursor: Cursor::new("11"),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-            entity_id: EntityId::new("tx-1"),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+            entity_id: EntityId::new("task-1"),
             operation: ChangeOperation::new(ChangeOperation::DELETE),
             server_version: ServerVersion::from_u64(9),
             server_modified_at: stamp(),
             payload: None,
             tombstone: Some(TombstoneV1 {
-                entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-                entity_id: EntityId::new("tx-1"),
+                entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+                entity_id: EntityId::new("task-1"),
                 deleted_at: stamp(),
                 server_version: ServerVersion::from_u64(9),
                 deleted_by_device: Some(DeviceId::new("device-2")),
@@ -195,10 +173,10 @@ fn snapshot_response_round_trips() {
         snapshot_id: SnapshotId::new("snapshot-1"),
         snapshot_cursor: Cursor::new("100"),
         items: vec![EntitySnapshotV1 {
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-            entity_id: EntityId::new("tx-1"),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+            entity_id: EntityId::new("task-1"),
             server_version: ServerVersion::from_u64(42),
-            payload: serde_json::to_value(transaction_payload()).unwrap().into(),
+            payload: serde_json::json!({"meta":{"id":"task-1"},"title":"Example task"}).into(),
         }],
         next_page_token: Some("page-2".to_owned()),
         completed: false,
@@ -221,7 +199,7 @@ fn capabilities_round_trip_with_defaults() {
     assert_eq!(json["maximumAtomicGroupSize"], 50);
     assert_eq!(json["tombstoneRetentionDays"], 90);
     let supported = json["supportedEntityTypes"].as_array().unwrap();
-    assert!(supported.iter().any(|value| value == "finance.transaction"));
+    assert!(supported.iter().any(|value| value == "execution.task"));
     let back: CapabilitiesResponseV1 = serde_json::from_value(json).unwrap();
     assert_eq!(back, capabilities);
 }
@@ -240,8 +218,8 @@ fn unknown_fields_are_ignored() {
 fn unknown_enum_values_do_not_fail_batch_parsing() {
     let json = serde_json::json!({
         "changeId": "change-1",
-        "entityType": "finance.transaction",
-        "entityId": "tx-1",
+        "entityType": "execution.task",
+        "entityId": "task-1",
         "operation": "future_operation",
         "baseServerVersion": "0",
         "entitySchemaVersion": 1,
@@ -256,13 +234,12 @@ fn unknown_enum_values_do_not_fail_batch_parsing() {
 
 #[test]
 fn entity_payload_dispatch_round_trips() {
-    let entity_type = EntityType::new(EntityType::FINANCE_TRANSACTION);
-    let json: JsonValue = serde_json::to_value(transaction_payload()).unwrap().into();
+    let entity_type = EntityType::new(EntityType::EXECUTION_TASK);
+    let json: JsonValue = serde_json::json!({"meta":{"id":"task-1"},"title":"Example task"}).into();
     let payload = EntityPayload::try_from((&entity_type, json)).unwrap();
     assert_eq!(payload.entity_type(), entity_type);
-    assert_eq!(payload.entity_id().as_str(), "tx-1");
-    let round_tripped = serde_json::from_value::<Transaction>(payload.to_json().0).unwrap();
-    assert_eq!(round_tripped, transaction_payload());
+    assert_eq!(payload.entity_id().as_str(), "task-1");
+    assert_eq!(payload.to_json().0["title"], "test");
 }
 
 #[test]

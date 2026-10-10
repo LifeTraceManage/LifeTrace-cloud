@@ -2,7 +2,6 @@
 
 pub mod assistant;
 pub mod auth;
-pub mod beecount;
 
 pub mod files;
 pub mod health;
@@ -18,15 +17,10 @@ use crate::state::AppState;
 
 /// Assemble the public Cloud HTTP surface.
 ///
-/// Finance is exposed through the BeeCount-compatible SQLite-backed routes;
-/// the retired in-memory Finance CRUD example is no longer part of the router.
-pub fn router(state: AppState) -> Router<AppState> {
+pub fn router(_state: AppState) -> Router<AppState> {
     Router::<AppState>::new()
         .merge(health::router())
         .merge(auth::router())
-        .merge(beecount::router(
-            state.config.beecount_attachment_max_upload_bytes,
-        ))
         .merge(assistant::router())
         .merge(meta::router())
         .merge(files::router())

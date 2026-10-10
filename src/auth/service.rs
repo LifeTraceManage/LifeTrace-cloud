@@ -82,11 +82,9 @@ impl AuthService {
             web_session_enabled: true,
             supported_apps: [
                 AppId::DESKTOP,
-                AppId::FINANCE_ANDROID,
                 AppId::NOTES_ANDROID,
                 AppId::HABITS_ANDROID,
                 AppId::EXECUTE_ANDROID,
-                AppId::BEECOUNT,
                 AppId::WEB,
             ]
             .into_iter()
@@ -869,76 +867,6 @@ impl AuthService {
     /// legacy client whose refresh request contains only `refresh_token`.
     /// The normal refresh path still performs the token hash, session, grant,
     /// app and device checks before issuing anything.
-    pub async fn refresh_compat(
-        &self,
-        refresh_token: String,
-        expected_app_id: &str,
-        context: &RequestContext,
-    ) -> Result<(TokenResponseV1, String, String), ApiError> {
-        let parsed = self
-            .tokens
-            .parse(TokenKind::Refresh, &refresh_token)
-            .ok_or_else(|| {
-                Self::error(
-                    ErrorCode::AuthInvalid,
-                    "invalid refresh token",
-                    StatusCode::UNAUTHORIZED,
-                )
-            })?;
-        let row = sqlx::query(
-            "SELECT rt.token_hash,s.app_id,d.external_device_id, \
-                    COALESCE(bil.beecount_user_id,s.user_id) AS beecount_user_id \
-             FROM auth_refresh_tokens rt \
-             JOIN auth_sessions s ON s.id=rt.session_id \
-             JOIN cloud_devices d ON d.id=s.device_id \
-             LEFT JOIN beecount_identity_links bil ON bil.user_id=s.user_id \
-             WHERE rt.id=$1",
-        )
-        .bind(parsed.id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(Self::db)?
-        .ok_or_else(|| {
-            Self::error(
-                ErrorCode::AuthInvalid,
-                "invalid refresh token",
-                StatusCode::UNAUTHORIZED,
-            )
-        })?;
-        let expected_hash: Vec<u8> = row.try_get("token_hash").unwrap_or_default();
-        if !self
-            .tokens
-            .verify(TokenKind::Refresh, &parsed, &expected_hash)
-        {
-            return Err(Self::error(
-                ErrorCode::AuthInvalid,
-                "invalid refresh token",
-                StatusCode::UNAUTHORIZED,
-            ));
-        }
-        let app_id: String = row.try_get("app_id").unwrap_or_default();
-        let device_id: String = row.try_get("external_device_id").unwrap_or_default();
-        let beecount_user_id: String = row.try_get("beecount_user_id").unwrap_or_default();
-        if app_id != expected_app_id || device_id.is_empty() {
-            return Err(Self::error(
-                ErrorCode::AuthInvalid,
-                "refresh token binding mismatch",
-                StatusCode::UNAUTHORIZED,
-            ));
-        }
-        let response = self
-            .refresh(
-                RefreshRequestV1 {
-                    refresh_token,
-                    app_id: AppId::new(expected_app_id),
-                    device_id: device_id.clone(),
-                },
-                context,
-            )
-            .await?;
-        Ok((response, device_id, beecount_user_id))
-    }
-
     pub async fn me(&self, principal: &AuthenticatedPrincipal) -> Result<AuthUserV1, ApiError> {
         self.user_by_id(Self::uuid(
             principal.user_id.as_str(),

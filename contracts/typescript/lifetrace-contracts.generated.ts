@@ -4,8 +4,6 @@
 
 export type AcceptedResponseV1 = { accepted: boolean, };
 
-export type AccountType = string;
-
 export type Activity = { meta: EntityMeta, name: string, activityType: ActivityType, unit: string, minimumTarget: number | null, normalTarget: number | null, targetPeriod: string, targetDays: Array<number>, icon: string | null, color: string | null, scheduleType: ActivityScheduleType | null, startDate: LocalDate | null, checkinMethod: ActivityCheckinMethod | null, syncSource: ActivitySyncSource | null, description: string | null, isArchived: boolean, };
 
 export type ActivityCheckinMethod = string;
@@ -139,7 +137,6 @@ export type FileMetadata = { meta: EntityMeta, originalName: string, mimeType: s
 
 export type FileStorageState = string;
 
-export type FinanceAccount = { meta: EntityMeta, name: string, accountType: AccountType, 
 /**
  * Baseline balance in cents at `balance_at`.
  */
@@ -289,7 +286,6 @@ export type TombstoneV1 = { entityType: EntityType, entityId: EntityId, deletedA
 
 export type TrainingNote = { meta: EntityMeta, title: string, content: string, workoutId: EntityId | null, source: WorkoutSource, noteDate: LocalDate, };
 
-export type Transaction = { meta: EntityMeta, transactionType: TransactionType, 
 /**
  * Amount in cents. Never floats on the wire.
  */
@@ -298,14 +294,6 @@ amountCents: bigint, currency: CurrencyCode, accountId: EntityId | null, toAccou
  * Business natural day `YYYY-MM-DD`; never derived from UTC slicing.
  */
 localDate: LocalDate, status: TransactionStatus, sourceType: string, externalTransactionId: string | null, };
-
-export type TransactionCategory = { meta: EntityMeta, name: string, categoryType: TransactionType, parentId: EntityId | null, icon: string | null, color: string | null, isSystem: boolean, isArchived: boolean, };
-
-export type TransactionEvidence = { meta: EntityMeta, transactionId: EntityId, sourceType: string, sourceId: string | null, externalTransactionId: string | null, confidence: number | null, };
-
-export type TransactionStatus = string;
-
-export type TransactionType = string;
 
 export type UpdateAppGrantRequestV1 = { scopes: Array<Scope>, };
 

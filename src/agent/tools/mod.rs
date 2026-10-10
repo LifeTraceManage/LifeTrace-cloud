@@ -145,7 +145,7 @@ impl Tool for SearchRecordsTool {
                 "entityTypes":{
                     "type":"array",
                     "items":{"type":"string"},
-                    "description":"可选。LifeTrace entityType，例如 execution.task、note.note、finance.transaction"
+                    "description":"可选。LifeTrace entityType，例如 execution.task、note.note"
                 },
                 "entityId":{"type":"string","description":"可选。精确读取一个当前用户可访问的 Sync 实体；来自 selectedEntity 时优先使用它"},
                 "query":{"type":"string","description":"可选。对 JSON 记录做不区分大小写的关键词匹配"},

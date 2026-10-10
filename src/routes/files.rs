@@ -18,7 +18,6 @@ use crate::state::AppState;
 
 const MAX_LIST_LIMIT: i64 = 200;
 const DOMAINS: &[&str] = &[
-    "finance_imports",
     "notes_attachments",
     "english_audio",
     "photos",
@@ -446,12 +445,6 @@ fn validate_domain(domain: &str) -> Result<(), ApiError> {
 
 fn mime_allowed(domain: &str, mime: &str) -> bool {
     match domain {
-        "finance_imports" => matches!(
-            mime,
-            "text/csv"
-                | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                | "application/vnd.ms-excel"
-        ),
         "notes_attachments" => {
             mime.starts_with("image/")
                 || mime.starts_with("audio/")
@@ -564,8 +557,6 @@ mod tests {
 
     #[test]
     fn domains_and_mime_allowlists_are_fail_closed() {
-        assert!(mime_allowed("finance_imports", "text/csv"));
-        assert!(!mime_allowed("finance_imports", "image/png"));
         assert!(mime_allowed("photos", "image/jpeg"));
         assert!(!mime_allowed("unknown", "image/jpeg"));
     }

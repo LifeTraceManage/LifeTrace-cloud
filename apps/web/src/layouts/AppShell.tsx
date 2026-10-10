@@ -25,7 +25,7 @@ const mobile = [
 ] as const;
 
 const commands = [
-  ["打开 Execute", "/execute/today"], ["新建任务", "/execute/inbox"], ["记录支出", "/finance/transactions?new=expense"], ["开始训练", "/app/fitness?new=workout"], ["新建笔记", "/notes?new=note"], ["打开设置", "/app/settings"],
+  ["打开 Execute", "/execute/today"], ["新建任务", "/execute/inbox"], ["开始训练", "/app/fitness?new=workout"], ["新建笔记", "/notes?new=note"], ["打开设置", "/app/settings"],
 ] as const;
 
 function routeActive(current: string, target: string) {

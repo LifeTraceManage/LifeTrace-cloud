@@ -6,7 +6,6 @@
 
 pub mod agent;
 pub mod auth;
-pub mod beecount;
 
 pub mod config;
 pub mod error;
