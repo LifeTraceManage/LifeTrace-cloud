@@ -55,8 +55,6 @@ pub struct Config {
     pub graceful_shutdown_seconds: u64,
     pub retention_entries: usize,
 
-    pub beecount_attachment_max_upload_bytes: usize,
-
     pub file_object_storage_endpoint: Option<String>,
     pub file_object_storage_bucket: Option<String>,
     pub file_object_storage_region: String,
@@ -129,7 +127,6 @@ impl Default for Config {
             maintenance_interval_seconds: 300,
             graceful_shutdown_seconds: 10,
             retention_entries: 1000,
-            beecount_attachment_max_upload_bytes: 64 * 1024 * 1024,
             file_object_storage_endpoint: None,
             file_object_storage_bucket: None,
             file_object_storage_region: "us-east-1".to_owned(),
@@ -249,10 +246,6 @@ impl Config {
         c.graceful_shutdown_seconds =
             env_u64("GRACEFUL_SHUTDOWN_SECONDS", c.graceful_shutdown_seconds);
         c.retention_entries = env_usize("LIFETRACE_RETENTION_ENTRIES", c.retention_entries);
-        c.beecount_attachment_max_upload_bytes = env_usize(
-            "BEECOUNT_ATTACHMENT_MAX_UPLOAD_BYTES",
-            c.beecount_attachment_max_upload_bytes,
-        );
         c.file_object_storage_endpoint = env_var("FILE_OBJECT_STORAGE_ENDPOINT");
         c.file_object_storage_bucket = env_var("FILE_OBJECT_STORAGE_BUCKET");
         c.file_object_storage_region =
@@ -337,11 +330,6 @@ impl Config {
         }
         if self.auth_refresh_idle_ttl_seconds > self.auth_refresh_absolute_ttl_seconds {
             return Err("refresh idle TTL must not exceed absolute TTL".to_owned());
-        }
-        if !(1024..=128 * 1024 * 1024).contains(&self.beecount_attachment_max_upload_bytes) {
-            return Err(
-                "BEECOUNT_ATTACHMENT_MAX_UPLOAD_BYTES must be between 1 KiB and 128 MiB".to_owned(),
-            );
         }
         if self.file_max_upload_bytes <= 0 {
             return Err("FILE_MAX_UPLOAD_BYTES must be greater than zero".to_owned());
@@ -550,15 +538,4 @@ mod tests {
         assert!(config.validate().unwrap_err().contains("HTTPS origin"));
     }
 
-    #[test]
-    fn beecount_attachment_limit_is_bounded() {
-        let config = Config {
-            beecount_attachment_max_upload_bytes: 129 * 1024 * 1024,
-            ..Config::default()
-        };
-        assert!(config
-            .validate()
-            .unwrap_err()
-            .contains("BEECOUNT_ATTACHMENT_MAX_UPLOAD_BYTES"));
-    }
 }
