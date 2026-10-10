@@ -1,6 +1,7 @@
 export * from "./cloud/types";
 export * from "./cloud/http";
 export * from "./cloud/base";
+export * from "./cloud/factories";
 export * from "./cloud/execution";
 export * from "./cloud/execution-advanced";
 export * from "./cloud/execution-goal";
