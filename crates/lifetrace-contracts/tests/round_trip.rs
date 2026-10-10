@@ -32,33 +32,12 @@ fn client() -> SyncClientInfo {
     }
 }
 
-fn transaction_payload() -> Transaction {
-    Transaction {
-        meta: meta("tx-1"),
-        transaction_type: TransactionType::new(TransactionType::EXPENSE),
-        amount_cents: 12525,
-        currency: CurrencyCode::cny(),
-        account_id: Some(EntityId::new("wechat-wallet")),
-        to_account_id: None,
-        category_id: Some(EntityId::new("cat-food")),
-        counterparty: Some("coffee shop".to_owned()),
-        merchant: None,
-        item: Some("latte".to_owned()),
-        note: None,
-        occurred_at: stamp(),
-        local_date: LocalDate::new("2026-08-04").unwrap(),
-        status: TransactionStatus::new(TransactionStatus::CONFIRMED),
-        source_type: "manual".to_owned(),
-        external_transaction_id: None,
-    }
-}
-
 fn change() -> SyncChangeV1 {
-    let payload = serde_json::to_value(transaction_payload()).unwrap();
+    let payload = serde_json::json!({"meta":{"id":"note-1"},"title":"test"});
     SyncChangeV1 {
         change_id: ChangeId::new("change-1"),
-        entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-        entity_id: EntityId::new("tx-1"),
+        entity_type: EntityType::new(EntityType::NOTE_NOTE),
+        entity_id: EntityId::new("note-1"),
         operation: ChangeOperation::new(ChangeOperation::UPSERT),
         base_server_version: ServerVersion::zero(),
         entity_schema_version: 1,
@@ -74,15 +53,14 @@ fn sync_change_v1_round_trips_with_camel_case() {
     let change = change();
     let json = serde_json::to_value(&change).unwrap();
     assert_eq!(json["changeId"], "change-1");
-    assert_eq!(json["entityType"], "finance.transaction");
+    assert_eq!(json["entityType"], "note.note");
     assert_eq!(json["operation"], "upsert");
     assert_eq!(json["baseServerVersion"], "0");
     assert_eq!(json["entitySchemaVersion"], 1);
     assert!(json.get("atomicGroupId").unwrap().is_null());
     assert_eq!(json["dependencies"], serde_json::json!([]));
     let payload = &json["payload"];
-    assert_eq!(payload["amountCents"], 12525);
-    assert_eq!(payload["transactionType"], "expense");
+    assert_eq!(payload["title"], "test");
 
     let back: SyncChangeV1 = serde_json::from_value(json).unwrap();
     assert_eq!(back, change);
@@ -221,7 +199,7 @@ fn capabilities_round_trip_with_defaults() {
     assert_eq!(json["maximumAtomicGroupSize"], 50);
     assert_eq!(json["tombstoneRetentionDays"], 90);
     let supported = json["supportedEntityTypes"].as_array().unwrap();
-    assert!(supported.iter().any(|value| value == "finance.transaction"));
+    assert!(supported.iter().any(|value| value == "note.note"));
     let back: CapabilitiesResponseV1 = serde_json::from_value(json).unwrap();
     assert_eq!(back, capabilities);
 }
@@ -240,7 +218,7 @@ fn unknown_fields_are_ignored() {
 fn unknown_enum_values_do_not_fail_batch_parsing() {
     let json = serde_json::json!({
         "changeId": "change-1",
-        "entityType": "finance.transaction",
+        "entityType": "note.note",
         "entityId": "tx-1",
         "operation": "future_operation",
         "baseServerVersion": "0",
@@ -261,8 +239,7 @@ fn entity_payload_dispatch_round_trips() {
     let payload = EntityPayload::try_from((&entity_type, json)).unwrap();
     assert_eq!(payload.entity_type(), entity_type);
     assert_eq!(payload.entity_id().as_str(), "tx-1");
-    let round_tripped = serde_json::from_value::<Transaction>(payload.to_json().0).unwrap();
-    assert_eq!(round_tripped, transaction_payload());
+    assert_eq!(payload.to_json().0["title"], "test");
 }
 
 #[test]

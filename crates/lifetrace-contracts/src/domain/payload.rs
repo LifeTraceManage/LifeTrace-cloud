@@ -7,7 +7,6 @@
 use crate::domain::assets::{Asset, AssetEvent};
 use crate::domain::execution::{ExecutionGoal, FocusSession, ImportantDate, Reminder};
 use crate::domain::files::FileMetadata;
-use crate::domain::finance::*;
 use crate::domain::habits::*;
 use crate::domain::links::EntityLink;
 use crate::domain::notes::*;
@@ -26,16 +25,6 @@ pub enum EntityPayload {
     Device(Device),
     Asset(Asset),
     AssetEvent(AssetEvent),
-    FinanceLedger(FinanceLedger),
-    FinanceAccount(FinanceAccount),
-    TransactionCategory(TransactionCategory),
-    Transaction(Transaction),
-    RecurringTransaction(RecurringTransaction),
-    FinanceTag(FinanceTag),
-    FinanceTransactionTag(FinanceTransactionTag),
-    FinanceBudget(FinanceBudget),
-    TransactionAttachment(TransactionAttachment),
-    TransactionEvidence(TransactionEvidence),
     Activity(Activity),
     ActivityLog(ActivityLog),
     DailyReview(DailyReview),
@@ -72,16 +61,6 @@ impl EntityPayload {
             EntityPayload::Device(_) => EntityType::IDENTITY_DEVICE,
             EntityPayload::Asset(_) => EntityType::ASSET_ASSET,
             EntityPayload::AssetEvent(_) => EntityType::ASSET_EVENT,
-            EntityPayload::FinanceLedger(_) => EntityType::FINANCE_LEDGER,
-            EntityPayload::FinanceAccount(_) => EntityType::FINANCE_ACCOUNT,
-            EntityPayload::TransactionCategory(_) => EntityType::FINANCE_CATEGORY,
-            EntityPayload::Transaction(_) => EntityType::FINANCE_TRANSACTION,
-            EntityPayload::RecurringTransaction(_) => EntityType::FINANCE_RECURRING_TRANSACTION,
-            EntityPayload::FinanceTag(_) => EntityType::FINANCE_TAG,
-            EntityPayload::FinanceTransactionTag(_) => EntityType::FINANCE_TRANSACTION_TAG,
-            EntityPayload::FinanceBudget(_) => EntityType::FINANCE_BUDGET,
-            EntityPayload::TransactionAttachment(_) => EntityType::FINANCE_TRANSACTION_ATTACHMENT,
-            EntityPayload::TransactionEvidence(_) => EntityType::FINANCE_TRANSACTION_EVIDENCE,
             EntityPayload::Activity(_) => EntityType::HABIT_ACTIVITY,
             EntityPayload::ActivityLog(_) => EntityType::HABIT_LOG,
             EntityPayload::DailyReview(_) => EntityType::REVIEW_DAILY,
@@ -114,16 +93,6 @@ impl EntityPayload {
             EntityPayload::Device(value) => &value.meta.id,
             EntityPayload::Asset(value) => &value.id,
             EntityPayload::AssetEvent(value) => &value.id,
-            EntityPayload::FinanceLedger(value) => &value.meta.id,
-            EntityPayload::FinanceAccount(value) => &value.meta.id,
-            EntityPayload::TransactionCategory(value) => &value.meta.id,
-            EntityPayload::Transaction(value) => &value.meta.id,
-            EntityPayload::RecurringTransaction(value) => &value.meta.id,
-            EntityPayload::FinanceTag(value) => &value.meta.id,
-            EntityPayload::FinanceTransactionTag(value) => &value.meta.id,
-            EntityPayload::FinanceBudget(value) => &value.meta.id,
-            EntityPayload::TransactionAttachment(value) => &value.meta.id,
-            EntityPayload::TransactionEvidence(value) => &value.meta.id,
             EntityPayload::Activity(value) => &value.meta.id,
             EntityPayload::ActivityLog(value) => &value.meta.id,
             EntityPayload::DailyReview(value) => &value.meta.id,
@@ -161,16 +130,6 @@ impl EntityPayload {
             EntityPayload::Device(v) => json!(v),
             EntityPayload::Asset(v) => json!(v),
             EntityPayload::AssetEvent(v) => json!(v),
-            EntityPayload::FinanceLedger(v) => json!(v),
-            EntityPayload::FinanceAccount(v) => json!(v),
-            EntityPayload::TransactionCategory(v) => json!(v),
-            EntityPayload::Transaction(v) => json!(v),
-            EntityPayload::RecurringTransaction(v) => json!(v),
-            EntityPayload::FinanceTag(v) => json!(v),
-            EntityPayload::FinanceTransactionTag(v) => json!(v),
-            EntityPayload::FinanceBudget(v) => json!(v),
-            EntityPayload::TransactionAttachment(v) => json!(v),
-            EntityPayload::TransactionEvidence(v) => json!(v),
             EntityPayload::Activity(v) => json!(v),
             EntityPayload::ActivityLog(v) => json!(v),
             EntityPayload::DailyReview(v) => json!(v),
@@ -243,45 +202,6 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
             }
             EntityType::ASSET_EVENT => {
                 parse::<AssetEvent>(&value, EntityType::ASSET_EVENT).map(EntityPayload::AssetEvent)
-            }
-            EntityType::FINANCE_LEDGER => {
-                parse::<FinanceLedger>(&value, EntityType::FINANCE_LEDGER)
-                    .map(EntityPayload::FinanceLedger)
-            }
-            EntityType::FINANCE_ACCOUNT => {
-                parse::<FinanceAccount>(&value, EntityType::FINANCE_ACCOUNT)
-                    .map(EntityPayload::FinanceAccount)
-            }
-            EntityType::FINANCE_CATEGORY => {
-                parse::<TransactionCategory>(&value, EntityType::FINANCE_CATEGORY)
-                    .map(EntityPayload::TransactionCategory)
-            }
-            EntityType::FINANCE_TRANSACTION => {
-                parse::<Transaction>(&value, EntityType::FINANCE_TRANSACTION)
-                    .map(EntityPayload::Transaction)
-            }
-            EntityType::FINANCE_RECURRING_TRANSACTION => {
-                parse::<RecurringTransaction>(&value, EntityType::FINANCE_RECURRING_TRANSACTION)
-                    .map(EntityPayload::RecurringTransaction)
-            }
-            EntityType::FINANCE_TAG => {
-                parse::<FinanceTag>(&value, EntityType::FINANCE_TAG).map(EntityPayload::FinanceTag)
-            }
-            EntityType::FINANCE_TRANSACTION_TAG => {
-                parse::<FinanceTransactionTag>(&value, EntityType::FINANCE_TRANSACTION_TAG)
-                    .map(EntityPayload::FinanceTransactionTag)
-            }
-            EntityType::FINANCE_BUDGET => {
-                parse::<FinanceBudget>(&value, EntityType::FINANCE_BUDGET)
-                    .map(EntityPayload::FinanceBudget)
-            }
-            EntityType::FINANCE_TRANSACTION_ATTACHMENT => {
-                parse::<TransactionAttachment>(&value, EntityType::FINANCE_TRANSACTION_ATTACHMENT)
-                    .map(EntityPayload::TransactionAttachment)
-            }
-            EntityType::FINANCE_TRANSACTION_EVIDENCE => {
-                parse::<TransactionEvidence>(&value, EntityType::FINANCE_TRANSACTION_EVIDENCE)
-                    .map(EntityPayload::TransactionEvidence)
             }
             EntityType::HABIT_ACTIVITY => {
                 parse::<Activity>(&value, EntityType::HABIT_ACTIVITY).map(EntityPayload::Activity)
@@ -415,23 +335,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn finance_ledger_dispatch_round_trips() {
-        let payload = FinanceLedger {
-            meta: meta("ledger-1"),
-            name: "日常账本".to_owned(),
-            currency: crate::money::CurrencyCode::cny(),
-            ledger_type: "personal".to_owned(),
-            month_start_day: 1,
-            sort_order: 0,
-            is_archived: false,
-        };
-        let value: JsonValue = serde_json::to_value(&payload).unwrap().into();
-        let parsed =
-            EntityPayload::try_from((&EntityType::new(EntityType::FINANCE_LEDGER), value)).unwrap();
-        assert_eq!(parsed.entity_id().as_str(), "ledger-1");
-        assert_eq!(parsed.entity_type().as_str(), EntityType::FINANCE_LEDGER);
-    }
 
     #[test]
     fn execute_important_date_dispatch_accepts_android_wire_payload() {
