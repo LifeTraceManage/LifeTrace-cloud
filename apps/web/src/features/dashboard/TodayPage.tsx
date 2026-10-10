@@ -1,14 +1,14 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { ArrowRight, CheckCircle2, Dumbbell, Flame, WalletCards } from "lucide-react";
+import { ArrowRight, CheckCircle2, Dumbbell, Flame } from "lucide-react";
 import { useApp } from "../../app/AppContext";
 import { Button, Card, CardContent, EmptyState, MetricCard, PageHeader, Progress, Section } from "../../components/ui";
-import { entities, number, recentDays, sum, text, todayKey } from "../../lib/entities";
-import { formatMoney, isOpenExecutionTask, taskMatchesToday } from "../../services/core";
+import { entities, number, recentDays, text, todayKey } from "../../lib/entities";
+import { isOpenExecutionTask, taskMatchesToday } from "../../services/core";
 
 export function TodayPage() {
-  const { state, privacy } = useApp();
+  const { state } = useApp();
   const navigate = useNavigate();
   const today = todayKey();
   const tasks = entities(state, "execution.task");
@@ -19,7 +19,6 @@ export function TodayPage() {
   const habitLogs = entities(state, "habit.log");
   const todayHabitLogs = habitLogs.filter((item) => text(item, "logDate") === today && text(item, "status") === "completed");
   const workouts = entities(state, "workout.workout");
-  const finance = entities(state, "finance.transaction");
   const reviews = entities(state, "review.daily");
 
   const days = recentDays(7);
@@ -30,19 +29,15 @@ export function TodayPage() {
       + workouts.filter((item) => text(item, "localDate") === day).length,
   })), [days.join("|"), habitLogs, tasks, workouts]);
 
-  const month = today.slice(0, 7);
-  const monthTx = finance.filter((item) => text(item, "localDate").startsWith(month) && text(item, "status", "confirmed") === "confirmed");
-  const expenses = sum(monthTx.filter((item) => ["expense", "fee"].includes(text(item, "transactionType"))).map((item) => number(item, "amountCents")));
   const habitProgress = habits.length ? Math.round(todayHabitLogs.length / habits.length * 100) : 0;
   const latestReview = reviews.sort((a, b) => text(b, "reviewDate").localeCompare(text(a, "reviewDate")))[0];
 
   return <div className="page-shell">
     <PageHeader title="今天" action={<Button onClick={() => navigate("/app/execution?new=task")}>新建任务</Button>} />
 
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-3">
       <MetricCard label="今日任务" value={`${completedToday.length}/${todayTasks.length + completedToday.length}`} hint={todayTasks.length ? `还有 ${todayTasks.length} 项待完成` : "今日任务已清空"} icon={<CheckCircle2 size={17} />} />
       <MetricCard label="习惯完成" value={`${habitProgress}%`} hint={`${todayHabitLogs.length} / ${habits.length || 0} 个项目`} icon={<Flame size={17} />} />
-      <MetricCard label="本月支出" value={formatMoney(expenses, "CNY", privacy)} hint={`${monthTx.length} 笔已确认交易`} icon={<WalletCards size={17} />} />
       <MetricCard label="本周训练" value={`${workouts.filter((item) => days.includes(text(item, "localDate"))).length} 次`} hint="训练记录自动汇入趋势" icon={<Dumbbell size={17} />} />
     </div>
 
