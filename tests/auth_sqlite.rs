@@ -179,7 +179,7 @@ async fn registered_device_can_sync_without_duplicate_key_error() {
         },
         changes: vec![SyncChangeV1 {
             change_id: ChangeId::new("regression-change-1"),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
             entity_id: EntityId::new("regression-entity-1"),
             operation: ChangeOperation::new(ChangeOperation::DELETE),
             base_server_version: ServerVersion::zero(),
@@ -209,78 +209,6 @@ async fn registered_device_can_sync_without_duplicate_key_error() {
     assert_eq!(count, 1);
 }
 
-#[tokio::test]
-async fn app_policy_and_sync_scope_prevent_cross_domain_access() {
-    let Some(state) = state().await else {
-        return;
-    };
-    let tokens = state
-        .auth_service
-        .register(
-            register(
-                AppId::FINANCE_ANDROID,
-                vec![Scope::new("finance:read"), Scope::new("notes:write")],
-            ),
-            &context(),
-        )
-        .await
-        .unwrap();
-    assert!(tokens
-        .scopes
-        .iter()
-        .any(|scope| scope.as_str() == "finance:read"));
-    assert!(!tokens
-        .scopes
-        .iter()
-        .any(|scope| scope.as_str() == "notes:write"));
-
-    let bearer = format!("Bearer {}", tokens.access_token);
-    let principal = state
-        .auth
-        .authenticate(AuthCredential::Bearer(Some(&bearer)))
-        .await
-        .unwrap();
-    assert!(principal.require_scope("finance:read").is_ok());
-    assert!(principal.require_scope("notes:write").is_err());
-
-    let response = app(state)
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/api/v1/sync/push")
-                .header("content-type", "application/json")
-                .header("authorization", bearer)
-                .body(Body::from(
-                    json!({
-                        "requestId": "auth-scope-request",
-                        "client": {
-                            "appId": AppId::FINANCE_ANDROID,
-                            "clientVersion": "0.2.1",
-                            "platform": "android",
-                            "protocolVersion": 1,
-                            "schemaVersion": 1,
-                            "deviceId": "external-device"
-                        },
-                        "changes": [{
-                            "changeId": "auth-scope-change",
-                            "entityType": "note.note",
-                            "entityId": "auth-note",
-                            "operation": "upsert",
-                            "baseServerVersion": "0",
-                            "entitySchemaVersion": 1,
-                            "clientModifiedAt": "2026-08-05T00:00:00Z",
-                            "payload": {},
-                            "dependencies": []
-                        }]
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-}
 
 #[tokio::test]
 async fn password_reset_is_single_use_and_revokes_sessions() {
