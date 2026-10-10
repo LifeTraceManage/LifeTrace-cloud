@@ -317,24 +317,6 @@ impl TryFrom<(&EntityType, JsonValue)> for EntityPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::EntityMeta;
-    use crate::ids::UserId;
-    use crate::time::UtcTimestamp;
-
-    fn meta(id: &str) -> EntityMeta {
-        let stamp: UtcTimestamp = "2026-08-12T00:00:00Z".parse().unwrap();
-        EntityMeta {
-            id: EntityId::new(id),
-            user_id: UserId::new("user-1"),
-            created_at: stamp,
-            updated_at: stamp,
-            deleted_at: None,
-            local_version: 1,
-            server_version: None,
-            modified_by_device: None,
-        }
-    }
-
 
     #[test]
     fn execute_important_date_dispatch_accepts_android_wire_payload() {
