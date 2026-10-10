@@ -1,6 +1,6 @@
 # LifeTrace Cloud
 
-LifeTrace 的轻量自托管后端与 Web 单仓库。Cloud 运行时只使用 Rust、Axum、SQLx 与 SQLite；Web 由独立 Nginx 容器提供静态资源并同源反向代理 Cloud API。BeeCount 兼容入口、邮件后台同步和 Execution 后台任务仍由 Cloud 进程提供。
+LifeTrace 的轻量自托管后端与 Web 单仓库。Cloud 运行时只使用 Rust、Axum、SQLx 与 SQLite；Web 由独立 Nginx 容器提供静态资源并同源反向代理 Cloud API。邮件后台同步和 Execution 后台任务由 Cloud 进程提供。
 
 目标不是做通用云平台，而是让个人服务器上的 LifeTrace 具备可靠同步、认证和少量云端能力，同时尽可能降低部署和维护成本。
 
@@ -24,7 +24,6 @@ LifeTrace Cloud :8787
 ├── Mail jobs
 ├── Exec jobs
 ├── SQLite
-└── BeeCount :8869
    │
    ▼
 /data/lifetrace.db
@@ -39,7 +38,6 @@ SQLite 使用 WAL 模式，数据库 migration 在 Cloud 启动时自动执行�
 - `src/routes/`：HTTP API
 - `src/auth/`：认证、Session、Token 与密码逻辑
 - `src/agent/`：Rig Agent runtime、会话持久化、数据工具、审批执行层与受控 Sandbox Job Runner
-- `src/beecount/`：BeeCount 兼容和财务同步
 - `src/mail/`：邮件协议、解析和邮件服务
 - `src/workers/`：随 Cloud 进程启动的后台任务
 - `src/repository/sqlite/`：Sync v1 SQLite 持久化
@@ -72,7 +70,6 @@ Cloud 主服务监听容器内部 `8787`；生产环境由 Web Nginx 容器监�
 | `/api/v1/sync/*` | Push / Pull / Snapshot |
 | `/api/v1/files/*` | 文件元数据和对象存储签名 |
 | `/api/v1/privacy/*` | 数据导出和账号删除 |
-| `/api/v1/integrations/beecount/*` | LifeTrace Web 财务接口 |
 | `/api/v1/mail/*` | 邮件 |
 | `/api/v1/assistant` | Agent 对话（Web/Native 共用 runtime） |
 | `/api/v1/assistant/sessions` | Agent 历史会话 |
@@ -83,7 +80,6 @@ Cloud 主服务监听容器内部 `8787`；生产环境由 Web Nginx 容器监�
 | `/api/v1/photo-*/*` | 照片相关能力 |
 | 其他路径 | Cloud 不负责 SPA；由 `web` 容器提供 |
 
-BeeCount 兼容监听 `8869`。该监听器只负责把 BeeCount 原始 `/api/v1/*` 和 `/ws` 请求重写到内部兼容路由，不需要 Caddy。
 
 ## 本地运行
 
@@ -189,7 +185,6 @@ web container :80
                                   ├── Mail / Execution jobs
                                   └── SQLite /data/lifetrace.db
 
-BeeCount clients ─────────────► host :8869 → cloud :8869
 ```
 
 Web Nginx 将附件上传上限设为 256 MiB，并把 API 保持为同源反向代理，因此浏览器认证 Cookie 不需要跨域配置。
@@ -379,9 +374,9 @@ Cloud 内置基于 Rig 的 Agent runtime。会话、消息、Run、工具调用�
 
 审批同时要求同一 `user_id`、同一 `app_id + scopes` 分区，并在执行时按 action 重新校验当前 Session 的写权限：任务、日程、Project、Memo、Waiting Item、Reminder 要求 `sync:write + execution:write`，习惯要求 `sync:write + habits:write`。Reminder 执行时还会重新确认 subject 实体仍存在，避免产生悬空提醒。前端只提交 approval id 和 approve/reject，不接受模型生成的任意 API/SQL。删除数据、发送/删除邮件及其他高风险写操作目前仍未开放。
 
-Web 不再把 Agent 作为独立 Workspace。Agent 以全局右侧 Sidebar 挂载在 Portal、Core Shell 和 Notes/Mail/Execute/Finance Workspace Shell 上；桌面端打开后工作区为固定侧栏让出空间，移动端以覆盖式抽屉显示。Sidebar 的会话、草稿、审批和打开状态由全局 Provider 持有，因此跨 Workspace 切换不会丢失当前对话。旧 `/app/assistant` 仅保留为兼容入口：打开 Sidebar 后回到正常工作台，不再渲染独立 Assistant 页面。
+Web 不再把 Agent 作为独立 Workspace。Agent 以全局右侧 Sidebar 挂载在 Portal、Core Shell 和 Notes/Mail/Execute Workspace Shell 上；桌面端打开后工作区为固定侧栏让出空间，移动端以覆盖式抽屉显示。Sidebar 的会话、草稿、审批和打开状态由全局 Provider 持有，因此跨 Workspace 切换不会丢失当前对话。旧 `/app/assistant` 仅保留为兼容入口：打开 Sidebar 后回到正常工作台，不再渲染独立 Assistant 页面。
 
-各 Workspace 可注册轻量 `pageContext`，当前已接入 Execute、Mail、Notes 和 Finance。上下文只描述 `workspace/view`、当前日期/范围、搜索条件以及 `selectedEntity { entityType, entityId }` 等导航信息，用于理解“这个任务”“当前邮件”“这里”等指代。Cloud 对字段长度和结构做校验，并明确要求 Agent 对实体内容、状态、权限和任何写操作重新调用服务器工具核验；前端不会把页面中的业务对象快照直接作为可信模型事实。
+各 Workspace 可注册轻量 `pageContext`，当前已接入 Execute、Mail 和 Notes。上下文只描述 `workspace/view`、当前日期/范围、搜索条件以及 `selectedEntity { entityType, entityId }` 等导航信息，用于理解“这个任务”“当前邮件”“这里”等指代。Cloud 对字段长度和结构做校验，并明确要求 Agent 对实体内容、状态、权限和任何写操作重新调用服务器工具核验；前端不会把页面中的业务对象快照直接作为可信模型事实。
 
 Sidebar 内会话历史支持显式删除。审批区只在主对话展示待处理项，已批准/拒绝/过期/被替代项折叠为最近审批历史。会话删除会利用 SQLite 外键级联清理该会话的 message、run、tool call 和 approval，避免长期留下孤儿记录。
 
@@ -443,7 +438,7 @@ FILE_OBJECT_STORAGE_PRESIGN_TTL_SECONDS
 FILE_MAX_UPLOAD_BYTES
 ```
 
-没有配置对象存储时，不影响核心同步、认证、Web、邮件和 BeeCount 功能。
+没有配置对象存储时，不影响核心同步、认证、Web、邮件功能。
 
 ## Notes / Mail 兼容性
 

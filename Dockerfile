@@ -45,7 +45,7 @@ ENV LIFETRACE_DATABASE_PATH=/data/lifetrace.db \
     AGENT_SANDBOX_RUNS_DIR=/data/agent-sandbox-runs
 
 USER lifetrace
-EXPOSE 8787 8869
+EXPOSE 8787
 VOLUME ["/data"]
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
