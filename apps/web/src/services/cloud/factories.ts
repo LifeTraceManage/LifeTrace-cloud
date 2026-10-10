@@ -1,41 +1,4 @@
-import { amountToCents, baseMeta, localDate, type JsonEntity } from "./types";
-
-export function createFinanceAccount(userId: string, deviceId: string, name: string): JsonEntity {
-  return { meta: baseMeta(userId, deviceId), name: name.trim() || "默认账户", accountType: "cash", color: "#49715d", icon: "wallet", isArchived: false, currency: "CNY", openingBalanceCents: 0, balanceAt: new Date().toISOString(), last4: null };
-}
-
-export function createFinanceCategory(userId: string, deviceId: string, name: string, categoryType: "expense" | "income"): JsonEntity {
-  return { meta: baseMeta(userId, deviceId), name: name.trim(), categoryType, parentId: null, icon: categoryType === "expense" ? "receipt" : "coins", color: categoryType === "expense" ? "#b86b55" : "#49715d", isSystem: false, isArchived: false };
-}
-
-export interface TransactionInput {
-  accountId?: string | null; toAccountId?: string | null; categoryId?: string | null;
-  amount: string; type: "expense" | "income" | "refund" | "fee";
-  occurredAt?: string; localDate?: string;
-  status?: "candidate" | "confirmed" | "ignored" | "duplicate";
-  sourceType?: string; merchant?: string | null; item?: string | null;
-  counterparty?: string | null; note?: string | null; externalTransactionId?: string | null;
-}
-
-export function createTransaction(userId: string, deviceId: string, input: TransactionInput): JsonEntity {
-  const amountCents = Math.abs(amountToCents(input.amount));
-  if (!amountCents) throw new Error("金额必须大于 0");
-  const occurredAt = input.occurredAt ?? new Date().toISOString();
-  return {
-    meta: baseMeta(userId, deviceId), transactionType: input.type, amountCents,
-    currency: "CNY", occurredAt, localDate: input.localDate ?? localDate(new Date(occurredAt)),
-    status: input.status ?? "confirmed", sourceType: input.sourceType ?? "web_manual",
-    accountId: input.accountId ?? null, toAccountId: input.toAccountId ?? null,
-    categoryId: input.categoryId ?? null, merchant: input.merchant?.trim() || null,
-    item: input.item?.trim() || null, counterparty: input.counterparty?.trim() || null,
-    note: input.note?.trim() || null, externalTransactionId: input.externalTransactionId?.trim() || null,
-  };
-}
-
-export function createBudgetPreference(userId: string, deviceId: string, month: string, amount: string, categoryId: string | null = null): JsonEntity {
-  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("预算月份格式必须为 YYYY-MM");
-  return { meta: baseMeta(userId, deviceId), preferenceKey: `finance.budget.${month}.${categoryId ?? "all"}`, value: { month, categoryId, amountCents: Math.abs(amountToCents(amount)), warningThreshold: 0.8 } };
-}
+import { baseMeta, localDate, type JsonEntity } from "./types";
 
 export interface HabitInput {
   name: string;

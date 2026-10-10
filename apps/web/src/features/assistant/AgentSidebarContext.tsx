@@ -314,7 +314,6 @@ export function agentContextFromPath(pathname: string): AgentPageContext {
   }
   if (pathname.startsWith("/mail")) return { workspace: "mail", view: "mail", label: "Mail" };
   if (pathname.startsWith("/notes")) return { workspace: "notes", view: "notes", label: "Notes" };
-  if (pathname.startsWith("/finance")) return { workspace: "finance", view: "finance", label: "Finance" };
   if (pathname.startsWith("/app/fitness")) return { workspace: "fitness", view: "fitness", label: "Fitness" };
   if (pathname.startsWith("/app/health")) return { workspace: "health", view: "health", label: "Health" };
   if (pathname.startsWith("/app/settings")) return { workspace: "settings", view: "settings", label: "Settings" };

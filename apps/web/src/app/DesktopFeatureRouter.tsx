@@ -8,7 +8,6 @@ const FitnessPage = lazy(() => import("../features/fitness/FitnessPage").then((m
 const HealthPage = lazy(() => import("../features/health/HealthPage").then((module) => ({ default: module.HealthPage })));
 const NotesPage = lazy(() => import("../features/notes/NotesPage").then((module) => ({ default: module.NotesPage })));
 const ReviewPage = lazy(() => import("../features/review/ReviewPage").then((module) => ({ default: module.ReviewPage })));
-const FinanceWorkspace = lazy(() => import("../features/finance/FinanceWorkspace").then((module) => ({ default: module.FinanceWorkspace })));
 const SearchPage = lazy(() => import("../features/search/SearchPage").then((module) => ({ default: module.SearchPage })));
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const UiShowcasePage = lazy(() => import("../features/system/UiShowcasePage").then((module) => ({ default: module.UiShowcasePage })));
@@ -41,12 +40,6 @@ function withSuspense(element: ReactNode) {
   return <Suspense fallback={<PageFallback />}>{element}</Suspense>;
 }
 
-function LegacyFinanceRedirect() {
-  const location = useLocation();
-  const pathname = location.pathname.replace(/^\/app\/finance/, "/finance");
-  return <Navigate to={`${pathname || "/finance"}${location.search}${location.hash}`} replace />;
-}
-
 function FeatureRoutes() {
   return (
     <Routes>
@@ -62,8 +55,6 @@ function FeatureRoutes() {
       <Route path="/app/health" element={withSuspense(<HealthPage />)} />
       <Route path="/app/notes" element={withSuspense(<NotesPage />)} />
       <Route path="/app/review" element={withSuspense(<ReviewPage />)} />
-      <Route path="/finance/*" element={withSuspense(<FinanceWorkspace />)} />
-      <Route path="/app/finance/*" element={<LegacyFinanceRedirect />} />
       <Route path="/app/assistant" element={<Navigate to="/app/health" replace />} />
       <Route path="/app/search" element={withSuspense(<SearchPage />)} />
       <Route path="/app/settings/*" element={withSuspense(<SettingsPage />)} />
