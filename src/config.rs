@@ -537,5 +537,4 @@ mod tests {
         };
         assert!(config.validate().unwrap_err().contains("HTTPS origin"));
     }
-
 }
