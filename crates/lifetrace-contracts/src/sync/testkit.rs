@@ -1006,33 +1006,16 @@ mod tests {
         base: u64,
         group: Option<&str>,
     ) -> SyncChangeV1 {
-        let transaction = Transaction {
-            meta: meta(entity_id),
-            transaction_type: TransactionType::new(TransactionType::EXPENSE),
-            amount_cents,
-            currency: CurrencyCode::cny(),
-            account_id: None,
-            to_account_id: None,
-            category_id: None,
-            counterparty: None,
-            merchant: None,
-            item: None,
-            note: None,
-            occurred_at: stamp(),
-            local_date: LocalDate::new("2026-08-04").unwrap(),
-            status: TransactionStatus::new(TransactionStatus::CONFIRMED),
-            source_type: "manual".to_owned(),
-            external_transaction_id: None,
-        };
+        let task = serde_json::json!({"meta": meta(entity_id), "title": "Sync test task", "amountCents": amount_cents});
         SyncChangeV1 {
             change_id: ChangeId::new(change_id),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
             entity_id: EntityId::new(entity_id),
             operation: ChangeOperation::new(ChangeOperation::UPSERT),
             base_server_version: ServerVersion::from_u64(base),
             entity_schema_version: 1,
             client_modified_at: stamp(),
-            payload: Some(serde_json::to_value(transaction).unwrap().into()),
+            payload: Some(task.into()),
             atomic_group_id: group.map(AtomicGroupId::new),
             dependencies: vec![],
         }
@@ -1041,7 +1024,7 @@ mod tests {
     fn delete_change(change_id: &str, entity_id: &str, base: u64) -> SyncChangeV1 {
         SyncChangeV1 {
             change_id: ChangeId::new(change_id),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
             entity_id: EntityId::new(entity_id),
             operation: ChangeOperation::new(ChangeOperation::DELETE),
             base_server_version: ServerVersion::from_u64(base),
@@ -1082,7 +1065,7 @@ mod tests {
         assert_eq!(response.results.len(), 1);
         assert_eq!(accepted_version(&response.results[0]), 1);
         let entity = server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+            .entity(EntityType::EXECUTION_TASK, "tx-1")
             .unwrap();
         assert!(!entity.deleted);
         assert_eq!(entity.server_version, 1);
@@ -1103,11 +1086,11 @@ mod tests {
             .unwrap();
         assert_eq!(accepted_version(&response.results[0]), 2);
         let entity = server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+            .entity(EntityType::EXECUTION_TASK, "tx-1")
             .unwrap();
         assert_eq!(entity.server_version, 2);
-        let payload: Transaction = serde_json::from_value(entity.payload.0.clone()).unwrap();
-        assert_eq!(payload.amount_cents, 200);
+        let payload = entity.payload.0.clone();
+        assert_eq!(payload["amountCents"], 200);
     }
 
     #[test]
@@ -1139,15 +1122,14 @@ mod tests {
                 assert_eq!(reason.as_str(), ConflictReason::BASE_VERSION_MISMATCH);
                 assert_eq!(current_server_version.to_u64(), Some(2));
                 assert!(!server_deleted);
-                let current: Transaction =
-                    serde_json::from_value(server_entity.clone().unwrap().0).unwrap();
-                assert_eq!(current.amount_cents, 200);
+                let current = server_entity.clone().unwrap().0;
+                assert_eq!(current["amountCents"], 200);
             }
             other => panic!("expected conflict, got {other:?}"),
         }
         // Nothing was written.
         let entity = server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+            .entity(EntityType::EXECUTION_TASK, "tx-1")
             .unwrap();
         assert_eq!(entity.server_version, 2);
     }
@@ -1176,7 +1158,7 @@ mod tests {
         assert_eq!(server.change_count(), 1);
         assert_eq!(
             server
-                .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+                .entity(EntityType::EXECUTION_TASK, "tx-1")
                 .unwrap()
                 .server_version,
             1
@@ -1218,7 +1200,7 @@ mod tests {
             .unwrap();
         assert_eq!(accepted_version(&response.results[0]), 2);
         let entity = server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+            .entity(EntityType::EXECUTION_TASK, "tx-1")
             .unwrap();
         assert!(entity.deleted);
         assert!(entity.deleted_at.is_some());
@@ -1478,11 +1460,11 @@ mod tests {
             }
         }
         assert!(server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-2")
+            .entity(EntityType::EXECUTION_TASK, "tx-2")
             .is_none());
         assert_eq!(
             server
-                .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+                .entity(EntityType::EXECUTION_TASK, "tx-1")
                 .unwrap()
                 .server_version,
             1
@@ -1502,10 +1484,10 @@ mod tests {
             .iter()
             .all(|result| { matches!(result, PushChangeResultV1::Accepted { .. }) }));
         assert!(server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+            .entity(EntityType::EXECUTION_TASK, "tx-1")
             .is_some());
         assert!(server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-2")
+            .entity(EntityType::EXECUTION_TASK, "tx-2")
             .is_some());
     }
 
