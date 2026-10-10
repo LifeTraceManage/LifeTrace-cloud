@@ -18,7 +18,6 @@ services:
       CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:?set CORS_ALLOWED_ORIGINS in .env.production}"
       AUTH_COOKIE_SECURE: "${AUTH_COOKIE_SECURE:-false}"
       AUTH_COOKIE_NAME: "${AUTH_COOKIE_NAME:-lifetrace_session}"
-    ports:
     expose:
       - "8787"
     volumes:

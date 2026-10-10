@@ -36,7 +36,7 @@ fn change() -> SyncChangeV1 {
     let payload = serde_json::json!({"meta":{"id":"note-1"},"title":"test"});
     SyncChangeV1 {
         change_id: ChangeId::new("change-1"),
-        entity_type: EntityType::new(EntityType::NOTE_NOTE),
+        entity_type: EntityType::new(EntityType::EXECUTION_TASK),
         entity_id: EntityId::new("note-1"),
         operation: ChangeOperation::new(ChangeOperation::UPSERT),
         base_server_version: ServerVersion::zero(),
@@ -53,7 +53,7 @@ fn sync_change_v1_round_trips_with_camel_case() {
     let change = change();
     let json = serde_json::to_value(&change).unwrap();
     assert_eq!(json["changeId"], "change-1");
-    assert_eq!(json["entityType"], "note.note");
+    assert_eq!(json["entityType"], "execution.task");
     assert_eq!(json["operation"], "upsert");
     assert_eq!(json["baseServerVersion"], "0");
     assert_eq!(json["entitySchemaVersion"], 1);
@@ -199,7 +199,7 @@ fn capabilities_round_trip_with_defaults() {
     assert_eq!(json["maximumAtomicGroupSize"], 50);
     assert_eq!(json["tombstoneRetentionDays"], 90);
     let supported = json["supportedEntityTypes"].as_array().unwrap();
-    assert!(supported.iter().any(|value| value == "note.note"));
+    assert!(supported.iter().any(|value| value == "execution.task"));
     let back: CapabilitiesResponseV1 = serde_json::from_value(json).unwrap();
     assert_eq!(back, capabilities);
 }
@@ -218,7 +218,7 @@ fn unknown_fields_are_ignored() {
 fn unknown_enum_values_do_not_fail_batch_parsing() {
     let json = serde_json::json!({
         "changeId": "change-1",
-        "entityType": "note.note",
+        "entityType": "execution.task",
         "entityId": "tx-1",
         "operation": "future_operation",
         "baseServerVersion": "0",
