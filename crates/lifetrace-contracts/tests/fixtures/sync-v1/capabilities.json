@@ -20,10 +20,8 @@
   "supportedEntityTypes": [
     "identity.user",
     "identity.device",
-    "finance.account",
-    "finance.category",
-    "finance.transaction",
-    "finance.transaction_evidence",
+    "execution.task",
+    "execution.task_evidence",
     "habit.activity",
     "habit.log",
     "review.daily",
