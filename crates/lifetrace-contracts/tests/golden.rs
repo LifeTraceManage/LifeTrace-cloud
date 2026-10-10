@@ -76,7 +76,7 @@ fn golden_pull_response_parses() {
 #[test]
 fn golden_tombstone_parses() {
     let tombstone: TombstoneV1 = serde_json::from_value(fixture("delete-tombstone.json")).unwrap();
-    assert_eq!(tombstone.entity_id.as_str(), "tx-2026-08-04-0002");
+    assert_eq!(tombstone.entity_id.as_str(), "task-2026-08-04-0002");
     assert_eq!(tombstone.server_version.as_str(), "12");
 }
 
