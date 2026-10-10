@@ -12,10 +12,6 @@
         ],
         "type": "object"
       },
-      "AccountType": {
-        "description": "Finance account type. Known values: cash, bank, wechat, alipay, investment, other. Unknown values are preserved (forward compatible).",
-        "type": "string"
-      },
       "Activity": {
         "description": "`habit.activity`",
         "properties": {
@@ -893,10 +889,6 @@
         ],
         "type": "object"
       },
-      "CurrencyCode": {
-        "description": "ISO 4217 currency code (for example `CNY`, `USD`).",
-        "type": "string"
-      },
       "Cursor": {
         "description": "Opaque server cursor. Clients must never parse, add, subtract or guess it.\nWire format: string.",
         "type": "string"
@@ -1273,7 +1265,7 @@
         "type": "object"
       },
       "EntityType": {
-        "description": "Registered entity type. Known values: identity.user, identity.device, asset.asset, asset.event, finance.ledger, finance.account, finance.category, finance.transaction, finance.recurring_transaction, finance.tag, finance.transaction_tag, finance.budget, finance.transaction_attachment, finance.transaction_evidence, habit.activity, habit.log, review.daily, note.folder, note.note, note.tag, note.tag_relation, note.relation, note.revision, workout.import, workout.workout, workout.exercise, workout.set, workout.training_note, execution.goal, execution.weekly_review, execution.project, execution.recurrence_rule, execution.task, execution.task_dependency, execution.task_occurrence, execution.waiting_item, execution.calendar_event, execution.calendar_occurrence, execution.important_date, execution.focus_session, execution.reminder, execution.completion_result, execution.entity_link, file.metadata, entity.link, user.preference. Unknown values are preserved.",
+        "description": "Registered entity type. Known values: identity.user, identity.device, asset.asset, asset.event, habit.activity, habit.log, review.daily, note.folder, note.note, note.tag, note.tag_relation, note.relation, note.revision, workout.import, workout.workout, workout.exercise, workout.set, workout.training_note, execution.goal, execution.weekly_review, execution.project, execution.recurrence_rule, execution.task, execution.task_dependency, execution.task_occurrence, execution.waiting_item, execution.calendar_event, execution.calendar_occurrence, execution.important_date, execution.focus_session, execution.reminder, execution.completion_result, execution.entity_link, file.metadata, entity.link, user.preference. Unknown values are preserved.",
         "type": "string"
       },
       "ErrorCode": {
@@ -1454,63 +1446,6 @@
         "description": "File storage state. Known values: local_only, pending_upload, server_stored. Unknown values are preserved (forward compatible).",
         "type": "string"
       },
-      "FinanceAccount": {
-        "description": "`finance.account`\n\nNew Android-only forward fields such as `ledgerId`, `sortOrder`, credit-card\nmetadata and `isHidden` are accepted by serde as unknown fields and remain in\nthe original JSON stored by LifeTrace Cloud.",
-        "properties": {
-          "accountType": {
-            "$ref": "#/components/schemas/AccountType"
-          },
-          "balanceAt": {
-            "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "color": {
-            "type": "string"
-          },
-          "currency": {
-            "$ref": "#/components/schemas/CurrencyCode"
-          },
-          "icon": {
-            "type": "string"
-          },
-          "isArchived": {
-            "type": "boolean"
-          },
-          "last4": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "meta": {
-            "$ref": "#/components/schemas/EntityMeta"
-          },
-          "name": {
-            "type": "string"
-          },
-          "openingBalanceCents": {
-            "description": "Baseline balance in cents at `balance_at`.",
-            "format": "int64",
-            "type": [
-              "integer",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "meta",
-          "name",
-          "accountType",
-          "color",
-          "icon",
-          "isArchived",
-          "currency"
-        ],
-        "type": "object"
-      },
       "ForgotPasswordRequestV1": {
         "properties": {
           "email": {
@@ -1601,24 +1536,6 @@
         "required": [
           "appId",
           "clientVersion"
-        ],
-        "type": "object"
-      },
-      "MoneyAmount": {
-        "description": "A monetary amount: integer cents plus currency.",
-        "properties": {
-          "amountCents": {
-            "description": "Amount in the smallest currency unit (cents). Never use floats.",
-            "format": "int64",
-            "type": "integer"
-          },
-          "currency": {
-            "$ref": "#/components/schemas/CurrencyCode"
-          }
-        },
-        "required": [
-          "amountCents",
-          "currency"
         ],
         "type": "object"
       },
@@ -2753,207 +2670,6 @@
           "noteDate"
         ],
         "type": "object"
-      },
-      "Transaction": {
-        "description": "`finance.transaction`\n\nForward bookkeeping fields (`ledgerId`, recurrence, statistics/budget\nexclusions and currency snapshots) are intentionally not added as public\nRust fields here. Serde accepts them and LifeTrace Cloud stores the original\nJSON unchanged, preserving both source compatibility and wire fidelity.",
-        "properties": {
-          "accountId": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EntityId"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "amountCents": {
-            "description": "Amount in cents. Never floats on the wire.",
-            "format": "int64",
-            "type": "integer"
-          },
-          "categoryId": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EntityId"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "counterparty": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "currency": {
-            "$ref": "#/components/schemas/CurrencyCode"
-          },
-          "externalTransactionId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "item": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "localDate": {
-            "$ref": "#/components/schemas/LocalDate",
-            "description": "Business natural day `YYYY-MM-DD`; never derived from UTC slicing."
-          },
-          "merchant": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "meta": {
-            "$ref": "#/components/schemas/EntityMeta"
-          },
-          "note": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "occurredAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "sourceType": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/TransactionStatus"
-          },
-          "toAccountId": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EntityId"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "transactionType": {
-            "$ref": "#/components/schemas/TransactionType"
-          }
-        },
-        "required": [
-          "meta",
-          "transactionType",
-          "amountCents",
-          "currency",
-          "occurredAt",
-          "localDate",
-          "status",
-          "sourceType"
-        ],
-        "type": "object"
-      },
-      "TransactionCategory": {
-        "description": "`finance.category`\n\nForward fields such as `ledgerId`, `sortOrder`, `level`, `iconType` and\n`customIconFileId` stay in the raw sync payload while older clients continue\nto use this stable view.",
-        "properties": {
-          "categoryType": {
-            "$ref": "#/components/schemas/TransactionType"
-          },
-          "color": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "icon": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "isArchived": {
-            "type": "boolean"
-          },
-          "isSystem": {
-            "type": "boolean"
-          },
-          "meta": {
-            "$ref": "#/components/schemas/EntityMeta"
-          },
-          "name": {
-            "type": "string"
-          },
-          "parentId": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EntityId"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "meta",
-          "name",
-          "categoryType",
-          "isSystem",
-          "isArchived"
-        ],
-        "type": "object"
-      },
-      "TransactionEvidence": {
-        "description": "`finance.transaction_evidence`",
-        "properties": {
-          "confidence": {
-            "format": "double",
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "externalTransactionId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "meta": {
-            "$ref": "#/components/schemas/EntityMeta"
-          },
-          "sourceId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "sourceType": {
-            "type": "string"
-          },
-          "transactionId": {
-            "$ref": "#/components/schemas/EntityId"
-          }
-        },
-        "required": [
-          "meta",
-          "transactionId",
-          "sourceType"
-        ],
-        "type": "object"
-      },
-      "TransactionStatus": {
-        "description": "Financial transaction status. Known values: candidate, provisional, confirmed, ignored. Unknown values are preserved (forward compatible).",
-        "type": "string"
-      },
-      "TransactionType": {
-        "description": "Financial transaction type. Known values: expense, income, transfer, refund, fee. Unknown values are preserved (forward compatible).",
-        "type": "string"
       },
       "UpdateAppGrantRequestV1": {
         "properties": {
