@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::auth::{AuthProvider, AuthService, DatabaseAuthProvider, DevelopmentAuthProvider};
-use crate::beecount::realtime::BeeCountRealtimeHub;
 use crate::config::Config;
 use crate::mail::realtime::MailRealtimeHub;
 use crate::repository::sqlite::SqliteRepository;
@@ -33,7 +32,6 @@ pub struct AppState {
     pub auth_service: Arc<AuthService>,
     pub cursor_codec: Arc<CursorCodec>,
     pub page_token_codec: Arc<PageTokenCodec>,
-    pub beecount_realtime: Arc<BeeCountRealtimeHub>,
     pub mail_realtime: Arc<MailRealtimeHub>,
 }
 
@@ -103,7 +101,6 @@ impl AppState {
             auth_service,
             cursor_codec: Arc::new(cursor_codec),
             page_token_codec: Arc::new(page_token_codec),
-            beecount_realtime: Arc::new(BeeCountRealtimeHub::default()),
             mail_realtime: Arc::new(MailRealtimeHub::default()),
         }
     }
