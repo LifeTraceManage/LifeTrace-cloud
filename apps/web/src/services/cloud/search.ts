@@ -15,25 +15,8 @@ export function searchEntities(state: CloudState, query: string): SearchHit[] {
   for (const entity of Object.values(state.entities["habit.log"] ?? {})) add("habit.log", entity, `坚持记录 ${entityText(entity, "logDate")}`, entityText(entity, "note"), "/habits");
   for (const entity of Object.values(state.entities["workout.workout"] ?? {})) add("workout.workout", entity, entityText(entity, "name") || "训练记录", `${entityText(entity, "localDate")} ${entityText(entity, "source")}`, "/fitness");
   for (const entity of Object.values(state.entities["workout.training_note"] ?? {})) add("workout.training_note", entity, entityText(entity, "title") || "训练笔记", entityText(entity, "content"), "/fitness");
-  for (const entity of Object.values(state.entities["finance.transaction"] ?? {})) add("finance.transaction", entity, entityText(entity, "merchant") || entityText(entity, "item") || entityText(entity, "note") || "财务流水", `${entityText(entity, "localDate")} ${entityText(entity, "counterparty")}`, "/finance/transactions");
-  for (const entity of Object.values(state.entities["finance.account"] ?? {})) add("finance.account", entity, entityText(entity, "name") || "资金账户", `${entityText(entity, "accountType")} ${entityText(entity, "last4")}`, "/finance/accounts");
   for (const entity of Object.values(state.entities["note.note"] ?? {})) add("note.note", entity, entityText(entity, "title") || "无标题笔记", entityText(entity, "contentText") || entityText(entity, "summary"), "/notes");
   for (const entity of Object.values(state.entities["review.daily"] ?? {})) add("review.daily", entity, `每日复盘 ${entityText(entity, "reviewDate")}`, `${entityText(entity, "bestThing")} ${entityText(entity, "problem")} ${entityText(entity, "tomorrowPriority")} ${entityText(entity, "note")}`, "/review");
   return hits.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 80);
 }
 
-export function findProbableDuplicate(transaction: JsonEntity, existing: JsonEntity[]): JsonEntity | null {
-  const externalId = entityText(transaction, "externalTransactionId");
-  if (externalId) {
-    const exact = existing.find((item) => entityText(item, "externalTransactionId") === externalId);
-    if (exact) return exact;
-  }
-  const amount = Number(transaction.amountCents ?? 0);
-  const date = entityText(transaction, "localDate");
-  const merchant = entityText(transaction, "merchant").toLocaleLowerCase();
-  return existing.find((item) => {
-    if (Number(item.amountCents ?? 0) !== amount || entityText(item, "localDate") !== date) return false;
-    const candidate = entityText(item, "merchant").toLocaleLowerCase();
-    return !merchant || !candidate || merchant === candidate;
-  }) ?? null;
-}
