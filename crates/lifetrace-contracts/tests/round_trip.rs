@@ -76,7 +76,7 @@ fn push_request_round_trips() {
     let json = serde_json::to_value(&request).unwrap();
     assert_eq!(json["requestId"], "req-1");
     assert_eq!(json["client"]["appId"], "lifetrace-desktop");
-    assert_eq!(json["changes"][0]["entityId"], "tx-1");
+    assert_eq!(json["changes"][0]["entityId"], "task-1");
     let back: PushRequestV1 = serde_json::from_value(json).unwrap();
     assert_eq!(back, request);
 }
@@ -88,8 +88,8 @@ fn push_response_accepted_round_trips() {
         server_time: stamp(),
         results: vec![PushChangeResultV1::Accepted {
             change_id: ChangeId::new("change-1"),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-            entity_id: EntityId::new("tx-1"),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+            entity_id: EntityId::new("task-1"),
             server_version: ServerVersion::from_u64(42),
             cursor: Cursor::new("42"),
             server_modified_at: stamp(),
@@ -111,8 +111,8 @@ fn push_response_conflict_round_trips() {
         results: vec![PushChangeResultV1::Conflict {
             conflict_id: ConflictId::new("conflict-1"),
             change_id: ChangeId::new("change-1"),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-            entity_id: EntityId::new("tx-1"),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+            entity_id: EntityId::new("task-1"),
             client_base_server_version: ServerVersion::from_u64(7),
             current_server_version: ServerVersion::from_u64(8),
             server_entity: Some(serde_json::json!({"server": true}).into()),
@@ -137,15 +137,15 @@ fn pull_response_with_tombstone_round_trips() {
         server_time: stamp(),
         changes: vec![ServerChangeV1 {
             cursor: Cursor::new("11"),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-            entity_id: EntityId::new("tx-1"),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+            entity_id: EntityId::new("task-1"),
             operation: ChangeOperation::new(ChangeOperation::DELETE),
             server_version: ServerVersion::from_u64(9),
             server_modified_at: stamp(),
             payload: None,
             tombstone: Some(TombstoneV1 {
-                entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-                entity_id: EntityId::new("tx-1"),
+                entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+                entity_id: EntityId::new("task-1"),
                 deleted_at: stamp(),
                 server_version: ServerVersion::from_u64(9),
                 deleted_by_device: Some(DeviceId::new("device-2")),
@@ -173,10 +173,10 @@ fn snapshot_response_round_trips() {
         snapshot_id: SnapshotId::new("snapshot-1"),
         snapshot_cursor: Cursor::new("100"),
         items: vec![EntitySnapshotV1 {
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
-            entity_id: EntityId::new("tx-1"),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
+            entity_id: EntityId::new("task-1"),
             server_version: ServerVersion::from_u64(42),
-            payload: serde_json::to_value(transaction_payload()).unwrap().into(),
+            payload: serde_json::json!({"meta":{"id":"task-1"},"title":"Example task"}).into(),
         }],
         next_page_token: Some("page-2".to_owned()),
         completed: false,
@@ -219,7 +219,7 @@ fn unknown_enum_values_do_not_fail_batch_parsing() {
     let json = serde_json::json!({
         "changeId": "change-1",
         "entityType": "execution.task",
-        "entityId": "tx-1",
+        "entityId": "task-1",
         "operation": "future_operation",
         "baseServerVersion": "0",
         "entitySchemaVersion": 1,
@@ -234,11 +234,11 @@ fn unknown_enum_values_do_not_fail_batch_parsing() {
 
 #[test]
 fn entity_payload_dispatch_round_trips() {
-    let entity_type = EntityType::new(EntityType::FINANCE_TRANSACTION);
-    let json: JsonValue = serde_json::to_value(transaction_payload()).unwrap().into();
+    let entity_type = EntityType::new(EntityType::EXECUTION_TASK);
+    let json: JsonValue = serde_json::json!({"meta":{"id":"task-1"},"title":"Example task"}).into();
     let payload = EntityPayload::try_from((&entity_type, json)).unwrap();
     assert_eq!(payload.entity_type(), entity_type);
-    assert_eq!(payload.entity_id().as_str(), "tx-1");
+    assert_eq!(payload.entity_id().as_str(), "task-1");
     assert_eq!(payload.to_json().0["title"], "test");
 }
 

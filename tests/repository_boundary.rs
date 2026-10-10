@@ -50,34 +50,7 @@ fn production_uses_split_web_and_single_sqlite_cloud() {
 
     assert!(main.contains("workers::mail::run"));
     assert!(main.contains("workers::execution::run"));
-    assert!(main.contains("rewrite_beecount_request"));
     assert!(main.contains("bootstrap-user"));
     assert!(main.contains("create-invite"));
 }
 
-#[test]
-fn beecount_compatibility_stays_inside_lifetrace_cloud() {
-    let production = include_str!("../deploy/cloud/docker-compose.production.yml");
-    let main = include_str!("../src/main.rs");
-
-    assert!(production.contains("\"8869:8869\""));
-    assert!(production.contains("caddy:"));
-    assert!(production.contains("\"443:443\""));
-    assert!(production.contains("\"443:443/udp\""));
-    let cloud_block = production
-        .split("  cloud:")
-        .nth(1)
-        .and_then(|value| value.split("\n  web:").next())
-        .expect("cloud service block");
-    let web_block = production
-        .split("  web:")
-        .nth(1)
-        .and_then(|value| value.split("\n  caddy:").next())
-        .expect("web service block");
-    assert!(!cloud_block.contains("\"443:443\""));
-    assert!(!web_block.contains("\"443:443\""));
-    assert!(!production.contains("beecount-cloud"));
-    assert!(main.contains("BEECOUNT_BIND_ADDRESS"));
-    assert!(main.contains("/api/v1/integrations/beecount/compat"));
-    assert!(main.contains("/health/ready"));
-}

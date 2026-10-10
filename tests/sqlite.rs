@@ -4,25 +4,18 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use chrono::Utc;
 use lifetrace_cloud::{app, AppState, Config};
-use lifetrace_contracts::domain::finance::Transaction;
-use lifetrace_contracts::domain::{TransactionStatus, TransactionType};
 use lifetrace_contracts::sync::v1::{
     AppId, ChangeOperation, ClientPlatform, PullRequestV1, PushChangeResultV1, PushRequestV1,
     SnapshotRequestV1, SyncChangeV1, SyncClientInfo,
 };
-use lifetrace_contracts::time::{LocalDate, UtcTimestamp};
 use lifetrace_contracts::{
-    ChangeId, CurrencyCode, EntityId, EntityMeta, EntityType, RequestId, ServerVersion, UserId,
+    ChangeId, EntityId, EntityType, RequestId, ServerVersion, UserId,
 };
 use serde_json::Value;
 use tower::ServiceExt;
 
 fn database_path() -> Option<String> {
     std::env::var("TEST_DATABASE_PATH").ok()
-}
-
-fn stamp() -> UtcTimestamp {
-    "2026-08-05T03:00:00Z".parse().unwrap()
 }
 
 fn client() -> SyncClientInfo {
@@ -36,35 +29,8 @@ fn client() -> SyncClientInfo {
     }
 }
 
-fn transaction_payload(id: &str, amount_cents: i64) -> lifetrace_contracts::JsonValue {
-    let transaction = Transaction {
-        meta: EntityMeta {
-            id: EntityId::new(id),
-            user_id: UserId::new("local-user"),
-            created_at: stamp(),
-            updated_at: stamp(),
-            deleted_at: None,
-            local_version: 1,
-            server_version: None,
-            modified_by_device: None,
-        },
-        transaction_type: TransactionType::new(TransactionType::EXPENSE),
-        amount_cents,
-        currency: CurrencyCode::cny(),
-        account_id: None,
-        to_account_id: None,
-        category_id: None,
-        counterparty: None,
-        merchant: None,
-        item: None,
-        note: None,
-        occurred_at: stamp(),
-        local_date: LocalDate::new("2026-08-05").unwrap(),
-        status: TransactionStatus::new(TransactionStatus::CONFIRMED),
-        source_type: "manual".to_owned(),
-        external_transaction_id: None,
-    };
-    lifetrace_contracts::JsonValue(serde_json::to_value(transaction).unwrap())
+fn task_payload(id: &str, estimated_minutes: i64) -> lifetrace_contracts::JsonValue {
+    lifetrace_contracts::JsonValue(serde_json::json!({ "meta": { "id": id }, "title": "Example task", "estimatedMinutes": estimated_minutes }))
 }
 
 fn push_request() -> PushRequestV1 {
@@ -73,13 +39,13 @@ fn push_request() -> PushRequestV1 {
         client: client(),
         changes: vec![SyncChangeV1 {
             change_id: ChangeId::new("postgres-change-1"),
-            entity_type: EntityType::new("finance.transaction"),
+            entity_type: EntityType::new("execution.task"),
             entity_id: EntityId::new("postgres-entity-1"),
             operation: ChangeOperation::new(ChangeOperation::UPSERT),
             base_server_version: ServerVersion::zero(),
             entity_schema_version: 1,
             client_modified_at: Utc::now(),
-            payload: Some(transaction_payload("postgres-entity-1", 1234)),
+            payload: Some(task_payload("postgres-entity-1", 1234)),
             atomic_group_id: None,
             dependencies: vec![],
         }],
@@ -158,7 +124,7 @@ async fn sqlite_runtime_migrates_persists_and_replays_idempotently() {
     restarted.initialize().await.unwrap();
     let items = restarted
         .store
-        .list_entities(&user, "finance.transaction")
+        .list_entities(&user, "execution.task")
         .await
         .unwrap();
     assert_eq!(items.len(), 1);
@@ -206,7 +172,7 @@ async fn sqlite_runtime_migrates_persists_and_replays_idempotently() {
     assert!(snapshot.completed);
     assert_eq!(snapshot.items.len(), 1);
 
-    let filtered_types = vec![EntityType::new("finance.transaction")];
+    let filtered_types = vec![EntityType::new("execution.task")];
     let filtered_snapshot = restarted
         .store
         .snapshot(

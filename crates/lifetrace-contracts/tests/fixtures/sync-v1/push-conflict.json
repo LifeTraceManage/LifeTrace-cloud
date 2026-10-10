@@ -6,13 +6,13 @@
       "status": "conflict",
       "conflictId": "conflict-0001",
       "changeId": "b2c3d4e5-f6a7-4890-9bcd-ef0123456789",
-      "entityType": "finance.transaction",
-      "entityId": "tx-2026-08-04-0001",
+      "entityType": "execution.task",
+      "entityId": "task-2026-08-04-0001",
       "clientBaseServerVersion": "41",
       "currentServerVersion": "42",
       "serverEntity": {
         "meta": {
-          "id": "tx-2026-08-04-0001",
+          "id": "task-2026-08-04-0001",
           "userId": "local-user",
           "createdAt": "2026-08-04T15:29:00Z",
           "updatedAt": "2026-08-04T15:30:05Z",
