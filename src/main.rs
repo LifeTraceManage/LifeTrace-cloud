@@ -1,6 +1,5 @@
 use std::io::{self, Write};
 
-use axum::{extract::Request, middleware, response::Response};
 use lifetrace_cloud::{app, Config};
 
 #[tokio::main]
@@ -22,30 +21,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let primary_listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let primary_address = primary_listener.local_addr().unwrap_or(config.bind_addr);
 
-    let beecount_addr = std::env::var("BEECOUNT_BIND_ADDRESS")
-        .unwrap_or_else(|_| "0.0.0.0:8869".to_owned())
-        .parse::<std::net::SocketAddr>()?;
-    let beecount_listener = tokio::net::TcpListener::bind(beecount_addr).await?;
-    let beecount_address = beecount_listener.local_addr().unwrap_or(beecount_addr);
-
     tracing::info!(
         target: "lifetrace::startup",
         environment = %config.environment,
         storage = "sqlite",
         http = %primary_address,
-        beecount = %beecount_address,
         "LifeTrace Cloud started"
     );
 
     let primary = axum::serve(
         primary_listener,
         app(state.clone()).into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    );
-    let beecount = axum::serve(
-        beecount_listener,
-        app(state.clone())
-            .layer(middleware::from_fn(rewrite_beecount_request))
-            .into_make_service_with_connect_info::<std::net::SocketAddr>(),
     );
     if state.config.mail_credential_key.is_some() {
         let mail_state = state.clone();
@@ -64,35 +50,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     tokio::select! {
         result = primary => result?,
-        result = beecount => result?,
         _ = shutdown_signal() => {},
     }
 
     Ok(())
-}
-
-async fn rewrite_beecount_request(mut request: Request, next: middleware::Next) -> Response {
-    let path = request.uri().path();
-    let rewritten = if path == "/ready" {
-        Some("/health/ready".to_owned())
-    } else if path == "/ws" {
-        Some("/api/v1/integrations/beecount/compat/ws".to_owned())
-    } else {
-        path.strip_prefix("/api/v1")
-            .map(|suffix| format!("/api/v1/integrations/beecount/compat{suffix}"))
-    };
-
-    if let Some(mut target) = rewritten {
-        if let Some(query) = request.uri().query() {
-            target.push('?');
-            target.push_str(query);
-        }
-        if let Ok(uri) = target.parse() {
-            *request.uri_mut() = uri;
-        }
-    }
-
-    next.run(request).await
 }
 
 async fn shutdown_signal() {
