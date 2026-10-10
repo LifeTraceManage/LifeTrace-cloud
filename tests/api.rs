@@ -7,10 +7,8 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Method, Request, StatusCode};
 use axum::Router;
 use lifetrace_cloud::{app, AppState, Config};
-use lifetrace_contracts::domain::finance::Transaction;
-use lifetrace_contracts::domain::{TransactionStatus, TransactionType};
-use lifetrace_contracts::time::{LocalDate, UtcTimestamp};
-use lifetrace_contracts::{CurrencyCode, EntityId, EntityMeta, UserId};
+use lifetrace_contracts::time::UtcTimestamp;
+use lifetrace_contracts::{EntityId, EntityMeta, UserId};
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
@@ -34,26 +32,8 @@ fn meta(id: &str) -> EntityMeta {
     }
 }
 
-fn transaction_payload(id: &str, amount_cents: i64) -> Value {
-    serde_json::to_value(Transaction {
-        meta: meta(id),
-        transaction_type: TransactionType::new(TransactionType::EXPENSE),
-        amount_cents,
-        currency: CurrencyCode::cny(),
-        account_id: None,
-        to_account_id: None,
-        category_id: None,
-        counterparty: None,
-        merchant: None,
-        item: None,
-        note: None,
-        occurred_at: stamp(),
-        local_date: LocalDate::new("2026-08-04").unwrap(),
-        status: TransactionStatus::new(TransactionStatus::CONFIRMED),
-        source_type: "manual".to_owned(),
-        external_transaction_id: None,
-    })
-    .unwrap()
+fn task_payload(id: &str, amount_cents: i64) -> Value {
+    json!({"meta": meta(id), "title": "Sync regression task", "amountCents": amount_cents})
 }
 
 fn client() -> Value {
@@ -77,14 +57,14 @@ fn change(
 ) -> Value {
     json!({
         "changeId": change_id,
-        "entityType": "finance.transaction",
+        "entityType": "execution.task",
         "entityId": entity_id,
         "operation": operation,
         "baseServerVersion": base.to_string(),
         "entitySchemaVersion": 1,
         "clientModifiedAt": "2026-08-04T15:30:00Z",
         "payload": if operation == "upsert" {
-            transaction_payload(entity_id, amount_cents)
+            task_payload(entity_id, amount_cents)
         } else {
             Value::Null
         },
