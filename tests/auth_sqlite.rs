@@ -209,7 +209,6 @@ async fn registered_device_can_sync_without_duplicate_key_error() {
     assert_eq!(count, 1);
 }
 
-
 #[tokio::test]
 async fn password_reset_is_single_use_and_revokes_sessions() {
     let Some(state) = state().await else {
