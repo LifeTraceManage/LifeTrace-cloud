@@ -1,7 +1,6 @@
 //! Entity type registry.
 //!
 //! `EntityType` is the stable, forward-compatible entity type name
-//! (`finance.transaction`, `note.note`, ...). Unknown entity types are
 //! preserved as strings so a newer client can never break a whole batch.
 
 use std::borrow::Cow;
@@ -76,25 +75,12 @@ const fn server_managed(entity_type: &'static str) -> EntityDescriptor {
     }
 }
 
-/// Complete static registry. Finance entities introduced by the Android
-/// bookkeeping client deliberately use the same generic LifeTrace sync store;
-/// registering them here is enough for push/pull/snapshot persistence and
-/// optimistic conflict handling.
+/// Complete static entity registry.
 pub const REGISTRY: &[EntityDescriptor] = &[
     server_managed(EntityType::IDENTITY_USER),
     server_managed(EntityType::IDENTITY_DEVICE),
     user_owned(EntityType::ASSET_ASSET, false),
     user_owned(EntityType::ASSET_EVENT, false),
-    user_owned(EntityType::FINANCE_LEDGER, false),
-    user_owned(EntityType::FINANCE_ACCOUNT, false),
-    user_owned(EntityType::FINANCE_CATEGORY, false),
-    user_owned(EntityType::FINANCE_TRANSACTION, false),
-    user_owned(EntityType::FINANCE_RECURRING_TRANSACTION, false),
-    user_owned(EntityType::FINANCE_TAG, false),
-    user_owned(EntityType::FINANCE_TRANSACTION_TAG, false),
-    user_owned(EntityType::FINANCE_BUDGET, false),
-    user_owned(EntityType::FINANCE_TRANSACTION_ATTACHMENT, true),
-    user_owned(EntityType::FINANCE_TRANSACTION_EVIDENCE, false),
     user_owned(EntityType::HABIT_ACTIVITY, false),
     user_owned(EntityType::HABIT_LOG, false),
     user_owned(EntityType::REVIEW_DAILY, false),
@@ -145,16 +131,6 @@ impl EntityType {
     pub const IDENTITY_DEVICE: &'static str = "identity.device";
     pub const ASSET_ASSET: &'static str = "asset.asset";
     pub const ASSET_EVENT: &'static str = "asset.event";
-    pub const FINANCE_LEDGER: &'static str = "finance.ledger";
-    pub const FINANCE_ACCOUNT: &'static str = "finance.account";
-    pub const FINANCE_CATEGORY: &'static str = "finance.category";
-    pub const FINANCE_TRANSACTION: &'static str = "finance.transaction";
-    pub const FINANCE_RECURRING_TRANSACTION: &'static str = "finance.recurring_transaction";
-    pub const FINANCE_TAG: &'static str = "finance.tag";
-    pub const FINANCE_TRANSACTION_TAG: &'static str = "finance.transaction_tag";
-    pub const FINANCE_BUDGET: &'static str = "finance.budget";
-    pub const FINANCE_TRANSACTION_ATTACHMENT: &'static str = "finance.transaction_attachment";
-    pub const FINANCE_TRANSACTION_EVIDENCE: &'static str = "finance.transaction_evidence";
     pub const HABIT_ACTIVITY: &'static str = "habit.activity";
     pub const HABIT_LOG: &'static str = "habit.log";
     pub const REVIEW_DAILY: &'static str = "review.daily";
@@ -197,16 +173,6 @@ impl EntityType {
             Self::IDENTITY_DEVICE,
             Self::ASSET_ASSET,
             Self::ASSET_EVENT,
-            Self::FINANCE_LEDGER,
-            Self::FINANCE_ACCOUNT,
-            Self::FINANCE_CATEGORY,
-            Self::FINANCE_TRANSACTION,
-            Self::FINANCE_RECURRING_TRANSACTION,
-            Self::FINANCE_TAG,
-            Self::FINANCE_TRANSACTION_TAG,
-            Self::FINANCE_BUDGET,
-            Self::FINANCE_TRANSACTION_ATTACHMENT,
-            Self::FINANCE_TRANSACTION_EVIDENCE,
             Self::HABIT_ACTIVITY,
             Self::HABIT_LOG,
             Self::REVIEW_DAILY,
@@ -315,23 +281,12 @@ mod tests {
     #[test]
     fn finance_bookkeeping_entities_are_syncable() {
         for entity in [
-            EntityType::FINANCE_LEDGER,
-            EntityType::FINANCE_ACCOUNT,
-            EntityType::FINANCE_CATEGORY,
-            EntityType::FINANCE_TRANSACTION,
-            EntityType::FINANCE_RECURRING_TRANSACTION,
-            EntityType::FINANCE_TAG,
-            EntityType::FINANCE_TRANSACTION_TAG,
-            EntityType::FINANCE_BUDGET,
-            EntityType::FINANCE_TRANSACTION_ATTACHMENT,
-            EntityType::FINANCE_TRANSACTION_EVIDENCE,
         ] {
             let descriptor = describe(entity).unwrap();
             assert_eq!(descriptor.ownership, EntityOwnership::UserOwned);
             assert_eq!(descriptor.sync_mode, SyncMode::Bidirectional);
             assert_eq!(descriptor.conflict_mode, ConflictMode::Optimistic);
         }
-        assert!(describe(EntityType::FINANCE_TRANSACTION_ATTACHMENT)
             .unwrap()
             .contains_file_references);
     }
@@ -341,7 +296,6 @@ mod tests {
         assert!(!is_syncable("secret.credential"));
         assert!(is_syncable(EntityType::ASSET_ASSET));
         assert!(is_syncable(EntityType::ASSET_EVENT));
-        assert!(is_syncable(EntityType::FINANCE_TRANSACTION));
         assert!(is_syncable(EntityType::EXECUTION_GOAL));
         assert!(is_syncable(EntityType::EXECUTION_IMPORTANT_DATE));
         assert!(is_syncable(EntityType::EXECUTION_FOCUS_SESSION));
