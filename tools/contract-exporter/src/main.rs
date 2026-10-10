@@ -77,7 +77,6 @@ macro_rules! public_types {
             Device::type_name(),
             Asset::type_name(),
             AssetEvent::type_name(),
-            Transaction::type_name(),
             // habits / reviews
             Activity::type_name(),
             ActivityLog::type_name(),
