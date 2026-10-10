@@ -16,8 +16,6 @@ pub const ALL_SCOPES: &[&str] = &[
     "sessions:write",
     "sync:read",
     "sync:write",
-    "finance:read",
-    "finance:write",
     "notes:read",
     "notes:write",
     "files:read",
@@ -42,12 +40,10 @@ pub fn supported_app(app_id: &str) -> bool {
     matches!(
         app_id,
         AppId::DESKTOP
-            | AppId::FINANCE_ANDROID
             | AppId::NOTES_ANDROID
             | AppId::HABITS_ANDROID
             | AppId::EXECUTE_ANDROID
             | AppId::ASSETS
-            | AppId::BEECOUNT
             | AppId::WEB
     )
 }
@@ -55,14 +51,6 @@ pub fn supported_app(app_id: &str) -> bool {
 pub fn allowed_scopes(app_id: &str) -> BTreeSet<String> {
     let values: &[&str] = match app_id {
         AppId::DESKTOP => ALL_SCOPES,
-        AppId::FINANCE_ANDROID => &[
-            "account:read",
-            "devices:read",
-            "sync:read",
-            "sync:write",
-            "finance:read",
-            "finance:write",
-        ],
         AppId::NOTES_ANDROID => &[
             "account:read",
             "devices:read",
@@ -111,17 +99,6 @@ pub fn allowed_scopes(app_id: &str) -> BTreeSet<String> {
             "links:read",
             "links:write",
         ],
-        AppId::BEECOUNT => &[
-            "account:read",
-            "devices:read",
-            "devices:write",
-            "sync:read",
-            "sync:write",
-            "finance:read",
-            "finance:write",
-            "files:read",
-            "files:write",
-        ],
         AppId::WEB => ALL_SCOPES,
         _ => &[],
     };
@@ -153,8 +130,6 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         "account"
     } else if entity_type == "identity.device" {
         "devices"
-    } else if entity_type.starts_with("finance.") {
-        "finance"
     } else if entity_type.starts_with("note.") {
         "notes"
     } else if entity_type.starts_with("habit.") {
@@ -179,8 +154,6 @@ pub fn required_entity_scope(entity_type: &str, write: bool) -> Option<&'static 
         return None;
     };
     Some(match (domain, suffix) {
-        ("finance", "read") => "finance:read",
-        ("finance", _) => "finance:write",
         ("notes", "read") => "notes:read",
         ("notes", _) => "notes:write",
         ("habits", "read") => "habits:read",
@@ -224,17 +197,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn finance_app_cannot_receive_notes_scope() {
-        let granted = default_scopes(AppId::FINANCE_ANDROID);
-        let issued = issue_scopes(
-            AppId::FINANCE_ANDROID,
-            &[Scope::new("notes:read"), Scope::new("finance:read")],
-            &granted,
-        );
-        assert_eq!(issued, vec!["finance:read"]);
-    }
-
-    #[test]
     fn execute_android_has_only_required_product_scopes() {
         assert!(supported_app(AppId::EXECUTE_ANDROID));
         let granted = allowed_scopes(AppId::EXECUTE_ANDROID);
@@ -258,7 +220,6 @@ mod tests {
         ] {
             assert!(granted.contains(required), "missing scope: {required}");
         }
-        assert!(!granted.contains("finance:read"));
         assert!(!granted.contains("notes:read"));
         assert!(!granted.contains("mail:read"));
     }
@@ -310,7 +271,6 @@ mod tests {
             assert!(granted.contains(required), "missing scope: {required}");
         }
         assert!(!granted.contains("account:write"));
-        assert!(!granted.contains("finance:write"));
         assert!(!granted.contains("notes:write"));
         assert!(!granted.contains("execution:write"));
         assert!(!granted.contains("mail:write"));

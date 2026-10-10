@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Bot, Dumbbell, HeartPulse, LayoutDashboard, Leaf, Mail, NotebookPen, Settings, WalletCards } from "lucide-react";
+import { ArrowRight, Bot, Dumbbell, HeartPulse, LayoutDashboard, Leaf, Mail, NotebookPen, Settings } from "lucide-react";
 import { useApp } from "../../app/AppContext";
 import { Button, Card, CardContent, cn } from "../../components/ui";
 import { AgentSidebar } from "../assistant/AgentSidebar";
@@ -23,12 +23,6 @@ const modules = [
     name: "Execute",
     icon: LayoutDashboard,
     accent: "text-warning",
-  },
-  {
-    to: "/finance",
-    name: "Finance",
-    icon: WalletCards,
-    accent: "text-primary",
   },
 ] as const;
 

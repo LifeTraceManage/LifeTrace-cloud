@@ -12,7 +12,7 @@ describe("navigation contract",()=>{
     expect(canonical("unknown")).toBe("/execute/today");
   });
   it("keeps first-class workspaces outside the core app namespace",()=>{
-    const workspaces=["/notes","/mail","/execute/today","/finance"];
+    const workspaces=["/notes","/mail","/execute/today"];
     expect(workspaces.every(path=>!path.startsWith("/app/"))).toBe(true);
     expect(executeViews).toContain("habits");
   });

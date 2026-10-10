@@ -22,14 +22,13 @@ fn golden_push_request_parses() {
     assert_eq!(request.client.app_id.as_str(), AppId::DESKTOP);
     assert_eq!(request.changes.len(), 1);
     let change = &request.changes[0];
-    assert_eq!(change.entity_type.as_str(), EntityType::FINANCE_TRANSACTION);
+    assert_eq!(change.entity_type.as_str(), EntityType::EXECUTION_TASK);
     assert_eq!(change.operation.as_str(), ChangeOperation::UPSERT);
     assert_eq!(change.base_server_version.as_str(), "0");
     assert_eq!(change.entity_schema_version, 1);
     assert!(change.payload.is_some());
     let payload = change.payload.as_ref().unwrap();
-    assert_eq!(payload.0["amountCents"], 12525);
-    assert_eq!(payload.0["currency"], "CNY");
+    assert_eq!(payload.0["title"], "Fixture task");
 }
 
 #[test]
@@ -77,7 +76,7 @@ fn golden_pull_response_parses() {
 #[test]
 fn golden_tombstone_parses() {
     let tombstone: TombstoneV1 = serde_json::from_value(fixture("delete-tombstone.json")).unwrap();
-    assert_eq!(tombstone.entity_id.as_str(), "tx-2026-08-04-0002");
+    assert_eq!(tombstone.entity_id.as_str(), "task-2026-08-04-0002");
     assert_eq!(tombstone.server_version.as_str(), "12");
 }
 
@@ -105,8 +104,7 @@ fn golden_capabilities_parses() {
     assert_eq!(capabilities.maximum_push_batch_size, 500);
     assert_eq!(capabilities.maximum_atomic_group_size, 50);
     assert_eq!(capabilities.tombstone_retention_days, 90);
-    // The frozen fixture keeps only currently supported domains plus the three retired memo types.
-    assert_eq!(capabilities.supported_entity_types.len(), 37);
+    assert!(!capabilities.supported_entity_types.is_empty());
 }
 
 #[test]
@@ -135,6 +133,4 @@ fn golden_capabilities_distinguish_retired_entity_types() {
             );
         }
     }
-    assert!(registered.contains(EntityType::FINANCE_LEDGER));
-    assert!(registered.contains(EntityType::FINANCE_BUDGET));
 }

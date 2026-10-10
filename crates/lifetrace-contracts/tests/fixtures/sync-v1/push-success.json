@@ -5,8 +5,8 @@
     {
       "status": "accepted",
       "changeId": "a1b2c3d4-e5f6-4789-9abc-def012345678",
-      "entityType": "finance.transaction",
-      "entityId": "tx-2026-08-04-0001",
+      "entityType": "execution.task",
+      "entityId": "task-2026-08-04-0001",
       "serverVersion": "42",
       "cursor": "42",
       "serverModifiedAt": "2026-08-04T15:30:05Z"

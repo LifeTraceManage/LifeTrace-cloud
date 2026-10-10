@@ -103,30 +103,6 @@ macro_rules! wire_string_enum {
     };
 }
 
-wire_string_enum!(TransactionType, "Financial transaction type.", [
-    EXPENSE => "expense",
-    INCOME => "income",
-    TRANSFER => "transfer",
-    REFUND => "refund",
-    FEE => "fee",
-]);
-
-wire_string_enum!(TransactionStatus, "Financial transaction status.", [
-    CANDIDATE => "candidate",
-    PROVISIONAL => "provisional",
-    CONFIRMED => "confirmed",
-    IGNORED => "ignored",
-]);
-
-wire_string_enum!(AccountType, "Finance account type.", [
-    CASH => "cash",
-    BANK => "bank",
-    WECHAT => "wechat",
-    ALIPAY => "alipay",
-    INVESTMENT => "investment",
-    OTHER => "other",
-]);
-
 wire_string_enum!(ActivityType, "Habit activity type.", [
     DURATION => "duration",
     COUNT => "count",
@@ -164,7 +140,6 @@ wire_string_enum!(NoteType, "Note type.", [
     DAILY => "daily",
     HABIT_LOG => "habit_log",
     WORKOUT_REVIEW => "workout_review",
-    EXPENSE_NOTE => "expense_note",
     WEEKLY_REVIEW => "weekly_review",
     MONTHLY_REVIEW => "monthly_review",
 ]);
@@ -197,23 +172,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn transaction_type_round_trips_known_and_unknown() {
-        let known = TransactionType::new(TransactionType::EXPENSE);
-        let json = serde_json::to_string(&known).unwrap();
-        assert_eq!(json, "\"expense\"");
-        let back: TransactionType = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, known);
-
-        let unknown: TransactionType = serde_json::from_str("\"future_type\"").unwrap();
-        assert_eq!(unknown.as_str(), "future_type");
-        assert_eq!(serde_json::to_string(&unknown).unwrap(), "\"future_type\"");
-    }
-
-    #[test]
     fn all_required_domain_enums_are_present() {
-        assert_eq!(TransactionType::REFUND, "refund");
-        assert_eq!(TransactionType::FEE, "fee");
-        assert_eq!(TransactionStatus::CANDIDATE, "candidate");
         assert_eq!(ActivityLogStatus::PARTIAL, "partial");
         assert_eq!(NoteType::WEEKLY_REVIEW, "weekly_review");
         assert_eq!(FileStorageState::LOCAL_ONLY, "local_only");
