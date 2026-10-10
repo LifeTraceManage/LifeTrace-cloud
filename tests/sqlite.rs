@@ -8,9 +8,7 @@ use lifetrace_contracts::sync::v1::{
     AppId, ChangeOperation, ClientPlatform, PullRequestV1, PushChangeResultV1, PushRequestV1,
     SnapshotRequestV1, SyncChangeV1, SyncClientInfo,
 };
-use lifetrace_contracts::{
-    ChangeId, EntityId, EntityType, RequestId, ServerVersion, UserId,
-};
+use lifetrace_contracts::{ChangeId, EntityId, EntityType, RequestId, ServerVersion, UserId};
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -30,7 +28,9 @@ fn client() -> SyncClientInfo {
 }
 
 fn task_payload(id: &str, estimated_minutes: i64) -> lifetrace_contracts::JsonValue {
-    lifetrace_contracts::JsonValue(serde_json::json!({ "meta": { "id": id }, "title": "Example task", "estimatedMinutes": estimated_minutes }))
+    lifetrace_contracts::JsonValue(
+        serde_json::json!({ "meta": { "id": id }, "title": "Example task", "estimatedMinutes": estimated_minutes }),
+    )
 }
 
 fn push_request() -> PushRequestV1 {

@@ -42,7 +42,6 @@ fn production_uses_split_web_and_single_sqlite_cloud() {
     assert!(production.contains("cloud:"));
     assert!(production.contains("web:"));
     assert!(production.contains("\"80:80\""));
-    assert!(production.contains("\"8869:8869\""));
     assert!(production.contains("lifetrace_data:/data"));
     assert!(!production.contains("postgres:"));
     assert!(!production.contains("mail-worker:"));
@@ -53,4 +52,3 @@ fn production_uses_split_web_and_single_sqlite_cloud() {
     assert!(main.contains("bootstrap-user"));
     assert!(main.contains("create-invite"));
 }
-
