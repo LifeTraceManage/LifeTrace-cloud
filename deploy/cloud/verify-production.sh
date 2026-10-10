@@ -36,7 +36,6 @@ done
 # Cloud runtime and embedded SQLite.
 "${compose[@]}" exec -T cloud sh -ec 'test -x /app/lifetrace-cloud'
 "${compose[@]}" exec -T cloud curl --fail --silent http://127.0.0.1:8787/health/ready >/dev/null
-"${compose[@]}" exec -T cloud curl --fail --silent http://127.0.0.1:8869/ready >/dev/null
 
 # Web static payload and reverse proxy to Cloud.
 "${compose[@]}" exec -T web sh -ec 'test -s /usr/share/nginx/html/index.html'
@@ -69,4 +68,3 @@ echo "  cloud:    lifetrace-cloud:local"
 echo "  gateway:  caddy"
 echo "  storage:  /data/lifetrace.db"
 echo "  public:   $(grep '^PUBLIC_WEB_BASE_URL=' "$ENV_FILE" | cut -d= -f2-)"
-echo "  beecount: http://127.0.0.1:8869/ready"
