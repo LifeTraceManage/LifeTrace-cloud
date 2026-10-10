@@ -279,19 +279,6 @@ mod tests {
     }
 
     #[test]
-    fn finance_bookkeeping_entities_are_syncable() {
-        for entity in [
-        ] {
-            let descriptor = describe(entity).unwrap();
-            assert_eq!(descriptor.ownership, EntityOwnership::UserOwned);
-            assert_eq!(descriptor.sync_mode, SyncMode::Bidirectional);
-            assert_eq!(descriptor.conflict_mode, ConflictMode::Optimistic);
-        }
-            .unwrap()
-            .contains_file_references);
-    }
-
-    #[test]
     fn unknown_entity_types_are_not_syncable() {
         assert!(!is_syncable("secret.credential"));
         assert!(is_syncable(EntityType::ASSET_ASSET));
