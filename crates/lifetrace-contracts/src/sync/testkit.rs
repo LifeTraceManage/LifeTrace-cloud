@@ -1006,33 +1006,21 @@ mod tests {
         base: u64,
         group: Option<&str>,
     ) -> SyncChangeV1 {
-        let transaction = Transaction {
-            meta: meta(entity_id),
-            transaction_type: TransactionType::new(TransactionType::EXPENSE),
-            amount_cents,
-            currency: CurrencyCode::cny(),
-            account_id: None,
-            to_account_id: None,
-            category_id: None,
-            counterparty: None,
-            merchant: None,
-            item: None,
-            note: None,
-            occurred_at: stamp(),
-            local_date: LocalDate::new("2026-08-04").unwrap(),
-            status: TransactionStatus::new(TransactionStatus::CONFIRMED),
-            source_type: "manual".to_owned(),
-            external_transaction_id: None,
-        };
+        let task = serde_json::json!({
+            "meta": meta(entity_id),
+            "title": "Example task",
+            "estimatedMinutes": amount_cents,
+            "status": "todo",
+        });
         SyncChangeV1 {
             change_id: ChangeId::new(change_id),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
             entity_id: EntityId::new(entity_id),
             operation: ChangeOperation::new(ChangeOperation::UPSERT),
             base_server_version: ServerVersion::from_u64(base),
             entity_schema_version: 1,
             client_modified_at: stamp(),
-            payload: Some(serde_json::to_value(transaction).unwrap().into()),
+            payload: Some(task.into()),
             atomic_group_id: group.map(AtomicGroupId::new),
             dependencies: vec![],
         }
@@ -1041,7 +1029,7 @@ mod tests {
     fn delete_change(change_id: &str, entity_id: &str, base: u64) -> SyncChangeV1 {
         SyncChangeV1 {
             change_id: ChangeId::new(change_id),
-            entity_type: EntityType::new(EntityType::FINANCE_TRANSACTION),
+            entity_type: EntityType::new(EntityType::EXECUTION_TASK),
             entity_id: EntityId::new(entity_id),
             operation: ChangeOperation::new(ChangeOperation::DELETE),
             base_server_version: ServerVersion::from_u64(base),
@@ -1076,13 +1064,13 @@ mod tests {
         let mut server = SyncServer::new(UserId::new("test-user"));
         let response = server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 100, 0, None,
+                "c1", "task-1", 100, 0, None,
             )]))
             .unwrap();
         assert_eq!(response.results.len(), 1);
         assert_eq!(accepted_version(&response.results[0]), 1);
         let entity = server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+            .entity(EntityType::EXECUTION_TASK, "task-1")
             .unwrap();
         assert!(!entity.deleted);
         assert_eq!(entity.server_version, 1);
@@ -1093,21 +1081,20 @@ mod tests {
         let mut server = SyncServer::new(UserId::new("test-user"));
         server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 100, 0, None,
+                "c1", "task-1", 100, 0, None,
             )]))
             .unwrap();
         let response = server
             .push(&push_request(vec![upsert_change(
-                "c2", "tx-1", 200, 1, None,
+                "c2", "task-1", 200, 1, None,
             )]))
             .unwrap();
         assert_eq!(accepted_version(&response.results[0]), 2);
         let entity = server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+            .entity(EntityType::EXECUTION_TASK, "task-1")
             .unwrap();
         assert_eq!(entity.server_version, 2);
-        let payload: Transaction = serde_json::from_value(entity.payload.0.clone()).unwrap();
-        assert_eq!(payload.amount_cents, 200);
+        assert_eq!(entity.payload.0["estimatedMinutes"], 200);
     }
 
     #[test]
@@ -1115,17 +1102,17 @@ mod tests {
         let mut server = SyncServer::new(UserId::new("test-user"));
         server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 100, 0, None,
+                "c1", "task-1", 100, 0, None,
             )]))
             .unwrap();
         server
             .push(&push_request(vec![upsert_change(
-                "c2", "tx-1", 200, 1, None,
+                "c2", "task-1", 200, 1, None,
             )]))
             .unwrap();
         let response = server
             .push(&push_request(vec![upsert_change(
-                "c3", "tx-1", 300, 1, None,
+                "c3", "task-1", 300, 1, None,
             )]))
             .unwrap();
         match &response.results[0] {
@@ -1139,15 +1126,13 @@ mod tests {
                 assert_eq!(reason.as_str(), ConflictReason::BASE_VERSION_MISMATCH);
                 assert_eq!(current_server_version.to_u64(), Some(2));
                 assert!(!server_deleted);
-                let current: Transaction =
-                    serde_json::from_value(server_entity.clone().unwrap().0).unwrap();
-                assert_eq!(current.amount_cents, 200);
+                assert_eq!(server_entity.as_ref().unwrap().0["estimatedMinutes"], 200);
             }
             other => panic!("expected conflict, got {other:?}"),
         }
         // Nothing was written.
         let entity = server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+            .entity(EntityType::EXECUTION_TASK, "task-1")
             .unwrap();
         assert_eq!(entity.server_version, 2);
     }
@@ -1157,12 +1142,12 @@ mod tests {
         let mut server = SyncServer::new(UserId::new("test-user"));
         let first = server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 100, 0, None,
+                "c1", "task-1", 100, 0, None,
             )]))
             .unwrap();
         let second = server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 100, 0, None,
+                "c1", "task-1", 100, 0, None,
             )]))
             .unwrap();
         assert!(matches!(
@@ -1176,7 +1161,7 @@ mod tests {
         assert_eq!(server.change_count(), 1);
         assert_eq!(
             server
-                .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+                .entity(EntityType::EXECUTION_TASK, "task-1")
                 .unwrap()
                 .server_version,
             1
@@ -1188,12 +1173,12 @@ mod tests {
         let mut server = SyncServer::new(UserId::new("test-user"));
         server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 100, 0, None,
+                "c1", "task-1", 100, 0, None,
             )]))
             .unwrap();
         let response = server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 999, 0, None,
+                "c1", "task-1", 999, 0, None,
             )]))
             .unwrap();
         match &response.results[0] {
@@ -1210,15 +1195,15 @@ mod tests {
         let mut server = SyncServer::new(UserId::new("test-user"));
         server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 100, 0, None,
+                "c1", "task-1", 100, 0, None,
             )]))
             .unwrap();
         let response = server
-            .push(&push_request(vec![delete_change("c2", "tx-1", 1)]))
+            .push(&push_request(vec![delete_change("c2", "task-1", 1)]))
             .unwrap();
         assert_eq!(accepted_version(&response.results[0]), 2);
         let entity = server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+            .entity(EntityType::EXECUTION_TASK, "task-1")
             .unwrap();
         assert!(entity.deleted);
         assert!(entity.deleted_at.is_some());
@@ -1246,15 +1231,15 @@ mod tests {
         let mut server = SyncServer::new(UserId::new("test-user"));
         server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 100, 0, None,
+                "c1", "task-1", 100, 0, None,
             )]))
             .unwrap();
         server
-            .push(&push_request(vec![delete_change("c2", "tx-1", 1)]))
+            .push(&push_request(vec![delete_change("c2", "task-1", 1)]))
             .unwrap();
         // Second delete with the tombstone version: idempotent success.
         let second = server
-            .push(&push_request(vec![delete_change("c3", "tx-1", 2)]))
+            .push(&push_request(vec![delete_change("c3", "task-1", 2)]))
             .unwrap();
         assert_eq!(accepted_version(&second.results[0]), 2);
         assert_eq!(
@@ -1264,7 +1249,7 @@ mod tests {
         );
         // Second delete with a stale version: explicit both_deleted conflict.
         let stale = server
-            .push(&push_request(vec![delete_change("c4", "tx-1", 1)]))
+            .push(&push_request(vec![delete_change("c4", "task-1", 1)]))
             .unwrap();
         match &stale.results[0] {
             PushChangeResultV1::Conflict {
@@ -1415,7 +1400,7 @@ mod tests {
         let mut server = SyncServer::new(UserId::new("test-user"));
         server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 100, 0, None,
+                "c1", "task-1", 100, 0, None,
             )]))
             .unwrap();
         let snapshot = server
@@ -1435,7 +1420,7 @@ mod tests {
         // A concurrent change lands after the snapshot cursor.
         server
             .push(&push_request(vec![upsert_change(
-                "c2", "tx-2", 200, 0, None,
+                "c2", "task-2", 200, 0, None,
             )]))
             .unwrap();
         let pull = server
@@ -1452,7 +1437,7 @@ mod tests {
             .iter()
             .map(|change| change.entity_id.as_str())
             .collect();
-        assert_eq!(changes, vec!["tx-2"], "no gap: concurrent change is pulled");
+        assert_eq!(changes, vec!["task-2"], "no gap: concurrent change is pulled");
     }
 
     #[test]
@@ -1460,13 +1445,13 @@ mod tests {
         let mut server = SyncServer::new(UserId::new("test-user"));
         server
             .push(&push_request(vec![upsert_change(
-                "c1", "tx-1", 100, 0, None,
+                "c1", "task-1", 100, 0, None,
             )]))
             .unwrap();
         // Group: tx-2 create + tx-1 update with a stale base -> whole group fails.
         let group = vec![
-            upsert_change("c2", "tx-2", 200, 0, Some("group-1")),
-            upsert_change("c3", "tx-1", 300, 0, Some("group-1")),
+            upsert_change("c2", "task-2", 200, 0, Some("group-1")),
+            upsert_change("c3", "task-1", 300, 0, Some("group-1")),
         ];
         let response = server.push(&push_request(group)).unwrap();
         for result in &response.results {
@@ -1478,11 +1463,11 @@ mod tests {
             }
         }
         assert!(server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-2")
+            .entity(EntityType::EXECUTION_TASK, "task-2")
             .is_none());
         assert_eq!(
             server
-                .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+                .entity(EntityType::EXECUTION_TASK, "task-1")
                 .unwrap()
                 .server_version,
             1
@@ -1493,8 +1478,8 @@ mod tests {
     fn atomic_group_succeeds_together() {
         let mut server = SyncServer::new(UserId::new("test-user"));
         let group = vec![
-            upsert_change("c1", "tx-1", 100, 0, Some("group-1")),
-            upsert_change("c2", "tx-2", 200, 0, Some("group-1")),
+            upsert_change("c1", "task-1", 100, 0, Some("group-1")),
+            upsert_change("c2", "task-2", 200, 0, Some("group-1")),
         ];
         let response = server.push(&push_request(group)).unwrap();
         assert!(response
@@ -1502,17 +1487,17 @@ mod tests {
             .iter()
             .all(|result| { matches!(result, PushChangeResultV1::Accepted { .. }) }));
         assert!(server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-1")
+            .entity(EntityType::EXECUTION_TASK, "task-1")
             .is_some());
         assert!(server
-            .entity(EntityType::FINANCE_TRANSACTION, "tx-2")
+            .entity(EntityType::EXECUTION_TASK, "task-2")
             .is_some());
     }
 
     #[test]
     fn unknown_entity_type_is_rejected() {
         let mut server = SyncServer::new(UserId::new("test-user"));
-        let mut change = upsert_change("c1", "tx-1", 100, 0, None);
+        let mut change = upsert_change("c1", "task-1", 100, 0, None);
         change.entity_type = EntityType::new("future.thing");
         let response = server.push(&push_request(vec![change])).unwrap();
         match &response.results[0] {
